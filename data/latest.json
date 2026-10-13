@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-13T11:20:22Z",
- "since": "2026-10-11T11:20:22Z",
+ "generated_at": "2026-10-13T19:17:25Z",
+ "since": "2026-10-11T19:17:25Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -65,15 +65,6 @@
      "user": "Lysenar",
      "url": "https://github.com/net4people/bbs/issues/650#issuecomment-6122085362",
      "body": "> 10\\. [@Lysenar](https://github.com/Lysenar) Друг, по-моему тут немного о другом изначально пишется)) Вы чтука от темы отошли, мы не о радио, и не про вайфай-модемы, а хаотичное поведение при (!) очищенном кэше, при (!) совершенно настроенном отлично ДНС (который работает на айфоне, например), и тому подобное. Это поведение систем разных и разных операторов в разных частях страны именно с точки зрения мобильной сети. Ясное дело, вылазки есть. Не спорю, что лично я (не знаю как оп), могу не знать некую инфу, обязательно ее изучу)))\n>      В любом случае, любые думки важны.\n\nо каком другом? никто даже не вкурсе о существовании каналов, тут darkk пишет про \"перерегистрируемся в сети\" в этот момент может смениться БАЗОВАЯ СТАНЦИЯ и ИЛИ КАНАЛ.  поведение в каналах может разниться.\n\nввот ты сидишь на жопе и тыркаешься, около тебя 3 стацнии твоего оператора, да anycast скажет выбрать самое близкое, но иногда ты можешь подключится и к той которая дальше всех и там поведение уже другое будет. И вы на кофейной гуще начинаете пакеты сравнивать и ответы... не зря в корень. \n\n> Главная загадка: когда пострадавший пользователь тестирует в момент, похожий на белый список — у него не открывается вообще ничего, включая заведомо белые ресурсы (gosuslugi.ru), которые по логике белого списка должны быть доступны всегда. Это не похоже на учебниковое поведение белого списка (default-deny с проходом только по CIDR+SNI) — скорее на что-то более жёсткое или вообще другую природу блокировки\n\nтут нужно понять 8.8.8.8 либо 128кб на канал повесили, я это связываю с каким то багом в ПО ТСПУ. "
-    },
-    {
-     "id": 6108985165,
-     "issue": 650,
-     "issue_title": "Обход белых списков мобильного интернета РФ - застряли, ищем реальный опыт / Bypassing the Russian Federation's mobile internet whitelists—we're stuck, looking for real-world experience",
-     "created_at": "2026-10-11T12:24:03Z",
-     "user": "EzoDdos",
-     "url": "https://github.com/net4people/bbs/issues/650#issuecomment-6108985165",
-     "body": "@Lysenar Друг, по-моему тут немного о другом изначально пишется)) Вы чтука от темы отошли, мы не о радио, и не про вайфай-модемы, а хаотичное поведение при (!) очищенном кэше, при (!) совершенно настроенном отлично ДНС (который работает на айфоне, например), и тому подобное. Это поведение систем разных и разных операторов в разных частях страны именно с точки зрения мобильной сети. Ясное дело, вылазки есть. Не спорю, что лично я (не знаю как оп), могу не знать некую инфу, обязательно ее изучу)))\n\nВ любом случае, любые думки важны."
     }
    ]
   },
@@ -85,7 +76,7 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-12T20:06:52Z",
-     "updated_at": "2026-10-12T20:06:52Z",
+     "updated_at": "2026-10-13T18:37:25Z",
      "user": "Justsomebuddy",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1381",
      "body": "## Summary\n\nOnly the plain TCP dial is bounded (5 s). After the TCP connection succeeds:\n\n- the WebSocket HTTP upgrade has **no deadline**;\n- the WSS TLS handshake has **no deadline** (the default `TLSHandshakeTimeout` of 10 s does not apply because the transport is built by hand);\n- the SOCKS negotiation has **no deadline**.\n\nA peer — or middlebox/DPI — that freezes the handshake therefore holds the dial open until the peer is removed entirely, wasting the whole backoff cycle on a dead attempt.\n\n## Fix\n\nIntroduce a shared `wsDialTimeout` (15 s, a variable so tests can shorten it) and apply it to each stage:\n\n- `http.Client.Timeout` for the ws/wss upgrade (the websocket library converts it into a context deadline for the whole dial);\n- `TLSHandshakeTimeout` for the WSS TLS handshake (not covered by the client timeout);\n- a context-bounded SOCKS negotiation via `DialContext` when the proxy supports it (the `x/net` SOCKS5 dialer does).\n\nFiles: `src/core/link_ws.go`, `src/core/link_wss.go`, `src/core/link_socks.go`.\n\n## Tests\n\nNew frozen-handshake tests (`TestWSDialTimeout`, `TestWSSDialTimeout`, `TestSOCKSDialTimeout`): a server that accepts TCP and never answers; each dial must be abandoned at the timeout (verified: ws 1.00 s, wss 1.00 s, socks 1.00 s with the timeout shortened to 1 s) instead of hanging.\n\n`go test ./src/core/` passes in full (develop + this change)."
@@ -118,6 +109,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2594,
+     "title": "fix Debian Bookworm build",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T12:57:47Z",
+     "updated_at": "2026-10-13T16:50:11Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2594",
+     "body": "libboost-*-dev (>= 1.83) for Debian Trixie. \r\nlibboost-*1.81-dev for Debian Bookworm, need to install the packages, this is not the default version.\r\n"
+    },
+    {
      "number": 2591,
      "title": "[Debian] Bookworm package build error",
      "is_pr": false,
@@ -138,20 +140,45 @@
      "user": "pobregat0",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2593",
      "body": "Minimum and requested bandwidth in a tunnel build request are chosen by the builder. The value is read into a uint32_t and multiplied by 1024, so from 4194304 upwards the product overflows: the comparison against the bandwidth limit no longer rejects, and an infeasible demand is accepted. The requested bandwidth branch answers with the requested value instead of the available one for the same reason.\n\nMeasured on the real path, with the request record built by the project's own hop config and addressed to the same router. Bandwidth limit 256 KB/s: a minimum of 1 KB/s accepted 10 of 10, a minimum of 100000 KB/s declined 10 of 10, a minimum of 4194304 KB/s accepted 10 of 10. After the fix the last group is declined 10 of 10 and the first is still accepted 10 of 10.\n\nBuilds with no warnings, tests pass."
-    },
-    {
-     "number": 2592,
-     "title": "don't depend on http proxy to pick socks proxy destination",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-11T10:14:04Z",
-     "updated_at": "2026-10-11T11:57:05Z",
-     "user": "iTwoPray",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2592",
-     "body": "ReadSocksProxy() picked the socks destination by comparing keys with the http proxy and reusing its destination object. on reload m_HttpProxy is already null at that point, so with httpproxy.enabled=false socks ended up loading the same key file a second time and creating a duplicate destination. removed that branch, socks now loads its own keys and CreateNewLocalDestination() reuses the existing destination via the ident hash, so the sharing behavior is unchanged.\n\nTL;DR prevent proxies race for the same private keys"
     }
    ],
    "comments": [
+    {
+     "id": 6150318000,
+     "issue": 2594,
+     "issue_title": "fix Debian Bookworm build",
+     "created_at": "2026-10-13T16:33:20Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2594#issuecomment-6150318000",
+     "body": "Пусть кто-нибудь погоняет эту сборку, а так же установку собраного пакета на чистую ОС.  Если все нормально, можно будет поправить инструкцию по сборке, написать для Bookworm отдельные слова про libboost.\r\n"
+    },
+    {
+     "id": 6150143977,
+     "issue": 2594,
+     "issue_title": "fix Debian Bookworm build",
+     "created_at": "2026-10-13T16:23:55Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2594#issuecomment-6150143977",
+     "body": "Собирается такой пакет с нужными зависимостями\r\n```\r\nuser1@vds00000:~/i2pd$ dpkg -I ../i2pd_2.61.0-1_amd64.deb\r\n new Debian package, version 2.0.\r\n size 1841168 bytes: control archive=3012 bytes.\r\n     161 bytes,     7 lines      conffiles\r\n     699 bytes,    14 lines      control\r\n    2667 bytes,    32 lines      md5sums\r\n    3027 bytes,    90 lines   *  postinst             #!/bin/sh\r\n     878 bytes,    34 lines   *  postrm               #!/bin/sh\r\n     225 bytes,     7 lines   *  preinst              #!/bin/sh\r\n     473 bytes,    12 lines   *  prerm                #!/bin/sh\r\n Package: i2pd\r\n Version: 2.61.0-1\r\n Architecture: amd64\r\n Maintainer: r4sas <r4sas@i2pmail.org>\r\n Installed-Size: 6499\r\n Pre-Depends: init-system-helpers (>= 1.54~), adduser\r\n Depends: libboost-json1.81.0 (>= 1.81.0), libboost-program-options1.81.0 (>= 1.81.0), libboost-url1.81.0 (>= 1.81.0), libc6 (>= 2.34), libgcc-s1 (>= 3.4), libssl3 (>= 3.0.0), libstdc++6 (>= 12), zlib1g (>= 1:1.1.4)\r\n Section: net\r\n Priority: optional\r\n Homepage: http://i2pd.website/\r\n Description: Full-featured C++ implementation of I2P client.\r\n  I2P (Invisible Internet Protocol) is a universal anonymous network layer. All\r\n  communications over I2P are anonymous and end-to-end encrypted, participants\r\n  don't reveal their real IP addresses.\r\n```\r\n"
+    },
+    {
+     "id": 6149866722,
+     "issue": 2594,
+     "issue_title": "fix Debian Bookworm build",
+     "created_at": "2026-10-13T16:09:12Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2594#issuecomment-6149866722",
+     "body": "Так же, как и другие dev-библиотеки - в соответствии с документацией \r\nhttps://docs.i2pd.website/en/latest/devs/building/unix/\r\nодной командой `apt-get install libboost-program-options1.81-dev  libboost-json1.81-dev  libboost-url1.81-dev` \r\nОни есть в репозитории, и соответствующие run-time libboost-*1.81.0.\r\nЭто не то же самое, что `apt-get install  libboost-program-options-dev` , которая установит 1.74. Если 1.74 уже установлены, их надо удалить, конфликтуют.\r\n\r\nКстати, на этой странице \r\nhttps://docs.i2pd.website/en/latest/devs/building/unix/ \r\nчто-то не то с оглавлением, не работают первые 3 пункта (Debian/Ubuntu, Arch/Manjaro, Fedora/RHEL/CentOS Stream) и последний (Solaris/OpenIndiana).\r\n"
+    },
+    {
+     "id": 6148330661,
+     "issue": 2594,
+     "issue_title": "fix Debian Bookworm build",
+     "created_at": "2026-10-13T14:51:32Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2594#issuecomment-6148330661",
+     "body": "А как ты заставишь системы сборки устанавливать 1.81?"
+    },
     {
      "id": 6135020784,
      "issue": 2591,
@@ -261,24 +288,6 @@
      "body": "С торрентами с Boost 1.81 не собирается\n```\ng++ -g -O2 -ffile-prefix-map=/home/user1/i2pd=. -fstack-protector-strong -Wformat -Werror=format-security -Wall -pedantic -std=c++20 -Wno-bidi-chars -fPIC -MMD -MP -DGITVER=2.61.0-762-gf8b4316a -Ilibi2pd -Ilibi2pd_client -Ii18n -c -o obj/libi2pd_client/TorrentsRPC.o libi2pd_client/TorrentsRPC.cpp\nlibi2pd_client/TorrentsRPC.cpp: In lambda function:\nlibi2pd_client/TorrentsRPC.cpp:370:127: error: no matching function for call to ‘boost::core::basic_string_view<char>::basic_string_view(boost::urls::url)’\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                               ^\nIn file included from /usr/include/boost/json/string_view.hpp:14,\n                 from /usr/include/boost/json/kind.hpp:14,\n                 from /usr/include/boost/json/array.hpp:14,\n                 from /usr/include/boost/json.hpp:15,\n                 from libi2pd_client/TorrentsRPC.cpp:13:\n/usr/include/boost/core/detail/string_view.hpp:401:25: note: candidate: ‘template<class Ch2> boost::core::basic_string_view<Ch>::basic_string_view(const boost::basic_string_view<Ch2, std::char_traits<_CharT2> >&, typename boost::enable_if<boost::core::is_same<Ch, Ch2> >::type*) [with Ch = char]’\n  401 |     template<class Ch2> basic_string_view( boost::basic_string_view<Ch2, std::char_traits<Ch2> > const& str,\n      |                         ^~~~~~~~~~~~~~~~~\n/usr/include/boost/core/detail/string_view.hpp:401:25: note:   template argument deduction/substitution failed:\nlibi2pd_client/TorrentsRPC.cpp:370:127: note:   ‘boost::urls::url’ is not derived from ‘const boost::basic_string_view<Ch, std::char_traits<_CharT> >’\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                               ^\n/usr/include/boost/core/detail/string_view.hpp:389:23: note: candidate: ‘template<class A> boost::core::basic_string_view<Ch>::basic_string_view(const std::__cxx11::basic_string<Ch, std::char_traits<_CharT>, A>&) [with Ch = char]’\n  389 |     template<class A> basic_string_view( std::basic_string<Ch, std::char_traits<Ch>, A> const& str ) BOOST_NOEXCEPT: p_( str.data() ), n_( str.size() )\n      |                       ^~~~~~~~~~~~~~~~~\n/usr/include/boost/core/detail/string_view.hpp:389:23: note:   template argument deduction/substitution failed:\nlibi2pd_client/TorrentsRPC.cpp:370:127: note:   ‘boost::urls::url’ is not derived from ‘const std::__cxx11::basic_string<char, std::char_traits<char>, A>’\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                               ^\n/usr/include/boost/core/detail/string_view.hpp:383:47: note: candidate: ‘template<class End> constexpr boost::core::basic_string_view<Ch>::basic_string_view(const Ch*, End, typename boost::enable_if<boost::core::is_same<End, const Ch*> >::type*) [with Ch = char]’\n  383 |     template<class End> BOOST_CXX14_CONSTEXPR basic_string_view( Ch const* first, End last,\n      |                                               ^~~~~~~~~~~~~~~~~\n/usr/include/boost/core/detail/string_view.hpp:383:47: note:   template argument deduction/substitution failed:\nlibi2pd_client/TorrentsRPC.cpp:370:127: note:   candidate expects 3 arguments, 1 provided\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                        "
     },
     {
-     "id": 6108768106,
-     "issue": 2592,
-     "issue_title": "don't depend on http proxy to pick socks proxy destination",
-     "created_at": "2026-10-11T11:57:04Z",
-     "user": "iTwoPray",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2592#issuecomment-6108768106",
-     "body": "You're right,  both default to transient proxy any ways....reverting it"
-    },
-    {
-     "id": 6108602682,
-     "issue": 2592,
-     "issue_title": "don't depend on http proxy to pick socks proxy destination",
-     "created_at": "2026-10-11T11:36:04Z",
-     "user": "orignal",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2592#issuecomment-6108602682",
-     "body": "You can't do it this way. HTTP or SOCKS proxy must be able to share the keys."
-    },
-    {
      "id": 6102170442,
      "issue": 2591,
      "issue_title": "[Debian] Bookworm package build error",
@@ -296,15 +305,103 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 6684,
+     "title": "Memory/socket leak with VLESS+XHTTP+REALITY on v26.3.27",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-08-26T08:42:11Z",
+     "updated_at": "2026-10-13T19:04:30Z",
+     "user": "moamad2003",
+     "url": "https://github.com/XTLS/Xray-core/issues/6684",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nHello,\nI'm experiencing what appears to be a memory/connection leak with Xray-core v26.3.27, specifically with the XHTTP+REALITY inbound. I noticed this issue (#5828) was closed after a fix in the xtls/reality dependency was merged into this same version, but I'm still seeing similar symptoms.\nVersion:\nXray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\nCode\nSetup:\n~150 concurrent users, VLESS + XHTTP + REALITY inbound (plus a second VLESS + XHTTP + TLS inbound on the same server).\nInbound config:\n{\n\"tag\": \"XHTTP-REALITY\",\n\"port\": 2053,\n\"protocol\": \"vless\",\n\"settings\": {\n\"clients\": [],\n\"decryption\": \"mlkem768x25519plus.native.600s.REDACTED\",\n\"encryption\": \"mlkem768x25519plus.native.0rtt.REDACTED\"\n},\n\"streamSettings\": {\n\"network\": \"xhttp\",\n\"security\": \"reality\",\n\"xhttpSettings\": {\n\"mode\": \"auto\",\n\"path\": \"/\"\n},\n\"realitySettings\": {\n\"target\": \"Google.com:443\",\n\"shortIds\": [\"7acd6597b255f7e5\"],\n\"privateKey\": \"REDACTED\",\n\"serverNames\": [\"play.google.com\"],\n\"fingerprint\": \"chrome\",\n\"publicKey\": \"REDACTED\"\n}\n}\n}\nJson\nObserved behavior:\nMonitored RSS and established connection count over several days using ps, ss -tn state established, and /proc//status.\nWith mode: auto:\nRSS grew continuously from ~89MB to ~379MB over 2 days without decreasing\nEstablished connections on the xhttp port grew to ~2100-2500 (with only ~150 users)\nFile descriptors grew proportionally to 4500+\nAfter switching to mode: packet-up on one inbound, connections initially dropped to ~50-60, but over the following days RSS and connection count climbed again, reaching 600MB+ RSS and 2400+ established connections after ~2 days.\nRestarting the process resets RSS/connections to baseline, after which the pattern repeats.\nQuestion:\nSince this version already includes the reality dependency fix mentioned in this issue's resolution, is this a separate/residual leak, or could there be a related root cause still present? I'm happy to provide full logs, RSS growth data over time, or capture heap/goroutine profiles (pprof) if someone can point me to the right steps.\nThanks!\n\n### Reproduction Method\n\nSetup a VLESS + XHTTP + REALITY inbound with ~150 concurrent users. Monitor RSS memory and established connection count over several days using `ps`, `ss -tn state established`, and `/proc/<pid>/status`. Memory grows continuously without ever decreasing, and only resets after restarting the process.\n\n### Client config\n\nXray version: 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\n\nServer inbound config:\n{\n  \"tag\": \"XHTTP-REALITY\",\n  \"port\": 2053,\n  \"protocol\": \"vless\",\n  \"settings\": {\n    \"clients\": [],\n    \"decryption\": \"mlkem768x25519plus.native.600s.REDACTED\",\n    \"encryption\": \"mlkem768x25519plus.native.0rtt.REDACTED\"\n  },\n  \"streamSettings\": {\n    \"network\": \"xhttp\",\n    \"security\": \"reality\",\n    \"xhttpSettings\": {\n      \"mode\": \"auto\",\n      \"path\": \"/\"\n    },\n    \"realitySettings\": {\n      \"target\": \"Google.com:443\",\n      \"shortIds\": [\"7acd6597b255f7e5\"],\n      \"privateKey\": \"REDACTED\",\n      \"serverNames\": [\"play.google.com\"],\n      \"fingerprint\": \"chrome\",\n      \"publicKey\": \"REDACTED\"\n    }\n  }\n}\n\n### Server config\n\nXray version: 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\n\nInbound config:\n{\n  \"tag\": \"XHTTP-REALITY\",\n  \"port\": 2053,\n  \"protocol\": \"vless\",\n  \"settings\": {\n    \"clients\": [],\n    \"decryption\": \"mlkem768x25519plu"
+    },
+    {
+     "number": 7143,
+     "title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T14:50:04Z",
+     "updated_at": "2026-10-13T18:43:11Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7143",
+     "body": "忘了加defer interrupt了 还有名字和其他协议同步了一下\n顺便还有之前关于UDP转发的一行改动我记得改了不知道最后为啥没P上来 ~~可能关机的时候忘记保存了~~"
+    },
+    {
+     "number": 7124,
+     "title": "Finalmask noise: Build packets from a Lua script",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-11T07:04:08Z",
+     "updated_at": "2026-10-13T15:47:04Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124",
+     "body": "builds on the lua engine from https://github.com/XTLS/Xray-core/pull/6823, docs in https://github.com/XTLS/Xray-docs-next/pull/909\n\n-- `noise.script` is a lua script defining `HandleNoise(plan, address)`. it submits each packet with `plan:Send(packet)` or `plan:Send(packet, delay)` for a delay in ms after that packet, and only returns something when it wants to report an error\n-- `xray.finalmask.noise` gives the script `Random(size)` for crypto random bytes and `RandomBetween(from, to)`, inclusive. `xray.log` works too. `RegisterLua` exports just those two, so another module's engine can offer them\n-- `script` takes whatever #7132 accepts, a path or an inline `base64:` / `base64+gzip:` script, the core resolves it. can't be set together with `noise`\n-- this is what `exp` can't do: conditionals, loops, state that survives between calls, and noise that depends on the peer\n\nit follows what the lifecycle page documents for the other pooled hooks: each noise layer gets its own pool so two layers naming the same file don't share state, and a refused return value keeps the instance while only a lua exception or a timeout drops it. the engine is created the first time a layer needs noise, never in infra, which only compiles the script so a typo is caught at startup. the call timeout is 1s rather than 6s because this hook runs while the first packet to a peer waits, the init timeout stays 120s\n\nno LTable on the hook path, one plan per instance that the hook is handed, and the packet buffer is reused per connection\n\nthe script only runs when a peer needs noise, never per packet. noise stays best effort: a script that fails only logs a warning and the real packet still goes out, which is how a failed noise write already behaves. sizes, delays and random bounds are capped at 65535 so a script can't ask for a huge allocation or a sleep that never ends\n\n~~@LjhAUMEM you said a lua pluggable mask would be cool, this is the smallest piece of that~~\n\n\n\n"
+    },
+    {
      "number": 6748,
      "title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-09-11T06:33:19Z",
-     "updated_at": "2026-10-13T10:51:12Z",
+     "updated_at": "2026-10-13T15:26:07Z",
      "user": "Risaro",
      "url": "https://github.com/XTLS/Xray-core/pull/6748",
      "body": "This stacks on #6745. Until that one is merged the diff here also contains its commit.\n\n### What it adds\n\nA `Storage` implementation for Google Drive, selected with `\"service\": \"Google Drive\"`, where `remoteFolder` is a Drive folder id and `secrets` holds ClientID, ClientSecret and RefreshToken.\n\n### No SDK\n\nPlain `net/http`, zero new entries in `go.mod`. It sits behind the same five method `Storage` interface as the local backend, so another provider is one more file and still no dependency.\n\n### How it works\n\nPaths are flattened into single names, so `streams/abc/c2s/000000000.seg` becomes `streams~abc~c2s~000000000.seg`, because Drive has no cheap path lookup and creating nested folders would cost a request per level.\n\nA name to id cache is filled from every listing, so a download costs one request instead of two. The access token is cached and refreshed on expiry or on a 401.\n\nRequests are retried on 429 and 5xx with a jittered backoff capped at 2 seconds. Jitter matters here: at concurrency 32 every request hits the rate limit at the same moment, and synchronised retries only make it worse. A request whose context is already cancelled is not retried at all.\n\n### Measurements\n\nBoth ends on a server in the Netherlands, against a real Google Drive account.\n\nRaw storage:\n\n* 4 sequential puts of 256 KiB: 199 KiB/s\n* 8 parallel puts of 256 KiB: 1637 KiB/s\n* 8 parallel gets of 256 KiB: 2453 KiB/s\n* listing a folder of 13 objects: 250 ms\n* an uploaded object becomes listable after about 200 ms, so the listing is fresh enough to drive the log\n\nTransport, 10 MB pushed through the WAL:\n\n* segment 128 KiB, concurrency 16: 1187 KiB/s\n* segment 256 KiB, concurrency 16: 1513 KiB/s\n* segment 256 KiB, concurrency 32: 1849 KiB/s\n* segment 512 KiB, concurrency 32: 2111 KiB/s\n\nReal proxy, curl through SOCKS into VLESS over XDRIVE over Google Drive:\n\n* 50 MB in 21.6 s, 2258 KiB/s, about 18.5 Mbit/s, byte identical\n* the first byte takes about 2 s, so bulk transfer is comfortable and interactive use is not\n\nMux, 30 parallel requests, which is roughly one web page:\n\n* without mux: 23675 ms and 30 sessions\n* with mux.cool at concurrency 8: 8605 ms and 4 sessions\n\nStability: 12 of 12 live runs against Drive.\n\n### Tests\n\nA fake Drive server on `httptest` covers upload, listing, download, delete, token caching and retries, and the whole transport is run over it. Live tests against a real account live in the same file and skip unless `XRAY_XDRIVE_DRIVE_SECRETS` points at a credentials file, so nothing here needs secrets in CI.\n\n### Known limits\n\nCredentials sit on the client, so this is for self hosted use. One outbound should enable mux.cool, otherwise every TCP connection becomes its own session with its own files. The HTTP client does not go through Xray's own dialer yet, so `sockopt` and a dialer proxy are not applied to Drive requests.\n"
+    },
+    {
+     "number": 7136,
+     "title": "Lua: Add sandbox mechanism",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T02:03:08Z",
+     "updated_at": "2026-10-13T15:04:30Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136",
+     "body": "```json\n{\n  \"env\": {\n    \"XRAY_LUA_PRIVILEGED_PSK\": \"your-secret\"\n  }\n}\n```\n\n```lua\n-- @xray:privileged-psk=your-secret\nlocal log = require(\"xray.log\")\n\nlocal success, err = pcall(function()\n    os.execute(\"echo 'Warning: OS command executed!'\")\nend)\nif not success then\n    log.Error(\"Failed to exec: \", err)\nend\n\nfunction HandleRoute()\n    log.Info(\"Choosing the direct outbound\")\n    return \"direct\"\nend\n```\n\nhttps://github.com/XTLS/Xray-core/pull/7132#issuecomment-6133901345\n\nenv 应该不会被包进分享链接或下发订阅\n否则还可以直接禁用内联 lua 的特权模式"
+    },
+    {
+     "number": 7142,
+     "title": "Fix Shadowsocks 2022 server TCP teardown",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T14:03:46Z",
+     "updated_at": "2026-10-13T14:48:01Z",
+     "user": "ChownYourLife",
+     "url": "https://github.com/XTLS/Xray-core/pull/7142",
+     "body": "## Summary\n\n```diff\n server TCP dispatch\n+  forward request EOF when request copying completes\n   keep the response path open until completion or policy timeout\n+  release both dispatch pipes and the activity timer on return\n Freedom request copy\n+  close the TCP write half after successful copying\n```\n\n## Changes\n\n- Forward request EOF in the shared server transport, instead of closing the dispatch writer after response completion. Release both dispatch pipes and the activity timer when `TransportTCP` returns, including abort or cancellation.\n- Shut down Freedom's TCP write half after a successful request copy. Statistics unwrapping preserves protocol wrappers, including TLS `close_notify`.\n- Add teardown regressions for EOF-dependent responses, buffered requests, delayed responses, reset/cancellation, and statistics-wrapped TCP/TLS connections.\n\nSingle-user, multi-user, and relay inbounds use the shared transport. The independent Shadowsocks outbound implementation and native UDP paths are unchanged.\n\n## Project impact\n\nThe native regressions below demonstrate request EOF propagation, response preservation, and cleanup on the covered TCP paths. Releasing completed-connection resources is expected to reduce retained memory pressure; the native PR implementation (`d7fdd847`) has no quantified heap benchmark.\n\n### Historical prototype benchmark\n\nA local encrypted SS2022 loopback run compared original historical source at `d2758a0` with an isolated full-lifecycle prototype in the older `singbridge` implementation. This prototype is distinct from the native implementation in this PR. Both variants used Go 1.26.1 on darwin/arm64, 200 generated fixed users, at most 40 live clients, and 1,000 completed connections (5 epochs of 200). Clients closed after sending two 4,096-byte frames to a persistent target; samples were taken after client drain and two forced GCs, without timer acceleration.\n\n| Post-drain metric | Historical original | Corrected prototype |\n| --- | ---: | ---: |\n| `HeapAlloc` | 192.67 MiB | 2.08 MiB |\n| Goroutines | 6,004 | 4 |\n| Active TCP workers | 1,000 | 0 |\n| Targets observing request EOF | 0 | 1,000 |\n\nThis pair measured approximately 98.9% lower absolute post-drain `HeapAlloc` (202,031,488 vs. 2,180,624 bytes; 1 MiB = 1,048,576 bytes). Both runs completed 1,000 clients without client errors or target deadline events. This percentage applies only to that historical prototype heap sample. It is not a measurement of native PR `d7fdd847`, RSS, cgroup memory, or OOM rate. Forced GC evicts idle pools; arrival jitter differs, and the short run does not establish indefinite leakage beyond existing timers or a throughput/latency improvement.\n\nA separate production trial of the historical backport failed to demonstrate OOM resolution: two additional cgroup OOM kills were observed during the trial, and the original binary was restored. The uncontrolled workload and observations do not establish whether the teardown change caused those events. No production OOM cure or reduction is claimed.\n\n## Evidence\n\nNative implementation regressions:\n\n- **Before:** Added `TransportTCP` regressions failed on missing request EOF and dispatch pipes surviving reset/cancellation. Rebuilt-core single/multi-user cases lost EOF-dependent responses or hit a 5-second peer read deadline with explicit 30-second Xray timeouts.\n  **After:** The same tests pass, including complete buffered requests and a final response delayed 150 ms after request EOF.\n- **Before:** Real Freedom tests with statistics-wrapped TCP and TLS connections failed while waiting for EOF-dependent responses.\n  **After:** Both pass with exact traffic counters; the TLS case verifies `close_notify` without closing the raw TCP write half.\n\nPassed locally on Go 1.27.0, darwin/arm64:\n\n```sh\ngo test -count=1 -race -timeout=120s ./proxy/shadowsocks_2022 ./proxy/freedom ./transport/pipe ./common/signal\ngo test -count=1 -timeout=180s ./testing/scenarios -run TestShadowsocks2022\ngo test"
+    },
+    {
+     "number": 7140,
+     "title": "XDNS: add DOH",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T11:53:44Z",
+     "updated_at": "2026-10-13T14:06:27Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140",
+     "body": ""
+    },
+    {
+     "number": 7141,
+     "title": "Fix Shadowsocks 2022 server TCP teardown",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T13:19:53Z",
+     "updated_at": "2026-10-13T14:04:21Z",
+     "user": "FakharzadehH",
+     "url": "https://github.com/XTLS/Xray-core/pull/7141",
+     "body": "## Summary\n\nThe shared server transport previously closed the dispatch writer after response completion, leaving request EOF unforwarded. Freedom also left its TCP write half open after a successful request copy. This forwards request EOF while preserving the response path, and releases both dispatch pipes and the activity timer when TransportTCP returns, including abort or cancellation. Statistics unwrapping preserves protocol wrappers, including TLS close_notify.\n\nSingle-user, multi-user, and relay inbounds use the shared transport. The independent Shadowsocks outbound implementation and native UDP paths are unchanged.\n\n## Evidence\n\n- **Before:** Added TransportTCP regressions failed on missing request EOF and dispatch pipes surviving reset/cancellation. Rebuilt-core single/multi-user cases lost EOF-dependent responses or hit a 5-second peer read deadline with explicit 30-second Xray timeouts.\n  **After:** The same tests pass, including complete buffered requests and a final response delayed 150 ms after request EOF.\n- **Before:** Real Freedom tests with statistics-wrapped TCP and TLS connections failed while waiting for EOF-dependent responses.\n  **After:** Both pass with exact traffic counters; the TLS case verifies close_notify without closing the raw TCP write half.\n\nPassed locally on Go 1.27.0, darwin/arm64:\n\n```sh\ngo test -count=1 -race -timeout=120s ./proxy/shadowsocks_2022 ./proxy/freedom ./transport/pipe ./common/signal\ngo test -count=1 -timeout=180s ./testing/scenarios -run TestShadowsocks2022\ngo test -count=1 -race -timeout=90s ./testing/scenarios -run '^TestShadowsocks2022TCPTeardown$'\n```\n\nThe broader Shadowsocks scenario run with `-race` reported a race in the untouched UDP test fixture (`testing/servers/udp.Server.Close` and `handleConnection`); its TCP cases passed. The separately built core subprocess is not race-instrumented by the scenario command. The affected-package race tests exercise the changed functions in process. No full-repository test pass, native outbound pipeline coverage for the new teardown scenario, or production OOM/RSS conclusion is claimed.\n\n## Compatibility\n\nNo configuration or data migration is required, and the commit can be reverted. The change affects shared Shadowsocks 2022 server dispatch teardown and Freedom request-side shutdown for TCP connections that expose CloseWrite. The response half remains open until completion or the existing policy timeout.\n"
+    },
+    {
+     "number": 7135,
+     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T01:29:50Z",
+     "updated_at": "2026-10-13T11:58:07Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135",
+     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
     },
     {
      "number": 7139,
@@ -329,17 +426,6 @@
      "body": "Valid fragmented IP input never reaches the lightweight TUN stack's transport handlers, even when every fragment fits the TUN MTU. This restores IPv4/IPv6 input reassembly while retaining the single lightweight stack introduced in #7130. That PR explicitly disclosed the omission; this change addresses the supported input case rather than treating it as an undisclosed defect.\n\nAt `c77a4d0e4932a53f3eeafafdfef877b56fd660ad`, the IPv4 parser rejects MF/nonzero offsets, and IPv6 Fragment Header 44 reaches no transport handler. Fitting individual IP packets to the MTU does not imply that they are unfragmented.\n\nThe reproducer uses a normal local UDP socket in an isolated Linux network namespace, a nonpersistent TUN at MTU 1500, and explicitly permits source fragmentation (`IP_MTU_DISCOVER`/`IPV6_MTU_DISCOVER` set to `DONT`). A 1600-byte payload produces valid IPv4 fragments of 1500/148 bytes and IPv6 fragments of 1496/208 bytes. The same result occurs with plain TUN and with `IFF_VNET_HDR` plus `CSUM|TSO4|TSO6`; fragment coverage and UDP/header checksums were checked. Replaying those unchanged kernel-generated IP packets through production `NewStack` -> `Handler` -> `DispatchLink` gives:\n\n- Previous official `701af607`: IPv4 and IPv6 delivery pass in both modes.\n- Current official `c77a4d0e`: unfragmented controls pass, fragmented delivery times out in both modes.\n- This patch: both controls and complete fragmented payloads pass in both modes.\n\nCapture and stack replay are separate checks; this is not a claim about every operating system, default socket policy, or network workload.\n\nReassembly is private to each stack, before existing TCP/UDP/ICMP dispatch. State is bounded to 256 keys including rejection tombstones, a 4 MiB retained-allocation budget (map overhead separately bounded by the key limit), and 256 pieces per datagram. One timer expires entries 60 seconds after first arrival; duplicates do not extend it. Conflicting overlaps reject the datagram through its original deadline, IPv6 atomic fragments are independent, and Close/read failure discard pending state. Unfragmented packets avoid reassembly allocation, clock reads and locks. No public API, configuration or dependency changes are required.\n\nPortable regressions cover packet boundaries/destinations, both fragment arrival orders, duplicate input, IPv6 options before and after the Fragment header, established TCP data, IPv4/IPv6 ICMP echo, invalid input, resource limits, expiry and actual stack lifecycle cleanup. ECN reconciliation, ICMP error generation and output fragmentation remain outside this receive-path change.\n\nValidation with Go 1.27.0:\n\n- Repository formatter: `go run ./infra/vformat/main.go -mode check -pwd ./`.\n- Windows/amd64: `go test -race ./proxy/tun/... -count=1`.\n- Windows/amd64: all fragment/state tests under `-race -count=3`; lifecycle/allocation additions separately under `-race -count=10`.\n- Linux/amd64: `CGO_ENABLED=0` package test binary, then its complete test suite executed on WSL2 kernel `6.18.33.2-microsoft-standard-WSL2`.\n- The official-to-official kernel capture/replay discriminator described above, followed by successful replay with the patch.\n- Independent parser/resource/lifecycle review and focused review of the added integration tests.\n"
     },
     {
-     "number": 7124,
-     "title": "Finalmask noise: Build packets from a Lua script",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-11T07:04:08Z",
-     "updated_at": "2026-10-13T10:33:04Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124",
-     "body": "builds on the lua engine from https://github.com/XTLS/Xray-core/pull/6823, docs in https://github.com/XTLS/Xray-docs-next/pull/909\n\n-- `noise.script` is a lua script defining `HandleNoise(plan, address)`. it submits each packet with `plan:Send(packet)` or `plan:Send(packet, delay)` for a delay in ms after that packet, and only returns something when it wants to report an error\n-- `xray.finalmask.noise` gives the script `Random(size)` for crypto random bytes and `RandomBetween(from, to)`, inclusive. `xray.log` works too. `RegisterLua` exports just those two, so another module's engine can offer them\n-- `script` takes whatever #7132 accepts, a path or an inline `base64:` / `base64+gzip:` script, the core resolves it. can't be set together with `noise`\n-- this is what `exp` can't do: conditionals, loops, state that survives between calls, and noise that depends on the peer\n\nit follows what the lifecycle page documents for the other pooled hooks: each noise layer gets its own pool so two layers naming the same file don't share state, and a refused return value keeps the instance while only a lua exception or a timeout drops it. the engine is created the first time a layer needs noise, never in infra, which only compiles the script so a typo is caught at startup. the call timeout is 1s rather than 6s because this hook runs while the first packet to a peer waits, the init timeout stays 120s\n\nno LTable on the hook path, one plan per instance that the hook is handed, and the packet buffer is reused per connection\n\nthe script only runs when a peer needs noise, never per packet. noise stays best effort: a script that fails only logs a warning and the real packet still goes out, which is how a failed noise write already behaves. sizes, delays and random bounds are capped at 65535 so a script can't ask for a huge allocation or a sleep that never ends\n\n~~@LjhAUMEM you said a lua pluggable mask would be cool, this is the smallest piece of that~~\n\n\n\n"
-    },
-    {
      "number": 7131,
      "title": "Bump uTLS: chrome fingerprint is still Chrome 133",
      "is_pr": false,
@@ -362,17 +448,6 @@
      "body": "### Summary\nThis PR addresses connection leaks and buffer handling issues in `transport/internet/tls/ech.go`:\n\n1. **Fix socket leak on failed DoH TLS handshake (`DialTLSContext`)**:\n   - In `DialTLSContext`, when establishing the TLS session with `utls.UClient`, if `uConn.HandshakeContext(ctx)` fails (e.g., handshake timeout, connection reset, or TLS negotiation error), the underlying TCP connection returned by `internet.DialSystem` was left unclosed before returning `nil, err`.\n   - Now, `_ = conn.Close()` is called upon handshake failure to prevent orphaned TCP socket leaks.\n\n2. **Check error on UDP DNS query write**:\n   - `conn.Write(msg)` return value was previously unhandled. We now check `if _, err = conn.Write(msg); err != nil { return nil, 0, err }` to catch write failures immediately.\n\n3. **Correct UDP DNS response buffer slicing**:\n   - The UDP response buffer is allocated as 512 bytes. Previously, `dnsResolve = udpResponse` passed the full buffer (including trailing zero padding) to `respMsg.Unpack`.\n   - Now correctly sliced to the received byte length: `dnsResolve = udpResponse[:n]`.\n\n4. **Explicit error for unsupported DNS protocols**:\n   - Adds an explicit error return (`unsupported ECH DNS server protocol`) when an unsupported DNS server scheme is configured, rather than falling through to unpack a `nil` response."
     },
     {
-     "number": 7136,
-     "title": "Lua: Add sandbox mechanism",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T02:03:08Z",
-     "updated_at": "2026-10-13T08:55:35Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136",
-     "body": "```json\n{\n  \"env\": {\n    \"XRAY_LUA_PRIVILEGED_PSK\": \"your-secret\"\n  }\n}\n```\n\n```lua\n-- @xray:privileged-psk=your-secret\nlocal log = require(\"xray.log\")\n\nlocal success, err = pcall(function()\n    os.execute(\"echo 'Warning: OS command executed!'\")\nend)\nif not success then\n    log.Error(\"Failed to exec: \", err)\nend\n\nfunction HandleRoute()\n    log.Info(\"Choosing the direct outbound\")\n    return \"direct\"\nend\n```\n\nhttps://github.com/XTLS/Xray-core/pull/7132#issuecomment-6133901345\n\nenv 应该不会被包进分享链接或下发订阅\n否则还可以直接禁用内联 lua 的特权模式"
-    },
-    {
      "number": 7130,
      "title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
      "is_pr": true,
@@ -382,17 +457,6 @@
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7130",
      "body": "as asked in #6795: the TUN inbound gets a small TCP/IP stack of its own instead of gVisor's (gVisor stays in go.mod for WireGuard and the ICMP helper). one goroutine reads the device and hands each segment to its connection, which is the buf.Reader and buf.Writer the dispatcher works with, so buffers from the outbound go to the tun as they are. TCP has window scaling, SACK, a congestion window and a retransmit timer that follows the round trip; UDP and ICMP echo behave as before\n\nthe second commit lets Linux do the segmentation (IFF_VNET_HDR, TUNSETOFFLOAD): Xray reads and writes segments of up to 64 KB instead of one packet per syscall\n\none stream at MTU 1500 downloads at 380 MB/s instead of 162 and takes 3.9 CPU-seconds per GB instead of 11.1; with the offload it is 2100 MB/s and 0.69. an idle TCP connection holds 14 KB of heap instead of 28. behind an emulated 100 Mbit link both keep up with the kernel's own TCP\n\nweaker than gVisor: the window is fixed (256 KB, 1 MB with the offload), so without the offload one connection over a 100 ms round trip gets 1.6 MB/s where main gets 4.4, and IP fragments are dropped, not reassembled. only Linux was run: the Windows, macOS, iOS, FreeBSD and Android devices are moved to the new interface and compile, nothing more\n\n<details>\n<summary>throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, Xray on 4 cores with GOMAXPROCS=4, load and target on cores of their own, freedom outbound to a local target. main (836a6fed), the stack and the stack with the offload take turns sample by sample; median of 5, MB/s of payload and CPU-seconds of Xray (user + system) per GB. 1 stream moves 2 GB, 8 streams 256 MB each\n\n```\n                       MB/s                      CPU s/GB\nMTU    case            main   stack  offload     main   stack  offload\n1500   download 1       162     380     2100     11.1     3.9     0.69\n1500   upload   1       233     354     3460      9.9     4.4     0.53\n1500   download 8       378    1244     4763      7.5     3.1     0.82\n1500   upload   8       398     357     2860      8.7     5.5     0.77\n9000   download 1       330    1035     1658      5.7     1.5     0.92\n9000   upload   1       456     939     3052      4.6     1.9     0.67\n9000   download 8      1465    3402     5082      2.3     1.2     0.82\n9000   upload   8      1359    1812     2938      3.0     1.3     0.82\n```\n\nthe MTU 9000 rows are from an earlier run, when the PC was doing other work as well, so their levels may read low\n\nwithout the offload, upload on 8 streams is a tenth behind main: one goroutine reads the tun and its queue of 500 packets overflows (78386 packets dropped there, 116531 for main)\n</details>\n\n<details>\n<summary>behind a link (the router case)</summary>\n\nthe load runs in a second namespace behind a link played in user space (rate, delay, drop-tail queue), the namespace of Xray forwards into the tun. \"kernel\" is the same link without Xray. median of 3, MB/s, in brackets the percent of data packets the link dropped\n\n```\n100 Mbit, 10 ms round trip   kernel       main         stack        offload\ndownload 1                   9.6 (0.4)    8.8 (0.5)    9.4 (0.1)    8.9 (0.9)\nupload   1                   9.7 (0.3)    8.7 (0.1)    9.4 (0.1)    9.5 (0.0)\ndownload 8                   9.1 (1.8)    8.7 (1.4)    8.9 (1.6)    8.9 (1.6)\nupload   8                   9.4 (1.8)    8.4 (1.5)    9.3 (1.5)    9.1 (1.6)\n\n50 Mbit, 20 ms round trip, 1 % random loss\ndownload 1                   0.7 (1.0)    0.6 (1.0)    0.8 (1.0)    0.8 (1.4)\nupload   1                   0.7 (0.9)    0.7 (1.0)    0.7 (1.1)    0.7 (1.1)\ndownload 8                   4.4 (1.7)    3.6 (1.6)    4.1 (1.8)    4.3 (1.9)\nupload   8                   3.6 (2.8)    3.7 (2.4)    3.8 (2.6)    4.0 (2.6)\n\n100 Mbit, 100 ms round trip\ndownload 1                   8.1 (0.5)    4.4 (3.5)    1.6 (0.0)    3.8 (0.6)\nupload   1                   7.4 (1.4)    6.1 (1.1)    2.4 (0.0)    6.5 (1.2)\ndownload 8                   5.1 (1.5)    4.7 (2"
-    },
-    {
-     "number": 7135,
-     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T01:29:50Z",
-     "updated_at": "2026-10-13T04:23:55Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135",
-     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
     },
     {
      "number": 7103,
@@ -815,13 +879,175 @@
    ],
    "comments": [
     {
+     "id": 6153034160,
+     "issue": 6684,
+     "issue_title": "Memory/socket leak with VLESS+XHTTP+REALITY on v26.3.27",
+     "created_at": "2026-10-13T19:04:30Z",
+     "user": "SettingPrompter",
+     "url": "https://github.com/XTLS/Xray-core/issues/6684#issuecomment-6153034160",
+     "body": "Also the leak is happening due to a bug in your hypervisor's kernel not a bug in xray/nginx interactions, contact your hoster and ask them why are they still running broken virtio drivers"
+    },
+    {
+     "id": 6153014113,
+     "issue": 6684,
+     "issue_title": "Memory/socket leak with VLESS+XHTTP+REALITY on v26.3.27",
+     "created_at": "2026-10-13T19:03:25Z",
+     "user": "SettingPrompter",
+     "url": "https://github.com/XTLS/Xray-core/issues/6684#issuecomment-6153014113",
+     "body": "You should quit posting AI responses the fix is much simpler than the whole 3 months long conversation, 1 line"
+    },
+    {
+     "id": 6149363945,
+     "issue": 7124,
+     "issue_title": "Finalmask noise: Build packets from a Lua script",
+     "created_at": "2026-10-13T15:43:11Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6149363945",
+     "body": "@CluvexStudio This is a great start.\r\nHopefully, it will evolve gradually and expand into other areas, ultimately resulting in a fully functional finalmask.lua.\r\n\r\nEventually, once Lua is able to take over connections, these dependencies will come in handy.\r\n\r\nLooking forward to your next PR."
+    },
+    {
+     "id": 6149005957,
+     "issue": 7143,
+     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "created_at": "2026-10-13T15:24:53Z",
+     "user": "ChownYourLife",
+     "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6149005957",
+     "body": "pls make it co-authored"
+    },
+    {
+     "id": 6149002666,
+     "issue": 7143,
+     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "created_at": "2026-10-13T15:24:43Z",
+     "user": "ChownYourLife",
+     "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6149002666",
+     "body": "My name is not in the commit!"
+    },
+    {
+     "id": 6148998924,
+     "issue": 6748,
+     "issue_title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
+     "created_at": "2026-10-13T15:24:32Z",
+     "user": "Ahmad-2213",
+     "url": "https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6148998924",
+     "body": "[SpeedTestMessures.txt](https://github.com/user-attachments/files/33392310/SpeedTestMessures.txt)\r\n\r\n\r\n@RPRX \r\nInitial SpeedTests from downloading a Content via Steam Cache. Steam opens 5 Cache domains and downloads the data from these 5.\r\nclient params include:\r\n\r\n> \"segmentBytes\": 262144, \"segmentGrowthFactor\": 1.5,\r\n>         \"flushIntervalMs\": 10, \"pollIntervalMs\": 150, \"maxPollIntervalMs\": 500,\r\n>         \"eagerWindowMs\": 3000, \"holeTimeoutMs\": 60000,\r\n>         \"concurrency\": 16, \"sessionTtlSeconds\": 300\r\n\r\nthe numbers can be adjusted , but no drive limit so far recorded per logs.\r\nhighest recorded download speed:  12.446 MB/s"
+    },
+    {
+     "id": 6148960275,
+     "issue": 7124,
+     "issue_title": "Finalmask noise: Build packets from a Lua script",
+     "created_at": "2026-10-13T15:22:35Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6148960275",
+     "body": "> plan:Send 是我随便起的名字\n\n@Meo597 renamed it to `plan:Add`, nothing is sent when it's called\n\n> 此函数可以考虑为 plan 也提供一份变体\n\nadded `plan:AddRandom(size)` and `plan:AddRandom(size, delay)`, the bytes never become a lua string\n\n> benchmark 是否和此前交替运行比较过？\n\nran the sink build and this one alternately on the same runner, five rounds each, same harness:\n\n```\nempty hook    sink 687.8 ns   plan 697.1 ns    400 B 6 allocs both\ntwo packets   sink 1585 ns    plan 1639 ns     816 B 14 allocs both\nAddRandom                     1343 ns          528 B 8 allocs\n```\n\nso the plan costs about 3% on two packets with the same allocations, and `AddRandom` takes 18% and 6 allocs off that\n\n> 这个大闭包有点难以阅读\n\nsplit it, `packets` only borrows a state and `callHook` does the call, with `reported` for what the script reported and `err` for what went wrong\n"
+    },
+    {
+     "id": 6148838618,
+     "issue": 6748,
+     "issue_title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
+     "created_at": "2026-10-13T15:16:32Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6148838618",
+     "body": "@RPRX wg and masque are on the built-in stack now, icmp too, and nothing imports gVisor any more (linux binary 51.1 MB instead of 57.5 here). it needs a few more tests, the pr comes tomorrow\n\nxdrive: only a simulated drive so far, i have no google api account. the id doesn't have to be fetched: the writer takes ids from files.generateIds and names the next ones in every segment, so the reader GETs the next one while the previous still downloads, and nothing lists (a list is 100 quota units, a get by id 5). what i can't simulate is how long one upload and one download of 4 or 16 MiB take, growing segments stand or fall with that. i'll measure it on a real account, your way\n"
+    },
+    {
+     "id": 6148594930,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-13T15:04:30Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6148594930",
+     "body": "所以 geodata 只允许下载已经存在的文件，并且目录给限定死了，还抠了半天防逃逸检查\r\n\r\n内联脚本的安全性我倒不是特别担心，全锁在最小沙盒里，白名单定好~可防可控~\r\n\r\n倒是目前特权模式设计的 psk 只能防小白复制一份网络大神脚本\r\n公私钥签名 lua 越想越觉得是合理的方案\r\n甚至可以内置一份 Xray LuaHub 仓库的公钥"
+    },
+    {
+     "id": 6148481319,
+     "issue": 6748,
+     "issue_title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
+     "created_at": "2026-10-13T14:58:54Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6148481319",
+     "body": "还有个方法是不必用本地网络，在 VPS 上 GET Google Drive 大文件并对比 XDRIVE 的速度即可，~~不过 VPS 延迟太低也挺干扰的~~\r\n\r\n@4RH1T3CT0R7 你那边有进展吗"
+    },
+    {
+     "id": 6148314716,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-13T14:50:46Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6148314716",
+     "body": "~~其实直接不支持内联 lua 的话就没那么多问题了，然后客户端订阅只修改 Xray 配置，不过你那 geo 自动下载是不是任意文件~~"
+    },
+    {
+     "id": 6148303521,
+     "issue": 6748,
+     "issue_title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
+     "created_at": "2026-10-13T14:50:13Z",
+     "user": "Ahmad-2213",
+     "url": "https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6148303521",
+     "body": "I just saw something Interesting.\r\n<img width=\"1569\" height=\"248\" alt=\"image\" src=\"https://github.com/user-attachments/assets/ccf70866-1867-46a0-af22-03a8b4f6779b\" />\r\n\r\n\r\n~~Though my internet speed isn't good enough , for exact download meassurement, i'll be using core's api , also, @megasoheilsh will help me for speed tests...~~"
+    },
+    {
+     "id": 6148259091,
+     "issue": 7142,
+     "issue_title": "Fix Shadowsocks 2022 server TCP teardown",
+     "created_at": "2026-10-13T14:48:00Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7142#issuecomment-6148259091",
+     "body": "哦我还漏了个小东西 一起补一下吧"
+    },
+    {
+     "id": 6147363746,
+     "issue": 7141,
+     "issue_title": "Fix Shadowsocks 2022 server TCP teardown",
+     "created_at": "2026-10-13T14:04:20Z",
+     "user": "FakharzadehH",
+     "url": "https://github.com/XTLS/Xray-core/pull/7141#issuecomment-6147363746",
+     "body": "Superseded by https://github.com/XTLS/Xray-core/pull/7142, which carries the same fix commit under ChownYourLife and expanded benchmark evidence."
+    },
+    {
+     "id": 6147360411,
+     "issue": 7141,
+     "issue_title": "Fix Shadowsocks 2022 server TCP teardown",
+     "created_at": "2026-10-13T14:04:10Z",
+     "user": "ChownYourLife",
+     "url": "https://github.com/XTLS/Xray-core/pull/7141#issuecomment-6147360411",
+     "body": "Superseded by https://github.com/XTLS/Xray-core/pull/7142, which carries the same fix commit under ChownYourLife and expanded benchmark evidence."
+    },
+    {
+     "id": 6146283363,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-13T13:09:12Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6146283363",
+     "body": "或者特权模式 psk 改为公私钥签名脚本\r\n防止本地恶意程序扫、改 lua 利用 xray tun 提权\r\n（有点过度了）"
+    },
+    {
+     "id": 6145633484,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-13T12:33:25Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6145633484",
+     "body": "我觉得特权模式没必要进一步限制\r\n因为矛盾点在于 lua 花活实在是太多了\r\n\r\nxray 的 lua 不像游戏里的插件只需要最小沙盒，连 debug string.dump print load 都不给\r\n这些其实都是攻击面，一大堆看似正常的函数都能被拿来利用\r\n在特权模式简单粗暴的禁，总是能找到更多的利用点，封不完的\r\n\r\n而且就连 os.exec 也有潜在的实际用途，比如运行时操纵 iptables、节点不通 curl\r\n~下个 PR 准备搞全局脚本，订阅事件，控制 xray，先从负载均衡下手~\r\n\r\n我觉得应该让沙盒模式最小白名单，安全到可以随便被下发订阅，分享链接\r\n特权模式全部放开有足够的扩展性，但没法被下游随意启动（除非故意）\r\n这样只要守好两头就行，而不是跟 lua 花活作斗争\r\n\r\n目前本地文件型的没什么攻击面了\r\n恶意程序如果能达成随意写 xray 配置文件，并同时写入一个外部 lua\r\n那他不如自己改 windows 快捷方式或 bashrc\r\n一大堆的地方可以下手攻击面更广\r\n\r\n目前的特权模式风险点在 env 上\r\n如果下游非要把位置来源的 lua 写入文件，并且还能接收外部 env 用来给 lua 提权\r\n（这样搞基本就是故意的，没有任何理由这样做）\r\n\r\n可以让 `XRAY_LUA_PRIVILEGED_PSK` 不允许从配置文件读\r\n（说实话不太明白为什么 env 要走配置文件读，一大堆无法生效的）\r\n\r\n再进一步就是改为启动参数（用起来麻烦点）"
+    },
+    {
+     "id": 6145016838,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-10-13T11:58:07Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6145016838",
+     "body": "Got it! I'll wait for the official uTLS release with commit `6ebdceb` and then reopen this PR. Thanks for the guidance! 🙏"
+    },
+    {
      "id": 6143840325,
      "issue": 6748,
      "issue_title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
      "created_at": "2026-10-13T10:46:43Z",
      "user": "Ahmad-2213",
      "url": "https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6143840325",
-     "body": "~~I just meassured my direct Speed , it's low , not good for testing; If you can test , I can provide you the config so you can test it yourself.~~\r\n\r\nI discovered that Inflight Upload cap is 16 KB for api , therefore , datas within this range can skip some delay. \r\n~~previously it was capped at 12 KB~~"
+     "body": "~~I just meassured my direct Speed , it's low , not good for testing; If you can test , I can provide you the config so you can test it yourself.~~\r\n\r\n"
     },
     {
      "id": 6143616318,
@@ -1904,105 +2130,6 @@
      "body": "utls并没有 release （如果release了会自动更新）\n并且 155 这个版本非常新 立刻迁移也不全是好事"
     },
     {
-     "id": 6111566552,
-     "issue": 7130,
-     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "created_at": "2026-10-11T17:12:56Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6111566552",
-     "body": "@RPRX \r\n要不考虑一下直接用 https://github.com/MetaCubeX/mipstack 吧 反正都是翻墙软件的东西各种坑人家也踩过了 许可证我看了下的 MPL 2.0 的 也方便换掉 wireguard 和 masque 什么的依赖 这样才能弄掉 gvisor 依赖"
-    },
-    {
-     "id": 6111404647,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T16:55:20Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6111404647",
-     "body": "fswatch 太重了，最多 rpc 重载\r\n\r\n@CluvexStudio json 内联 lua 我会再开个 PR "
-    },
-    {
-     "id": 6111095010,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T16:22:09Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6111095010",
-     "body": "> 目的是为了方便 json 分享吗？ fm 有它自己的特殊性的确可以这么干 适合在 fm/infra 那边做，传给 core 的直接就是代码而不是文件路径 别的地方还准备做热重载不太适合\r\n\r\n传文本就不重载呗\r\n你很喜欢搞重载但是这个不比证书和geofile无人值守更新 一更新希望它立刻生效别到时候又只能加个fswatch进来"
-    },
-    {
-     "id": 6111049598,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T16:17:23Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6111049598",
-     "body": "> 要不给 `script` 加个魔法头 `base64+gzip:` 之类的\n\n@Meo597 @Fangliding did it that way. one `script`, `file:` is the default so a plain path still works, plus `base64:` and `base64+gzip:` for the code itself. core gets the code either way, infra/conf is the only place that reads a file or unpacks anything\n\nabout how much gzip saves, the 537 byte script from the guide is 716 bytes as plain base64 and 404 with gzip, the small 113 byte one is 152 plain and 156 with gzip, so it only helps from a few hundred bytes up. that's in the docs\n\ntests cover a plain path, `file:`, both inline forms, and a path with a colon in it so it doesn't get taken for a prefix. rejects too, unknown prefix, bad base64, something that isn't gzip, a cut gzip, no `HandleNoise`, and `script` with `noise`. docs updated in zh en and ru\n"
-    },
-    {
-     "id": 6110729799,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T15:43:07Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6110729799",
-     "body": "要不给 `script` 加个魔法头 `base64+gzip:` 之类的\r\n然后统统丢给核心\r\n默认是 `file:`"
-    },
-    {
-     "id": 6110589976,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T15:27:39Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6110589976",
-     "body": "目的是为了方便 json 分享吗？\r\nfm 有它自己的特殊性的确可以这么干\r\n适合在 fm/infra 那边做，传给 core 的直接就是代码而不是文件路径\r\n别的地方还准备做热重载不太适合"
-    },
-    {
-     "id": 6110557806,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T15:24:09Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6110557806",
-     "body": "应该提供一种路径之外的地方放Lua方便用户来回搬 比如把原代码base64一遍直接填在json里（考虑gzip之类的压缩？不知道一般压缩后是多大）\r\n@Meo597 "
-    },
-    {
-     "id": 6110532870,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T15:21:25Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6110532870",
-     "body": "> 高开销的原因是 LTable 应尽力避免使用它\n\n@Meo597 you're right, the tables were most of it. there's no LTable left now, the script submits each packet with noise.Send(packet) or noise.Send(packet, delay) and the hook only returns an error if it wants to report one. the packet buffer is reused per connection so nothing is allocated between calls\n\nsame two packets on a github runner went from 1424B and 23 allocs to 432B and 9, about twice as fast too, so it's 2.7x the static items now instead of 5x\n\nSend is only in the private registerLua, the public RegisterLua gives other modules just Random and RandomBetween since they can't send noise anyway, same split as dns.Query. the sink lives in the registry so a script can't reach it. docs are updated in all three languages\n"
-    },
-    {
-     "id": 6110099962,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T14:33:37Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6110099962",
-     "body": "高开销的原因是 LTable 应尽力避免使用它"
-    },
-    {
-     "id": 6109887865,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T14:09:44Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6109887865",
-     "body": "> lua 部分应该导出 `xray.finalmask.noise`\n\n@Meo597 all four done. module is xray.finalmask.noise now, the lua glue moved into lua.go with a public RegisterLua so another module's engine can offer it later, and script.go is just the engine and the lifecycle like app/dns/script.go does it. no private registerLua, both functions are plain helpers so there's nothing to hide the way dns.Query is from a dns script\n\nbenchmark is in lua_benchmark_test.go, ran it on a github runner. the bridging on its own is 145ns and 16B, a call that returns two packets is about 2us and 1.4KB against 412ns and 128B for the same thing built from static items, and the write path after a peer already has its noise stays at 318ns and 64B. so a script is a few times the static items but only once per peer and nothing is paid per packet\n\nand yeah lua taking over a connection is the interesting one, agree. this was meant to be the small step, a pooled hook that stays off the write path, so the bigger stateful thing is still free to take finalmask.lua\n"
-    },
-    {
-     "id": 6109508546,
-     "issue": 7124,
-     "issue_title": "Finalmask noise: Build packets from a Lua script",
-     "created_at": "2026-10-11T13:26:30Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6109508546",
-     "body": "关于此 pr 的 fm 部分我没什么意见\r\n\r\n~只要不是 streamSettings.finalmask.lua 就行~\r\n~因为我对它的期望很高~\r\n几天前我 vibe 了一个 fm 实现让 lua 接管连接，而不是目前这种无状态的池化 hook，那可以做更多事情\r\n但为了能控制 payload 以及需要双向无阻塞，不得不抠很多细节\r\n最终 ai 写出来的一坨过于丑陋就让我给扔了\r\n或许我步子不应该一开始就迈那么大，应该慢慢演进\r\n\r\n回到这个 pr 上面\r\nlua 部分应该导出 `xray.finalmask.noise`\r\n一些函数应该移至 lua.go 并且 RegisterLua 来导出一些函数以供未来其它模块使用\r\n仅供自己使用的才用 registerLua 具体示例可见 dns 那块\r\ndns 脚本引擎自己 require(\"xray.dns\") 不应有 dns.Query 因此有 registerLua 和 RegisterLua\r\n\r\n其它的我没有逐行 review\r\nlua 一不小心就会导致高内存开销，建议加个 benchmark"
-    },
-    {
      "id": 5956870055,
      "issue": 6454,
      "issue_title": "tun模式存在dns泄漏",
@@ -2024,6 +2151,127 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3274,
+     "title": "**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-12T05:50:26Z",
+     "updated_at": "2026-10-13T18:13:32Z",
+     "user": "sp198469-hue",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3274",
+     "body": "<img width=\"1040\" height=\"641\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/86dca68e-52e4-4ac3-acb9-bbeed4053301\" />\n\nВсем привет, может быть кому то из русскоязычного человечества поможет, обновил Амнезию с 4 версии до пятой, дальше протокол Amnezia WG был сначала legacy потом 2.0, потом вышла 3.1 - дай думаю обнловлю. Пришлось снести пользователей (т.е. я пошел по пути \"удалить протокол\" -> \"поставить протокол\"), думал так будет чище, вернее смелее. Проблема №1 - после обновления протокола старая версия на Apple iPhone \"не понимала\" новый протокол, обновиться просто так - фигу, \"в вашей стране данное приложение недоступно\", вай вай - каким образом Эпл Сторе поддался на какое то \"давление\" со стороны РФ мы оставим за сценой. Чтобы решить вопрос  конкретно на айфоне есть два пути: а) создать отдельный акк (зарубежный без санкций) для покупок - вариант капитальный и долгосрочный, но не быстрый как мне на тот момент было нужно б) сгрузить приложение и \"переустановить\" его с риском потери доступа.  Риски были оправданы т.к. впн работал только на ПК - захожу в настройки, основные, хранилище - там видим список приложений, находим Амнезию - нажимаем \"сгрузить приложение\", после того как оно сгрузилось - \"переустановить приложение\" и вуаля - новая версия закачивается с сервиса (спасибо Стив). Далее решаем вопрос с тем, какой же редьки после обновления ПО на свежее и установки нового протокола всё так адово стало тупить и тормозить, т.е. не то, чтобы ютьюб не работал, вообще пакеты терялись, банально почту было открыть невозможно, идём и решаем вопрос:\n\n**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления\n\nПосле обновления до **AmneziaVPN 5 с протоколом AmneziaWG 3.1** столкнулся с сильным замедлением интернета: сайты долго открывались, соединение периодически зависало, потери пакетов через VPN достигали **70–80%**.\n\nПроблема наблюдалась на нескольких устройствах, подключённых к одному VPS.\n\n**Конфигурация:**\n- Сервер: Ubuntu 22.04, Docker, AmneziaWG 3.1.\n- Клиент: Windows, AmneziaVPN 5.\n- MTU сервера: 1420.\n- MTU в настройках клиента: 1200.\n\n### Решение\n\n**1. Изменить MTU клиента на 1280**\n\nAmneziaVPN → настройки подключения → AmneziaWG → MTU → `1280`.\n\nСохранить и переподключить VPN.\n\n**2. Изменить MTU на сервере**\n\nПодключиться к VPS по SSH.\n\nНайти контейнер:\n\n```bash\ndocker ps\n```\n\nВ моём случае контейнер назывался `amnezia-awg2`.\n\nПроверить MTU:\n\n```bash\ndocker exec amnezia-awg2 ip link show awg0\n```\n\nБыло `mtu 1420`.\n\nУстановить 1280:\n\n```bash\ndocker exec amnezia-awg2 ip link set dev awg0 mtu 1280\n```\n\n**3. Закрепить настройку после перезапуска**\n\nСначала создать резервную копию:\n\n```bash\ndocker cp amnezia-awg2:/opt/amnezia/awg/awg0.conf /root/awg0.conf.backup\nchmod 600 /root/awg0.conf.backup\n```\n\nДобавить `MTU = 1280` в секцию `[Interface]` конфигурации:\n\n```bash\ndocker exec amnezia-awg2 sh -c \"sed -i '/^\\[Interface\\]/a MTU = 1280' /opt/amnezia/awg/awg0.conf\"\n```\n\nОграничить права доступа:\n\n```bash\ndocker exec amnezia-awg2 chmod 600 /opt/amnezia/awg/awg0.conf\n```\n\nПроверить конфигурацию:\n\n```bash\ndocker exec amnezia-awg2 sh -c 'awg-quick strip /opt/amnezia/awg/awg0.conf >/dev/null && echo OK'\n```\n\nКогда допустим кратковременный обрыв VPN, перезапустить контейнер:\n\n```bash\ndocker restart amnezia-awg2\ndocker exec amnezia-awg2 ip link show awg0\n```\n\nПосле перезапуска MTU остался **1280**.\n\n### Результат\n\nПосле изменения MTU соединение стало заметно стабильнее, сайты начали открываться значительно быстрее, постоянные зависания практически исчезли.\n\nПовторный тест Packet Loss Test показал **1,1% потерь пакетов**. Ранее при проверке Ping через VPN наблюдалось 70–80% потерь (методики тестирования различались).\n\n**Важно:** это решение помогло в моей конфигурации, но не является универсальным. Разные значения MTU клиента и сервера сами по себе не обязательно свидетельствуют об ошибке. Перед изменениями сохраните конфигурацию. При обновлении или пересоздании Docker-контей"
+    },
+    {
+     "number": 1965,
+     "title": "Раздельное туннелирование",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2025-10-29T20:32:12Z",
+     "updated_at": "2026-10-13T17:30:47Z",
+     "user": "krutpik",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1965",
+     "body": "Добавьте возможность иcключать программы через название процесса, как это сделано в nekobox"
+    },
+    {
+     "number": 3247,
+     "title": "feat: api tests",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-01T10:44:28Z",
+     "updated_at": "2026-10-13T15:44:12Z",
+     "user": "MrMirDan",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3247",
+     "body": ""
+    },
+    {
+     "number": 3262,
+     "title": "feat: split app/tunnel logs viewer",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-06T11:53:24Z",
+     "updated_at": "2026-10-13T14:10:33Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3262",
+     "body": ""
+    },
+    {
+     "number": 1722,
+     "title": "MacOS share client error: QFile error.",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-07-15T10:32:58Z",
+     "updated_at": "2026-10-13T13:59:17Z",
+     "user": "stupalov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1722",
+     "body": "\nОбновился на MacOS до последней версии 4.8.8.3\n\nПри попытке расшарить клиента (для AmneziaVPN) выдает ошибку\n\nErrorCode: 1200. QFile error: The file could not be opened\n\nСам сервер доступен, подключаюсь на уже созданный vpn.\nМогу зайти на сервер..\n\n\nMacOS 15.5 (24F74)\nMacbook Pro M3"
+    },
+    {
+     "number": 3239,
+     "title": "feature: cover test gateway service config import",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-28T14:46:48Z",
+     "updated_at": "2026-10-13T13:51:00Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3239",
+     "body": "feature add test for  gateway service config import"
+    },
+    {
+     "number": 3248,
+     "title": "fix: libagw review",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-01T15:59:19Z",
+     "updated_at": "2026-10-13T13:39:53Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3248",
+     "body": "fix: run libagw calls off the main thread\r\nfix: accept gateway answers without http_status\r\nfix: stop logging server config with private keys\r\nfix: destroy news gateway controller on its own thread\r\nfix: keep agw failover state per environment and gateway"
+    },
+    {
+     "number": 3276,
+     "title": "fix: hint xray settings file on main import",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-12T15:12:55Z",
+     "updated_at": "2026-10-13T13:26:59Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3276",
+     "body": ""
+    },
+    {
+     "number": 3275,
+     "title": "fix: location separation texts",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-12T06:18:18Z",
+     "updated_at": "2026-10-13T13:26:24Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3275",
+     "body": ""
+    },
+    {
+     "number": 3028,
+     "title": "feat: use libagw",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-08-24T09:05:08Z",
+     "updated_at": "2026-10-13T13:26:02Z",
+     "user": "vkamn",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3028",
+     "body": ""
+    },
+    {
+     "number": 2511,
+     "title": "Amnezia VPN Error 305",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-04-22T15:34:30Z",
+     "updated_at": "2026-10-13T12:45:52Z",
+     "user": "igorgurochkin",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2511",
+     "body": "Всем привет! Столкнулся с ошибкой 305 при попытке подключиться к серверу. Как пофиксить?\n\nВидел, что уже кто то сталкивался с подобным, но я к сожалению не особо разбираюсь в матчасти(\n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6c1523de-dc2d-442a-80fa-73598d1bd235\" />"
+    },
     {
      "number": 3058,
      "title": "Support Amnezia 3.1 for kinetic",
@@ -2080,17 +2328,6 @@
      "body": "**Describe the bug**\nWhen the login shell is set as fish, the app reports that there is no sudo permission. I assume this is because that the checks done do not work in fish and presents an error.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Set login shell as fish.\n2. Try to install any VPN.\n3. Error appears.\n\n**Expected behaviour**\nThe app should identify that the shell is fish and proceed with a modified script; OR\nAdd a bash shebang at the script.\n\n**Log files**\nN/A\n\n**Screenshots**\nN/A\n\n**Desktop (please complete the following information):**\n - OS: macOS\n - Version 27.0.1\n\n**Server (please complete the following information):**\n - OS: Ubuntu 24.04\n\n**Additional context**\nN/A"
     },
     {
-     "number": 3274,
-     "title": "**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-12T05:50:26Z",
-     "updated_at": "2026-10-12T23:13:30Z",
-     "user": "sp198469-hue",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3274",
-     "body": "<img width=\"1040\" height=\"641\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/86dca68e-52e4-4ac3-acb9-bbeed4053301\" />\n\nВсем привет, может быть кому то из русскоязычного человечества поможет, обновил Амнезию с 4 версии до пятой, дальше протокол Amnezia WG был сначала legacy потом 2.0, потом вышла 3.1 - дай думаю обнловлю. Пришлось снести пользователей (т.е. я пошел по пути \"удалить протокол\" -> \"поставить протокол\"), думал так будет чище, вернее смелее. Проблема №1 - после обновления протокола старая версия на Apple iPhone \"не понимала\" новый протокол, обновиться просто так - фигу, \"в вашей стране данное приложение недоступно\", вай вай - каким образом Эпл Сторе поддался на какое то \"давление\" со стороны РФ мы оставим за сценой. Чтобы решить вопрос  конкретно на айфоне есть два пути: а) создать отдельный акк (зарубежный без санкций) для покупок - вариант капитальный и долгосрочный, но не быстрый как мне на тот момент было нужно б) сгрузить приложение и \"переустановить\" его с риском потери доступа.  Риски были оправданы т.к. впн работал только на ПК - захожу в настройки, основные, хранилище - там видим список приложений, находим Амнезию - нажимаем \"сгрузить приложение\", после того как оно сгрузилось - \"переустановить приложение\" и вуаля - новая версия закачивается с сервиса (спасибо Стив). Далее решаем вопрос с тем, какой же редьки после обновления ПО на свежее и установки нового протокола всё так адово стало тупить и тормозить, т.е. не то, чтобы ютьюб не работал, вообще пакеты терялись, банально почту было открыть невозможно, идём и решаем вопрос:\n\n**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления\n\nПосле обновления до **AmneziaVPN 5 с протоколом AmneziaWG 3.1** столкнулся с сильным замедлением интернета: сайты долго открывались, соединение периодически зависало, потери пакетов через VPN достигали **70–80%**.\n\nПроблема наблюдалась на нескольких устройствах, подключённых к одному VPS.\n\n**Конфигурация:**\n- Сервер: Ubuntu 22.04, Docker, AmneziaWG 3.1.\n- Клиент: Windows, AmneziaVPN 5.\n- MTU сервера: 1420.\n- MTU в настройках клиента: 1200.\n\n### Решение\n\n**1. Изменить MTU клиента на 1280**\n\nAmneziaVPN → настройки подключения → AmneziaWG → MTU → `1280`.\n\nСохранить и переподключить VPN.\n\n**2. Изменить MTU на сервере**\n\nПодключиться к VPS по SSH.\n\nНайти контейнер:\n\n```bash\ndocker ps\n```\n\nВ моём случае контейнер назывался `amnezia-awg2`.\n\nПроверить MTU:\n\n```bash\ndocker exec amnezia-awg2 ip link show awg0\n```\n\nБыло `mtu 1420`.\n\nУстановить 1280:\n\n```bash\ndocker exec amnezia-awg2 ip link set dev awg0 mtu 1280\n```\n\n**3. Закрепить настройку после перезапуска**\n\nСначала создать резервную копию:\n\n```bash\ndocker cp amnezia-awg2:/opt/amnezia/awg/awg0.conf /root/awg0.conf.backup\nchmod 600 /root/awg0.conf.backup\n```\n\nДобавить `MTU = 1280` в секцию `[Interface]` конфигурации:\n\n```bash\ndocker exec amnezia-awg2 sh -c \"sed -i '/^\\[Interface\\]/a MTU = 1280' /opt/amnezia/awg/awg0.conf\"\n```\n\nОграничить права доступа:\n\n```bash\ndocker exec amnezia-awg2 chmod 600 /opt/amnezia/awg/awg0.conf\n```\n\nПроверить конфигурацию:\n\n```bash\ndocker exec amnezia-awg2 sh -c 'awg-quick strip /opt/amnezia/awg/awg0.conf >/dev/null && echo OK'\n```\n\nКогда допустим кратковременный обрыв VPN, перезапустить контейнер:\n\n```bash\ndocker restart amnezia-awg2\ndocker exec amnezia-awg2 ip link show awg0\n```\n\nПосле перезапуска MTU остался **1280**.\n\n### Результат\n\nПосле изменения MTU соединение стало заметно стабильнее, сайты начали открываться значительно быстрее, постоянные зависания практически исчезли.\n\nПовторный тест Packet Loss Test показал **1,1% потерь пакетов**. Ранее при проверке Ping через VPN наблюдалось 70–80% потерь (методики тестирования различались).\n\n**Важно:** это решение помогло в моей конфигурации, но не является универсальным. Разные значения MTU клиента и сервера сами по себе не обязательно свидетельствуют об ошибке. Перед изменениями сохраните конфигурацию. При обновлении или пересоздании Docker-контей"
-    },
-    {
      "number": 3277,
      "title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
      "is_pr": false,
@@ -2111,17 +2348,6 @@
      "user": "gegemon2012",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1039",
      "body": "Здравствуйте!\r\nПодскажите пожалуйста как мне импортировать в список раздельного туннелирования сайтов списки с сайта https://antifilter.download/  в формате *.lst и *.txt. Тут подробнее - https://community.antifilter.download/ о списках.\r\nИ почему по умолчанию такой функционал отсутствует в программе, ведь программа позициорируется как для обывателя, а списки сохраняет и импортирует только в экзотическом формате *.json.\r\nМожет можно как-то сконвертировать lst/txt в json? Или дополнить функционал программы на распознование таких списков в формате *.lst и *.txt. Я сам не программист но не думаю что это такая уж и сложная задача. А еще лучше если программа могла сама парсить списки с сайта и обновлять их в автоматическом режиме.\r\n\r\n"
-    },
-    {
-     "number": 3262,
-     "title": "feat: split app/tunnel logs viewer",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-06T11:53:24Z",
-     "updated_at": "2026-10-12T17:44:52Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3262",
-     "body": ""
     },
     {
      "number": 3273,
@@ -2146,17 +2372,6 @@
      "body": "### Summary\n\nWhen changing the SNI field (\"Server name (sni)\") for the **Xray** protocol via the Amnezia-client UI, the server-side `server.json` inside the `amnezia-xray` container is updated only in `realitySettings.serverNames`. The `realitySettings.dest` field is **not** updated and keeps the original default value (e.g. `www.googletagmanager.com:443`).\n\nAs a result, the server continues to fetch and present the TLS certificate of the old `dest` host, while advertising a different SNI to clients. This creates a mismatch between the requested SNI and the returned certificate.\n\n### Affected setup\n\n- Protocol: **Xray (VLESS + REALITY, xtls-rprx-vision)**\n- Server: Amnezia self-hosted VPS, protocol installed via Amnezia-client (Docker container `amnezia-xray`)\n- Container entrypoint: `dumb-init /opt/amnezia/start.sh`\n- Config path inside container: `/opt/amnezia/xray/server.json`\n- Clients used for testing: **sing-box 1.14.x** (TUN mode, strict certificate verification), plus Amnezia mobile clients (Android)\n\n### Steps to reproduce\n\n1. Install Xray protocol on a clean VPS via the Amnezia client (Docker container `amnezia-xray`).\n2. In the Amnezia client UI, open the Xray protocol settings and change the **\"Server name (SNI)\"** field from the default value (e.g. `www.googletagmanager.com`) to another domain, for example `files.pythonhosted.org`.\n3. Apply changes.\n4. On the server, inspect the container config:\n   ```bash\n   docker exec -it amnezia-xray cat /opt/amnezia/xray/server.json\n   ```\n\n### Actual behavior\n\nThe config contains a **mismatch**:\n\n```json\n\"realitySettings\": {\n    \"dest\": \"www.googletagmanager.com:443\",\n    \"fingerprint\": \"chrome\",\n    \"privateKey\": \"...\",\n    \"serverNames\": [\n        \"files.pythonhosted.org\"\n    ],\n    \"shortIds\": [\n        \"...\"\n    ]\n}\n```\n\n- `serverNames` — updated to the new SNI entered in the UI.\n- `dest` — **left unchanged** at the old default (`www.googletagmanager.com:443`).\n\nBecause REALITY uses `dest` as the source of the certificate it presents during the handshake, the server returns a certificate valid for `*.google-analytics.com` / `*.googletagmanager.com` while the client expects `files.pythonhosted.org`.\n\n### Expected behavior\n\nChanging the SNI in the UI should update **both** `serverNames` **and** `dest` (or at least provide a separate field / automatic synchronization), so that the presented certificate matches the advertised SNI.\n\n### Impact\n\n- **sing-box** (and any client that strictly verifies the certificate) fails to connect with:\n  ```\n  x509: certificate is valid for *.google-analytics.com, ..., not files.pythonhosted.org\n  ```\n- Amnezia mobile clients appear to work because they do not strictly verify the returned certificate, which **masks the bug** during normal use.\n- The mismatched SNI/certificate pair is an anomaly in TLS traffic that can be flagged by DPI systems, potentially putting the server IP at risk of being blocked.\n\n### Workaround\n\nManually editing `dest` inside the container fixes the issue:\n\n```bash\ndocker cp amnezia-xray:/opt/amnezia/xray/server.json /root/server.json\n# edit \"dest\" to match \"serverNames\", e.g. \"files.pythonhosted.org:443\"\npython3 -m json.tool /root/server.json > /dev/null && echo \"JSON OK\"\ndocker cp /root/server.json amnezia-xray:/opt/amnezia/xray/server.json\ndocker restart amnezia-xray\n```\n\nHowever, this is fragile: any subsequent change to the Xray protocol via the Amnezia client UI (adding a client, changing SNI, etc.) overwrites `server.json` and reverts `dest` back to the old default, requiring the manual fix again.\n\n### Suggested fix\n\nIn the Amnezia-client code that generates `server.json` for the Xray protocol, when the user changes the SNI, update `realitySettings.dest` accordingly (e.g. set `dest` to `<new_sni>:443`), or add an explicit `dest`/`target` field in the UI so both values can be configured and kept in sync.\n\n### Environment\n\n- Amnezia-client version: _5.0.3.0_\n- Desktop OS: Windows 11\n- Server OS: Debian 13\n- Con"
     },
     {
-     "number": 3276,
-     "title": "fix: hint xray settings file on main import",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-12T15:12:55Z",
-     "updated_at": "2026-10-12T15:12:55Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3276",
-     "body": ""
-    },
-    {
      "number": 2767,
      "title": "Latest Amnesia version doesn't work on Ubuntu 22.04",
      "is_pr": false,
@@ -2166,17 +2381,6 @@
      "user": "berdachuk",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2767",
      "body": "**Describe the bug**  \nAmneziaVPN does not start on Ubuntu 22.04 after upgrading to the latest version.\n\n**To Reproduce**  \nSteps to reproduce the behavior:\n1. Download and install the latest version, `4.8.19.0`.\n2. Start the application from the menu — nothing happens.\n3. Start it from the terminal:\n```bash\n$ AmneziaVPN\n```\n4. See the error:\n```text\n/opt/AmneziaVPN/client/bin/AmneziaVPN: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.36' not found (required by /opt/AmneziaVPN/client/bin/AmneziaVPN)\n/opt/AmneziaVPN/client/bin/AmneziaVPN: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found (required by /opt/AmneziaVPN/client/bin/AmneziaVPN)\n```\n\n**Expected behavior**  \nThe application should start and work normally.\n\n**Desktop (please complete the following information):**\n- OS: Ubuntu\n- Version: 22.04\n\n**Additional context**  \nThe latest AmneziaVPN version that I am able to start is `AmneziaVPN_4.8.11.4_linux_x64.tar.zip`.  \nHowever, it shows `Error 1111: ApiUpdateRequestError`."
-    },
-    {
-     "number": 3275,
-     "title": "fix: location separation texts",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-12T06:18:18Z",
-     "updated_at": "2026-10-12T06:18:18Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3275",
-     "body": ""
     },
     {
      "number": 3089,
@@ -2221,31 +2425,45 @@
      "user": "uxerror",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2383",
      "body": "Bug fixes:\r\n- connectionController: use server-specific container config instead of last-viewed container model config (m_settings->containerConfig)\r\n- vpnconnection: prevent routeMode reset from VpnAllExceptSites to VpnAllSites when excluded sites list is empty\r\n\r\nFeature — KillSwitch Allow LAN (Linux):\r\n- New setting to allow local network (LAN) access including DNS when KillSwitch is active\r\n- Adds iptables rules for 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 without VPN interface restriction in the 320.allowDNS chain\r\n- Full pipeline: Settings -> UI toggle -> VpnConnection -> IPC ->\r\n  Daemon -> LinuxFirewall (both WG/AWG and OpenVPN/XRay paths)\r\n- Translations added for all supported languages"
-    },
-    {
-     "number": 1400,
-     "title": "Add to Winget",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2025-02-05T20:57:24Z",
-     "updated_at": "2026-10-11T16:31:09Z",
-     "user": "e-t-l",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1400",
-     "body": "This is a great program and it would be awesome for it to automatically update through WinGet. It should be pretty easy to do; you just add the winget submission Action to your Github Workflow when publishing a new release using the [Winget-Releaser](https://github.com/vedantmgoyal9/winget-releaser) template\n\nnote: If the `-silent` install parameter isn't working on Windows, as #459 suggests, that may need to fixed first."
-    },
-    {
-     "number": 3268,
-     "title": "[iOS][AmneziaWG] Previously shared VPN users no longer appear in Share VPN → Users",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-08T05:45:20Z",
-     "updated_at": "2026-10-11T12:46:39Z",
-     "user": "AleksZakh7",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3268",
-     "body": "## Describe the problem\nPreviously shared VPN users have stopped appearing in AmneziaVPN on iPhone. These users were visible before.\n\nIn Share VPN → Users (Russian UI: «Поделиться VPN → Пользователи»), the server and AmneziaWG protocol are selected, but the users list is completely blank. No error message is visible in the supplied screenshot.\n\nThis is a suspected regression or client-list retrieval failure. The root cause has not been established; deletion of server-side peers has not been confirmed.\n\n## Steps to reproduce the reported symptom\n1. Use a self-hosted VPN with access previously shared with other users.\n2. Open Share VPN → Users.\n3. Select the relevant server and AmneziaWG.\n4. Previously listed users are no longer displayed.\n\n## Expected behavior\nPreviously created users should be listed for access management and revocation. If retrieving the list fails, show an actionable error instead of an unexplained blank list.\n\n## Environment\n- Client: iPhone / iOS.\n- Protocol displayed: AmneziaWG.\n- Deployment: self-hosted VPS.\n- Exact AmneziaVPN build, iOS version, server OS and container version: not yet supplied.\n- Date reported: 8 October 2026.\n\n## Evidence and investigation limits\nThe screenshot supplied by the user shows the empty Users section with no visible error. The screenshot is described here; it is not attached to this issue.\n\nApplication logs and server state have not yet been inspected. Whether existing shared profiles still connect, whether creating new users works, and whether another administrator device displays the users have not yet been checked.\n\n## Related report and request\n#2837 describes an empty AmneziaWG users list on Android and additional invalid configuration export symptoms. Those additional symptoms have NOT been tested or reported in this iOS case. A shared root cause is only a possibility.\n\nPlease advise whether this is a known issue, which sanitized logs or read-only checks would distinguish a list-fetch/SSH failure from a client-table problem, and how to restore the list without recreating the server or invalidating existing shared profiles."
     }
    ],
    "comments": [
+    {
+     "id": 6152116607,
+     "issue": 3274,
+     "issue_title": "**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления",
+     "created_at": "2026-10-13T18:13:32Z",
+     "user": "sp198469-hue",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3274#issuecomment-6152116607",
+     "body": "\"хотя устанавливал на серверной стороне\" - сделал тоже самое, да, заново раздал конфиги - всё работает теперь гораздо лучше, спасибо."
+    },
+    {
+     "id": 6152112841,
+     "issue": 3274,
+     "issue_title": "**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления",
+     "created_at": "2026-10-13T18:13:20Z",
+     "user": "sp198469-hue",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3274#issuecomment-6152112841",
+     "body": "\"хотя устанавливал на серверной стороне\" - сделал тоже самое, да, заново раздал конфиги - всё работает теперь гораздо лучше, спасибо."
+    },
+    {
+     "id": 6147261891,
+     "issue": 1722,
+     "issue_title": "MacOS share client error: QFile error.",
+     "created_at": "2026-10-13T13:59:17Z",
+     "user": "Resways",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1722#issuecomment-6147261891",
+     "body": "m4 pro\nперезагрузка клиента помогла"
+    },
+    {
+     "id": 6145855416,
+     "issue": 2511,
+     "issue_title": "Amnezia VPN Error 305",
+     "created_at": "2026-10-13T12:45:51Z",
+     "user": "Kos1va",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2511#issuecomment-6145855416",
+     "body": "Привет, разобрался? "
+    },
     {
      "id": 6141450258,
      "issue": 2535,
@@ -2353,30 +2571,56 @@
      "user": "sp198469-hue",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3089#issuecomment-6118606116",
      "body": "Всем привет, может быть кому то из русскоязычного человечества поможет, обновил Амнезию с 4 версии до пятой, дальше протокол Amnezia WG был сначала legacy потом 2.0, потом вышла 3.1 - дай думаю обнловлю. Пришлось снести пользователей (т.е. я пошел по пути \"удалить протокол\" -> \"поставить протокол\"), думал так будет чище, вернее смелее. Проблема №1 - после обновления протокола старая версия на Apple iPhone \"не понимала\" новый протокол, проблема №2 основная - ВПН начал дико тормозить. Решение для русскоговорящих тут https://github.com/amnezia-vpn/amnezia-client/issues/3274 "
-    },
-    {
-     "id": 6111179548,
-     "issue": 1400,
-     "issue_title": "Add to Winget",
-     "created_at": "2026-10-11T16:31:09Z",
-     "user": "e-t-l",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1400#issuecomment-6111179548",
-     "body": "That's great. Fyi: This issue was opened BEFORE it was added to winget. I don't know why the devs didn't close it as complete once they added it, but I guess I'll do that now."
-    },
-    {
-     "id": 6109171479,
-     "issue": 3268,
-     "issue_title": "[iOS][AmneziaWG] Previously shared VPN users no longer appear in Share VPN → Users",
-     "created_at": "2026-10-11T12:46:39Z",
-     "user": "AleksZakh7",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3268#issuecomment-6109171479",
-     "body": "Update from the reporter: the symptoms occurred after changing the server's SSH password. The application could no longer display previously shared users or export a new configuration, while the existing VPN connection continued to work.\n\nI have identified the SSH password change as the cause in my setup and am closing this report at my request. This closure does not indicate that a software fix has been released."
     }
    ]
   },
   "apernet/hysteria": {
-   "issues": [],
-   "comments": []
+   "issues": [
+    {
+     "number": 1699,
+     "title": "chore(deps): bump werkzeug from 3.1.8 to 3.1.9",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T18:17:46Z",
+     "updated_at": "2026-10-13T18:17:49Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1699",
+     "body": "Bumps [werkzeug](https://github.com/pallets/werkzeug) from 3.1.8 to 3.1.9.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/pallets/werkzeug/releases\">werkzeug's releases</a>.</em></p>\n<blockquote>\n<h2>3.1.9</h2>\n<p>This is the Werkzeug 3.1.9 security fix release, which fixes security issues and bugs but does not otherwise change behavior and should not result in breaking changes compared to the latest feature release.</p>\n<p>PyPI: <a href=\"https://pypi.org/project/Werkzeug/3.1.9/\">https://pypi.org/project/Werkzeug/3.1.9/</a>\nChanges: <a href=\"https://werkzeug.palletsprojects.com/page/changes/#version-3-1-9\">https://werkzeug.palletsprojects.com/page/changes/#version-3-1-9</a>\nMilestone: <a href=\"https://github.com/pallets/werkzeug/milestone/46?closed=1\">https://github.com/pallets/werkzeug/milestone/46?closed=1</a></p>\n<ul>\n<li><code>safe_join</code> on Windows does not allow special devices names with empty ADS markers on NTFS. <a href=\"https://github.com/pallets/werkzeug/security/advisories/GHSA-g6x2-hccm-hh4m\">https://github.com/pallets/werkzeug/security/advisories/GHSA-g6x2-hccm-hh4m</a></li>\n<li><code>ProfilerMiddleware</code> uses <code>profiling.tracing</code> on Python 3.15. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3207\">#3207</a></li>\n<li><code>uri_to_iri</code> and <code>iri_to_uri</code> preserve empty username, password, and port 0. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3189\">#3189</a></li>\n<li>Improve performance of <code>parse_options_header</code>. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3231\">#3231</a></li>\n<li>Improve performance of <code>parse_etags</code>. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3231\">#3231</a></li>\n<li>Improve performance of <code>parse_cookie</code>. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3231\">#3231</a></li>\n<li><code>get_host</code> also checks that the port is in the valid range. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3236\">#3236</a></li>\n<li>The <code>int</code> URL converter returns a 404 instead of 500 error when the value is longer than <code>sys.get_int_max_str_digits()</code>. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3237\">#3237</a></li>\n<li>Improve debugger PIN generation from cgroup data inside Podman. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3245\">#3245</a></li>\n<li><code>Authorization</code> parsing <code>basic</code> auth disallows non-base64 characters.  <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3248\">#3248</a></li>\n<li><code>application/x-www-form-urlencoded</code> form data is no longer limited to <code>max_form_memory_size</code>, only <code>max_content_length</code>. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3251\">#3251</a></li>\n<li><code>LimitedStream.readinto</code> does not resize the buffer when it reads less than the remaining size. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3253\">#3253</a></li>\n<li>Rules with 10 or more converters in a single part assign matched values correctly. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3254\">#3254</a></li>\n<li>The invalid <code>Range</code> suffix length <code>-0</code> is no longer accepted. <a href=\"https://redirect.github.com/pallets/werkzeug/issues/3255\">#3255</a></li>\n</ul>\n</blockquote>\n</details>\n<details>\n<summary>Changelog</summary>\n<p><em>Sourced from <a href=\"https://github.com/pallets/werkzeug/blob/main/CHANGES.rst\">werkzeug's changelog</a>.</em></p>\n<blockquote>\n<h2>Version 3.1.9</h2>\n<p>Released 2026-09-27</p>\n<ul>\n<li><code>safe_join</code> on Windows does not allow special devices names with empty ADS\nmarkers on NTFS. :ghsa:<code>g6x2-hccm-hh4m</code></li>\n<li><code>ProfilerMiddleware</code> uses <code>profiling.tracing</code> on Python 3.15.\n:issue:<code>3207</code></li>\n<li><code>uri_to_iri</code> and <code>iri_to_uri</code> preserv"
+    },
+    {
+     "number": 1698,
+     "title": "feat(client): add opt-in reconnectable QUIC connection pool",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T13:39:44Z",
+     "updated_at": "2026-10-13T15:27:30Z",
+     "user": "rison1337",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1698",
+     "body": "## Summary\n\nRelated to #1431. Add an opt-in QUIC connection pool to the core API and client YAML; existing constructors and defaults remain unchanged.\n\n```yaml\nquic:\n  connectionPoolSize: 2\n```\n\nValues 1..8; omitted or 0 means one connection. Applies to client proxy/forwarding/TPROXY/TUN modes; Realm pooling is rejected. Share URIs and the single-stream speedtest command stay unchanged.\n\n- Sizes 2..8 use independent reconnectable QUIC connections; size 1 preserves the existing path.\n- Assign new TCP streams and UDP sessions round-robin. Established flows stay on their member; no single-stream bonding or replay.\n- Split nonzero bandwidth targets statically, preserving the aggregate target. This is not a shared wire-rate limiter.\n- Serialize config/callback execution and handle initialization failures and concurrent close.\n\n## Validation\n\nFull Linux `core`/`app` and serial `extras` tests, formatting and changed-package vet passed. Pool and CLI config-to-client tests passed `-race -count=20` on Linux and Windows, including real TCP/UDP, defaults and invalid sizes, eager/lazy startup, fragmentation and member recovery.\n\nThree paired MT7981 runs measured download median **271 -> 349 Mbps (+28.4%)**, with higher CPU use. One pooled run reported **0.58% loss and UDP memory errors**; this is not a long-term stability claim. Method and limits: [benchmark](https://github.com/rison1337/hysteria/blob/feat/optional-connection-pool/CONNECTION_POOL_BENCHMARK.md).\n\n## Before merge\n\n- **Depends on #1696** for retired-transport cleanup. A [separate validation branch](https://github.com/rison1337/hysteria/tree/test/pool-reconnect-cleanup) passed repeated real server-restart/recovery checks with that fix.\n- API shape and static Brutal allocation policy need maintainer agreement.\n- Upstream CI still requires approval to run the fork workflow.\n\nNo server/protocol, quic-go, router or overclock changes are included. AI-assisted; locally reviewed and tested.\n"
+    },
+    {
+     "number": 1431,
+     "title": "Multiplex Controller (Bypass connection-based speed limit)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-09-08T10:40:26Z",
+     "updated_at": "2026-10-13T13:23:25Z",
+     "user": "gfw-killer",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1431",
+     "body": "**Is your feature request related to a problem? Please describe.**\nHy2 makes only 1 multiplexed connection for all client's sub-connections, in the cases that speed of each connection is limited, performance of Hy2 is also limited.\n\n**Describe the solution you'd like**\nHysteria2 can add option to make a connection pool and do a load-balance, or make a new connection when the last connection has N sub-connections.\n\n**Describe alternatives you've considered**\n\\-\n\n**Additional context**\n\\-\n"
+    }
+   ],
+   "comments": [
+    {
+     "id": 6146553555,
+     "issue": 1431,
+     "issue_title": "Multiplex Controller (Bypass connection-based speed limit)",
+     "created_at": "2026-10-13T13:23:25Z",
+     "user": "rison1337",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1431#issuecomment-6146553555",
+     "body": "I have a working experimental client-side connection-pool prototype and some measurements relevant to this request. Would maintainers be interested in an **opt-in pool of reconnectable QUIC connections** for CPU-constrained clients?\n\nThe motivation in my case is client-side processing throughput, not bypassing a server/account bandwidth policy. New TCP streams and Hysteria UDP sessions are assigned round-robin; each returned TCP stream / UDP session stays on its original connection. This is not multipath and does not bond a single stream.\n\n### Small paired experiment\n\nCudy WR3000S / MT7981, two Cortex-A53 cores, OpenWrt 25.12.5, Linux 6.12.94. The CPU was held at **1640 MHz in both cases**; these are not stock-clock results. Windows Ookla CLI on a wired LAN client, through router TPROXY, same VPN server and same Speedtest server (50771, Frankfurt). Three tests per case, alternating A/B, on 2026-10-04:\n\n| Metric | 1 QUIC connection | 2 QUIC connections |\n| --- | ---: | ---: |\n| Download median | 273.32 Mbps | 368.22 Mbps |\n| Upload median | 290.08 Mbps | 284.60 Mbps |\n| Download loaded latency median (Ookla IQM) | 216.96 ms | 110.49 ms |\n| Mean of per-run loaded CPU means | 73.82% | 87.36% |\n| Process RSS maximum across runs | 69.59 MiB | 69.36 MiB |\n| MemAvailable minimum across runs | 45.48 MiB | 47.33 MiB |\n\nThe download median increased by approximately **34.7%**. The six download samples were 263.09 / 276.58 / 273.32 Mbps for one connection and 368.22 / 368.22 / 364.76 Mbps for two.\n\n### Important qualifications\n\n- Both A and B used the same experimental Hysteria/quic-go binary. UDP GRO and receive-buffer recycling were enabled in **both** cases, as were `GOMEMLIMIT=64MiB` and nice -5. This isolates pool size within that prototype, but is **not** a stock-upstream-versus-pool-only benchmark.\n- Brutal's configured bandwidth targets were kept at an aggregate **450 Mbps down / 300 Mbps up** by dividing the targets evenly among connections. This is a static allocation, not a shared rate limiter: a single stream cannot borrow idle members' allocations. Loss compensation and server-side per-connection policies still need review; dividing targets is not proof of correct aggregate congestion behavior.\n- Kernel UDP buffer-error counters and WAN drop counters did not increase during these six runs. However, diagnostic QUIC receive-queue drops remained: 33,855 across A and 65,791 across B. External DIRECT ICMP probes also missed replies (3/68 and 7/66, respectively, with a short 500 ms timeout). I am **not** claiming zero packet loss or proven long-term stability.\n- A separate three-repeat 2-versus-3-connection experiment produced 356.97 versus 367.75 Mbps download medians, only about 3% improvement. More connections are not automatically better.\n- The prototype is based on Hysteria 2.12.3 and a local quic-go fork based on `v0.62.1-0.20260912175848-73339f7edbb9`. A submission would need rebasing and testing with the current pinned dependency.\n\nIf this direction is welcome, I would propose a small, separate pool-only PR: default size 1 / existing behavior unchanged, explicit configuration rather than experimental environment variables, documented static bandwidth allocation, per-session affinity, and tests for lazy/eager initialization, cleanup, reconnect and concurrent close. GRO, receive-path changes and OpenWrt/overclock/guard scripts would not be included.\n\nIn particular, would you prefer to restrict the initial pool feature to an automatically controlled congestion mode, or consider static per-connection Brutal target allocation if the limitations are explicit? I would appreciate guidance before settling the public API/configuration shape.\n"
+    }
+   ]
   }
  }
 }

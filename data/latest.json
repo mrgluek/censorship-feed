@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-14T08:42:43Z",
- "since": "2026-10-12T08:42:43Z",
+ "generated_at": "2026-10-14T14:31:06Z",
+ "since": "2026-10-12T14:31:06Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -25,17 +25,6 @@
      "user": "ospab",
      "url": "https://github.com/net4people/bbs/issues/673",
      "body": "Yes, this is another AI-assisted protocol (written with a lot of help from\nClaude Code). But it works: it gets my relatives through censorship every day\nand saves them a fair amount of money and nerves. Now I'd like people who know\nDPI better than I do to tell me where the design breaks.\n\nhttps://github.com/ospab/ostp — AGPL-3.0: the protocol, server, CLI, desktop and\nAndroid apps.\n\n### Wire image\n\n- Handshake: `Noise_NNpsk0_25519_ChaChaPoly_BLAKE2s`; data: ChaCha20-Poly1305.\n  Every secret is HKDF-derived from the shared access key. No custom primitives.\n- No cleartext version field or magic byte. The 12-byte outer header (session id\n  + nonce) is XOR-masked with HMAC-SHA256(obfuscation key, first 32 bytes of the\n  packet's ciphertext), so headers are uncorrelated between packets.\n- Handshake padding length is drawn from a range derived from the access key, so\n  different deployments have different size distributions.\n- Optional junk datagrams before the handshake (per-key marker, not a constant)\n  and fragmentation of the first TCP write into small chunks.\n- An unauthenticated peer gets a fallback website or a decoy, not a reset.\n\nSpec: `docs/en/specification.md`, obfuscation: `docs/en/obfuscation.md`.\n\n### Three carriers for the same datagrams\n\n1. **UDP** — random-looking, own ARQ (selective ACK/NACK) and congestion control.\n2. **UoT** — the same datagrams over plain TCP, for networks that throttle unknown UDP.\n3. **TLS on 443** (added recently) — UoT inside real TLS with a real Let's Encrypt\n   certificate on your domain, directly or behind nginx/Caddy on a secret path.\n   Not an imitation: the server is a real website.\n\n### What I've seen in Russia\n\n- **My home (wired) ISP:** almost everything is blocked. OSTP works, and so does\n  a carefully tuned VLESS setup; nothing else I tried does.\n- **Mobile operators differ a lot.** On MegaFon, one of the biggest, VLESS\n  surprisingly isn't blocked, but OSTP over plain UDP and over UoT are blocked\n  readily. With UDP the client's counters show only a few hundred bytes coming\n  back, and the handshake never completes or the session never becomes stable.\n- **TLS works on both** the home ISP and MegaFon.\n\nSo in practice the \"looks like nothing\" carriers are what fails on mobile, and\nthe real-TLS carrier is what survives.\n\n### What I know is weak\n\n- UDP and UoT are fully encrypted protocols by design, so they're exposed to FEP\n  blocking (entropy / \"looks like nothing\" heuristics) and whitelisting — the\n  MegaFon result above is consistent with that.\n- Length padding changes sizes but, as far as I can tell, doesn't hide the\n  direction/count pattern from #363 (client sends ≥3 packets ≥411 bytes while\n  the server talks more often) inside the TLS carrier.\n- One developer, no audit.\n- The repo has a prober (`ostp-prober`) that tries every carrier against a\n  server and estimates where the filtering box is by TTL, but it's rough and\n  prints a lot of noise; it needs work before its output is worth sharing.\n\n### Questions\n\n1. The MegaFon UDP case — a few hundred bytes back, then nothing. Does that match\n   what others see from TSPU against fully encrypted UDP (the first packets pass,\n   then the flow is cut)? Any idea what triggers it: entropy, packet sizes, the\n   destination ASN?\n2. For traffic carried inside TLS: what inner shaping is actually worth doing\n   against encapsulated-handshake fingerprinting?\n3. Decoy responses vs silent drop for unauthenticated probes — which one has\n   held up better against TSPU's active probing in your experience?\n\n\nAll this message also written by Claude. Sorry about that. \n"
-    },
-    {
-     "number": 650,
-     "title": "Обход белых списков мобильного интернета РФ - застряли, ищем реальный опыт / Bypassing the Russian Federation's mobile internet whitelists—we're stuck, looking for real-world experience",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-08-19T13:55:09Z",
-     "updated_at": "2026-10-12T10:06:22Z",
-     "user": "amigocarra",
-     "url": "https://github.com/net4people/bbs/issues/650",
-     "body": "Свой VPN-сервис для конечных пользователей в России. Протокол - VLESS+Reality (uTLS, decoy SNI на популярных доменах и на собственном self-hosted decoy). Задача — пережить режим «белых списков» на мобильном интернете (LTE), когда оператор пропускает только заранее одобренный список ресурсов, а всё остальное блокирует на уровне сети\n\nВся диагностика ниже - только МТС. Все три реальных тестировщика (два друга и я сам) оказались на МТС. По МегаФону, Билайну и Т2 — ноль подтверждённых данных, ни в обычном режиме, ни тем более в белых списках. Возможно, часть описанного ниже — не общее свойство белых списков, а специфика конкретно МТС или даже конкретного сегмента их сети\n\nЧто подтверждено рабочим\n\n- Обычная DPI-блокировка (не белый список) на МТС — Reality с SNI под популярные домены (vk.com, cloudflare.com) стабильно работает у одного реального пользователя уже несколько недель, тысячи соединений в логах.\n\nЧто не работает и не поддаётся объяснению\n\nВторой реальный пользователь, тот же оператор (МТС), но другой сегмент(московский номер, тогда как первый — региональный/южный) — не смог подключиться *ни разу* ни через один из наших серверов (иностранный VPS в Германии, два разных адреса Yandex Cloud), включая периоды, когда белый список точно не был активен (обычный интернет у него при этом работал).\n\n- Пробовали архитектуру с размещением сервера на Yandex Cloud специально ради «коллатерального» прохождения белого списка: зарезервировали статический IP, сверили с публичными списками белых CIDR (community-maintained) — нашли конкретную /22 подсеть внутри /16-пула Yandex Cloud, которая присутствует в таких списках, в отличие от изначально выданного эфемерного адреса (он был из другого /20-пула того же провайдера и в списках отсутствовал). Технически адрес живой — Reality-хендшейк проходит, трафик реально проксируется, проверено с нескольких независимых внешних точек. Но подтверждения работы именно в момент активного белого списка на реальном мобильном устройстве пока нет.\nГлавная загадка: когда пострадавший пользователь тестирует в момент, похожий на белый список — у него не открывается вообще ничего, включая заведомо белые ресурсы (gosuslugi.ru), которые по логике белого списка должны быть доступны всегда. Это не похоже на учебниковое поведение белого списка (default-deny с проходом только по CIDR+SNI) — скорее на что-то более жёсткое или вообще другую природу блокировки\n\nВопросы к сообществу\n\n1. Есть ли у кого-то подтверждённо рабочая схема именно во время активного белого списка — на любом операторе (МТС/МегаФон/Билайн/Т2)? Особенно интересен опыт не по МТС - своих данных пока ноль.\n2. Отличаются ли правила/поведение белых списков между операторами принципиально, или список сайтов+IP один и тот же (спускается от Минцифры), а разница только в реализации фильтрации на стороне конкретного оператора?\n3. Чем может объясняться полный блэкаут, при котором не открываются даже точно белые ресурсы — это известный более жёсткий вариант фильтрации, или это вообще не про белый список (SIM-специфичное ограничение, тарифная фильтрация, что-то ещё)?\n4. Есть ли более надёжный способ поймать «правильный» IP-пул на Yandex Cloud / другом рос. хостинге, чем резервировать адреса и проверять их вручную против публичных списков?\n\nБуду благодарен за любой конкретный опыт, не общие рассуждения\n\n---\n\n*A custom VPN service for end users in Russia. Protocol: VLESS+Reality (uTLS, decoy SNI on popular domains and on our own self-hosted decoy). The goal is to bypass the \"whitelist\" restrictions on mobile internet (LTE), where the carrier only allows access to a pre-approved list of resources and blocks everything else at the network level*\n\n*All test results below are for MTS only. All three real testers (two friends and myself) were on MTS. For MegaFon, Beeline, and T2—there was no confirmed data, neither in normal mode nor, even less so, under whitelisting. It's possible that some of what's described below isn't a general characteristic of whitelisting, but spe"
     }
    ],
    "comments": [
@@ -56,15 +45,6 @@
      "user": "ospab",
      "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6130837051",
      "body": "Я в своём протоколе к этому и пришел: tls на своём домене, но правда без reality и self-steal. Есть какие-то способы обхода белых списков кроме cdn и русского сервера с ip в белом списке?"
-    },
-    {
-     "id": 6122085362,
-     "issue": 650,
-     "issue_title": "Обход белых списков мобильного интернета РФ - застряли, ищем реальный опыт / Bypassing the Russian Federation's mobile internet whitelists—we're stuck, looking for real-world experience",
-     "created_at": "2026-10-12T10:06:22Z",
-     "user": "Lysenar",
-     "url": "https://github.com/net4people/bbs/issues/650#issuecomment-6122085362",
-     "body": "> 10\\. [@Lysenar](https://github.com/Lysenar) Друг, по-моему тут немного о другом изначально пишется)) Вы чтука от темы отошли, мы не о радио, и не про вайфай-модемы, а хаотичное поведение при (!) очищенном кэше, при (!) совершенно настроенном отлично ДНС (который работает на айфоне, например), и тому подобное. Это поведение систем разных и разных операторов в разных частях страны именно с точки зрения мобильной сети. Ясное дело, вылазки есть. Не спорю, что лично я (не знаю как оп), могу не знать некую инфу, обязательно ее изучу)))\n>      В любом случае, любые думки важны.\n\nо каком другом? никто даже не вкурсе о существовании каналов, тут darkk пишет про \"перерегистрируемся в сети\" в этот момент может смениться БАЗОВАЯ СТАНЦИЯ и ИЛИ КАНАЛ.  поведение в каналах может разниться.\n\nввот ты сидишь на жопе и тыркаешься, около тебя 3 стацнии твоего оператора, да anycast скажет выбрать самое близкое, но иногда ты можешь подключится и к той которая дальше всех и там поведение уже другое будет. И вы на кофейной гуще начинаете пакеты сравнивать и ответы... не зря в корень. \n\n> Главная загадка: когда пострадавший пользователь тестирует в момент, похожий на белый список — у него не открывается вообще ничего, включая заведомо белые ресурсы (gosuslugi.ru), которые по логике белого списка должны быть доступны всегда. Это не похоже на учебниковое поведение белого списка (default-deny с проходом только по CIDR+SNI) — скорее на что-то более жёсткое или вообще другую природу блокировки\n\nтут нужно понять 8.8.8.8 либо 128кб на канал повесили, я это связываю с каким то багом в ПО ТСПУ. "
     }
    ]
   },
@@ -109,6 +89,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2591,
+     "title": "[Debian] Bookworm package build error",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-10T19:37:43Z",
+     "updated_at": "2026-10-14T13:23:31Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2591",
+     "body": "debian/control\n`Build-Depends: debhelper (>= 12~), libboost-program-options-dev (>= 1.46), libboost-json-dev (>= 1.81), libboost-url-dev (>= 1.81), libminiupnpc-dev, libssl-dev (>= 3.5), zlib1g-dev`\nVersion of libssl-dev is too high.\nIn Debian Bookworm libssl is 3.0.22\nhttps://packages.debian.org/search?keywords=libssl\nand there is no backport\nhttps://packages.debian.org/search?suite=bookworm-backports&searchon=names&keywords=libssl\n\n"
+    },
+    {
      "number": 2595,
      "title": "Fix duplicated attributes in torrents web panel link",
      "is_pr": true,
@@ -118,17 +109,6 @@
      "user": "pobregat0",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2595",
      "body": "The web panel link was emitting target and rel twice, once in the onmouseover line and once in the onclick line, with no space between `rel=\"noopener noreferrer\"` and `onclick=`, so the attributes ran together.\n\nChecked on a running console with a torrents tunnel: the page now carries one target and one rel, properly separated.\n\nBuilds with no warnings, tests pass."
-    },
-    {
-     "number": 2591,
-     "title": "[Debian] Bookworm package build error",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-10T19:37:43Z",
-     "updated_at": "2026-10-13T20:56:12Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2591",
-     "body": "debian/control\n`Build-Depends: debhelper (>= 12~), libboost-program-options-dev (>= 1.46), libboost-json-dev (>= 1.81), libboost-url-dev (>= 1.81), libminiupnpc-dev, libssl-dev (>= 3.5), zlib1g-dev`\nVersion of libssl-dev is too high.\nIn Debian Bookworm libssl is 3.0.22\nhttps://packages.debian.org/search?keywords=libssl\nand there is no backport\nhttps://packages.debian.org/search?suite=bookworm-backports&searchon=names&keywords=libssl\n\n"
     },
     {
      "number": 2594,
@@ -154,6 +134,33 @@
     }
    ],
    "comments": [
+    {
+     "id": 6168897324,
+     "issue": 2591,
+     "issue_title": "[Debian] Bookworm package build error",
+     "created_at": "2026-10-14T12:58:49Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6168897324",
+     "body": "В этом `#if !defined(ANDROID) && (BOOST_VERSION >= 108100) // boost::json since 1.75, boost::url since 1.81` ?\nВсё нормально, так оставить.\nСейчас у меня в /usr/include/boost/version.hpp\nв Bookworm \n`#define BOOST_VERSION 108100`\n`#define BOOST_LIB_VERSION \"1_81\"`\nВ Trixie\n`#define BOOST_VERSION 108300`\n`#define BOOST_LIB_VERSION \"1_83\"`\nУсловие BOOST_VERSION >= 108100 выполняется и там, и там.\n\nЗапись в debian/control \nBuild-Depends:   libboost-program-options-dev **(>= 1.83)** \nпредотвращает использование в Bookworm старой 1.74, которая там по умолчанию (имеется метапакет и наверняка так и останется),поэтому и 1.81, и 1.83 годятся.\nВот если вдруг в Bookworm завезут 1.83 (которая в Trixie) вместо 1.81, нужно будет поменять то, что после `|`.\nПочему они сделали так, а не положили весь комплект 1.83 с метапакетом в backports, не знаю.\n\nА в Trixie в качестве такой же добавки имеется 1.88\n\n\n\n"
+    },
+    {
+     "id": 6167706668,
+     "issue": 2591,
+     "issue_title": "[Debian] Bookworm package build error",
+     "created_at": "2026-10-14T11:52:15Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6167706668",
+     "body": "А  в коде то что писать?"
+    },
+    {
+     "id": 6164798215,
+     "issue": 2591,
+     "issue_title": "[Debian] Bookworm package build error",
+     "created_at": "2026-10-14T09:03:41Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6164798215",
+     "body": "> ИИ может врать или не врать, но будет так как написано в этой сточке\n> #if !defined(ANDROID) && (BOOST_VERSION >= 108100) // boost::json since 1.75, boost::url since 1.81\n\nС формальной точки зрения  мжно было написать \nBuild-Depends: debhelper (>= 12~), libboost-program-options-dev (>= 1.81)  ........\nно т.к. в дистрибутивах 1.83, то безразлично\n"
+    },
     {
      "id": 6155028853,
      "issue": 2591,
@@ -306,24 +313,6 @@
      "user": "orignal",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6127580514",
      "body": "https://github.com/PurpleI2P/i2pd/commit/7fdad9d9e318a4fd2423a5a408d37e4e714ef293"
-    },
-    {
-     "id": 6123545626,
-     "issue": 2591,
-     "issue_title": "[Debian] Bookworm package build error",
-     "created_at": "2026-10-12T11:41:16Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6123545626",
-     "body": "С торрентами с Boost 1.81 не собирается\n```\ng++ -g -O2 -ffile-prefix-map=/home/user1/i2pd=. -fstack-protector-strong -Wformat -Werror=format-security -Wall -pedantic -std=c++20 -Wno-bidi-chars -fPIC -MMD -MP -DGITVER=2.61.0-762-gf8b4316a -Ilibi2pd -Ilibi2pd_client -Ii18n -c -o obj/libi2pd_client/TorrentsRPC.o libi2pd_client/TorrentsRPC.cpp\nlibi2pd_client/TorrentsRPC.cpp: In lambda function:\nlibi2pd_client/TorrentsRPC.cpp:370:127: error: no matching function for call to ‘boost::core::basic_string_view<char>::basic_string_view(boost::urls::url)’\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                               ^\nIn file included from /usr/include/boost/json/string_view.hpp:14,\n                 from /usr/include/boost/json/kind.hpp:14,\n                 from /usr/include/boost/json/array.hpp:14,\n                 from /usr/include/boost/json.hpp:15,\n                 from libi2pd_client/TorrentsRPC.cpp:13:\n/usr/include/boost/core/detail/string_view.hpp:401:25: note: candidate: ‘template<class Ch2> boost::core::basic_string_view<Ch>::basic_string_view(const boost::basic_string_view<Ch2, std::char_traits<_CharT2> >&, typename boost::enable_if<boost::core::is_same<Ch, Ch2> >::type*) [with Ch = char]’\n  401 |     template<class Ch2> basic_string_view( boost::basic_string_view<Ch2, std::char_traits<Ch2> > const& str,\n      |                         ^~~~~~~~~~~~~~~~~\n/usr/include/boost/core/detail/string_view.hpp:401:25: note:   template argument deduction/substitution failed:\nlibi2pd_client/TorrentsRPC.cpp:370:127: note:   ‘boost::urls::url’ is not derived from ‘const boost::basic_string_view<Ch, std::char_traits<_CharT> >’\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                               ^\n/usr/include/boost/core/detail/string_view.hpp:389:23: note: candidate: ‘template<class A> boost::core::basic_string_view<Ch>::basic_string_view(const std::__cxx11::basic_string<Ch, std::char_traits<_CharT>, A>&) [with Ch = char]’\n  389 |     template<class A> basic_string_view( std::basic_string<Ch, std::char_traits<Ch>, A> const& str ) BOOST_NOEXCEPT: p_( str.data() ), n_( str.size() )\n      |                       ^~~~~~~~~~~~~~~~~\n/usr/include/boost/core/detail/string_view.hpp:389:23: note:   template argument deduction/substitution failed:\nlibi2pd_client/TorrentsRPC.cpp:370:127: note:   ‘boost::urls::url’ is not derived from ‘const std::__cxx11::basic_string<char, std::char_traits<char>, A>’\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                               ^\n/usr/include/boost/core/detail/string_view.hpp:383:47: note: candidate: ‘template<class End> constexpr boost::core::basic_string_view<Ch>::basic_string_view(const Ch*, End, typename boost::enable_if<boost::core::is_same<End, const Ch*> >::type*) [with Ch = char]’\n  383 |     template<class End> BOOST_CXX14_CONSTEXPR basic_string_view( Ch const* first, End last,\n      |                                               ^~~~~~~~~~~~~~~~~\n/usr/include/boost/core/detail/string_view.hpp:383:47: note:   template argument deduction/substitution failed:\nlibi2pd_client/TorrentsRPC.cpp:370:127: note:   candidate expects 3 arguments, 1 provided\n  370 |                                                 magnet += boost::core::string_view (boost::urls::url (torrent->GetAnnounce ()));\n      |                                                                                                                        "
-    },
-    {
-     "id": 6102170442,
-     "issue": 2591,
-     "issue_title": "[Debian] Bookworm package build error",
-     "created_at": "2026-10-10T21:05:42Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6102170442",
-     "body": "Так ` libssl-dev (>= 3.0)` тоже можно.\n\nВ Bookworm имеются (кажется появились? раньше не было?) компоненты libboost 1.81, но добавлены как-то особенным образом. Метапакетов libboost-json-dev и libboost-url-dev соответствующих нет, есть только libboost-json1.81-dev и libboost-url1.81-dev, при установке пакета libboost-program-options-dev устанавливаются libboost* версии 1.74 (потому что https://packages.debian.org/source/bookworm/boost-defaults), и они не позволяет установить libboost-json1.81-dev и libboost-url1.81-dev\n```\nroot@vdsxxxxxx:~# apt-cache search  libboost-program-opt\nlibboost-program-options-dev - program options library for C++ (default version)\nlibboost-program-options1.74-dev - program options library for C++\nlibboost-program-options1.74.0 - program options library for C++\nlibboost-program-options1.81-dev - program options library for C++\nlibboost-program-options1.81.0 - program options library for C++\n\nroot@vdsxxxxxx:~# apt-cache search libboost-json\nlibboost-json1.81-dev - C++ containers and algorithms that implement JSON\nlibboost-json1.81.0 - C++ containers and algorithms that implement JSON\n\nroot@vdsxxxxxx:~# apt-cache search libboost-url\nlibboost-url1.81-dev - C++ library that implements \"URL\"\nlibboost-url1.81.0 - C++ library that implements \"URL\"\n```\nМожно временно обойти этот баг, отключив торренты.\n"
     }
    ]
   },
@@ -334,48 +323,180 @@
   "XTLS/Xray-core": {
    "issues": [
     {
-     "number": 7143,
-     "title": "SS2022: Correct interrupt behavior and UDP conn change",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T14:50:04Z",
-     "updated_at": "2026-10-14T08:41:09Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7143",
-     "body": "忘了加defer interrupt了 还有名字和其他协议同步了一下\n顺便还有之前关于UDP转发的一行改动我记得改了不知道最后为啥没P上来 ~~可能关机的时候忘记保存了~~"
-    },
-    {
      "number": 7140,
      "title": "XDNS: add DOH",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-13T11:53:44Z",
-     "updated_at": "2026-10-14T07:34:08Z",
+     "updated_at": "2026-10-14T14:29:07Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140",
      "body": ""
     },
     {
+     "number": 7136,
+     "title": "Lua: Add sandbox mechanism",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T02:03:08Z",
+     "updated_at": "2026-10-14T14:25:44Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136",
+     "body": "From https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6133901345\r\n\r\n脚本默认运行在沙盒模式\r\nBase64 内联的脚本无法提权\r\n本地文件可以使用命令签名，并配合 xray 启动参数提权\r\n\r\n```sh\r\n$ ./xray ed25519\r\nPrivateKey: 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8\r\nPublicKey: kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n\r\n$ ./xray lua sign -key 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8 test.lua\r\n```\r\n\r\n```lua\r\n-- @xray:privileged-signature=cc5JRC0CX09xK-xxDUWmXmSoXKRCYhNuHOZCluVRUrMPPCC576AnZjM9ah1wpuaATIyy2JstVPNxoHGcqBGyBA\r\nlocal log = require(\"xray.log\")\r\n\r\nlocal success, err = pcall(function()\r\n    os.execute(\"echo 'Warning: OS command executed!'\")\r\nend)\r\nif not success then\r\n    log.Error(\"Failed to exec: \", err)\r\nend\r\n\r\nfunction HandleRoute()\r\n    log.Info(\"Choosing the direct outbound\")\r\n    return \"direct\"\r\nend\r\n```\r\n\r\n```sh\r\n$ ./xray run --lua-privileged-pubkey=kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n```"
+    },
+    {
+     "number": 7154,
+     "title": "README.md: Add V2Mac to macOS arm64 in GUI Clients",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T14:24:19Z",
+     "updated_at": "2026-10-14T14:24:31Z",
+     "user": "LordVersA",
+     "url": "https://github.com/XTLS/Xray-core/pull/7154",
+     "body": "Add V2Mac, a native macOS client for Xray-core, to the README GUI Clients list.\n\nIt is an open source (GPL-3.0) SwiftUI menu bar app for Apple Silicon (macOS 26+): subscriptions, VLESS/VMess/Trojan/Shadowsocks/Hysteria2, latency tests, routing and TUN mode. Since it runs only on arm64, it gets its own `macOS arm64` group next to `macOS arm64 & x64`.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+    },
+    {
+     "number": 7153,
+     "title": "WireGuard: Make the scenario test send traffic",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T14:16:02Z",
+     "updated_at": "2026-10-14T14:16:02Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7153",
+     "body": "TestWireguard never sent anything (it had a FIXME saying the server does not\nreceive). The server got its peer through Peers, which the inbound ignores\nsince it reads Users, and the two public key variables had each other's names.\nAlso, the server's netstack drops packets to loopback addresses, so the client\nnow dials the server's tunnel address and the server's freedom outbound\nredirects to the test server. The test now moves 3 x 1 MB through the tunnel.\n"
+    },
+    {
+     "number": 7152,
+     "title": "WireGuard outbound: Resolve the endpoint with Xray's DNS for the socket too",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T14:15:58Z",
+     "updated_at": "2026-10-14T14:15:58Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7152",
+     "body": "The peer endpoints are resolved with Xray's DNS (resolveLocal), but the UDP\nsocket for them is dialed with the endpoint string, and DialSystem resolves a\nname with the system resolver unless sockopt.domainStrategy is set. With a\nname that only Xray's DNS resolves (hosts entries, DoH only setups), the\ndevice never came up: \"failed to dial to dest > lookup ...: no such host\".\n\nlistenFunc now resolves the name with resolveLocal first when it dials\ndirectly. With dialerProxy or finalmask the name is passed on as before, so a\nchained proxy still resolves it on its side.\n\nThe test helpers in client_test.go are the same as in #7151; whichever of the\ntwo goes in second needs a small rebase, which I will do.\n"
+    },
+    {
+     "number": 7151,
+     "title": "WireGuard outbound: Keep the device when its setup fails",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T14:15:39Z",
+     "updated_at": "2026-10-14T14:15:39Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151",
+     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
+    },
+    {
+     "number": 7150,
+     "title": "WireGuard: Use UDP GSO on Linux",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-14T14:07:25Z",
+     "updated_at": "2026-10-14T14:13:35Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7150",
+     "body": "With kernel TUN (Linux with CAP_NET_ADMIN, the usual case on servers),\nwireguard-go hands Send up to 128 encrypted datagrams of one TSO packet at\nonce, and the bind writes them with one sendmsg each. Each one then goes\nthrough the UDP/IP stack on its own, so upload costs about twice the CPU of\nkernel WireGuard.\n\nNow each run of equal-sized datagrams goes out as one sendmsg with\nUDP_SEGMENT, as wireguard-go's own bind does. This is only for a plain UDP\nsocket: with finalmask or dialerProxy the conn is not one and nothing changes,\nand in gVisor mode Send gets one packet per call, so nothing changes there\neither. If the kernel rejects UDP_SEGMENT (EIO without checksum offload,\nEMSGSIZE or EINVAL when a segment does not fit the path MTU), the bind stops\nusing it and sends one by one as before.\n\n2 vCPU KVM guest, Linux 6.8, kernel TUN, iperf3 with 4 streams through a\nWireGuard server on the internet, Mbit/s:\n\n|                  | upload    | CPU cores per Gbit/s |\n|------------------|-----------|----------------------|\n| main             | 732-848   | 1.82                 |\n| this PR          | 1181-1204 | 0.80                 |\n| kernel WireGuard | 1213      | 0.87                 |\n\nUpload on that path tops out near 1.2 Gbit/s, so the CPU column is the better\nmeasure. Download is unchanged (892 vs 902). Behind a VLESS + REALITY inbound\non the same server it looks the same: upload 917-1037 -> 1106-1119 Mbit/s, and\nthe server's CPU per Gbit/s goes from about 1.5 to 0.8-1.0.\n\nTests cover grouping datagrams into runs, loopback round trips (IPv4, IPv6,\ndual-stack socket to IPv4) with reserved bytes and stats, and the fallback.\n"
+    },
+    {
      "number": 7146,
      "title": "Why is RoutingService.SubscribeRoutingStats disabled by passing nil routingStats?",
      "is_pr": false,
-     "state": "open",
+     "state": "closed",
      "created_at": "2026-10-14T07:09:32Z",
-     "updated_at": "2026-10-14T07:09:32Z",
+     "updated_at": "2026-10-14T12:37:17Z",
      "user": "Li-xiaotong-cauc",
      "url": "https://github.com/XTLS/Xray-core/issues/7146",
      "body": "Hi, I’m currently exploring the RoutingService API while building a small Xray management console.\n\nI noticed that SubscribeRoutingStats is still defined in the proto and implemented in command.go, and TestRoute also has PublishResult support.\n\nHowever, in the production service registration path, RoutingService is created with:\n\n    NewRoutingServer(router, nil)\n\nAs a result, SubscribeRoutingStats always returns:\n\n    Routing statistics not enabled.\n\nI also checked the repository history and found that this seems to have been the case for a very long time. I did not find any production code path that passes a real stats.Channel into NewRoutingServer; only tests seem to do so.\n\nSo I’m curious about the original design intent:\n\n1. Was SubscribeRoutingStats intentionally disabled in normal runtime?\n2. If so, what was the main reason — performance overhead, privacy concerns, unfinished design, or something else?\n3. Is there any officially supported way to enable routing statistics in current Xray-core?\n4. Is this API kept mainly for compatibility/testing, or is there any plan to make it usable in production?\n\nI’m not requesting a feature change here — I mainly want to understand the historical/design reason behind this behavior.\n\nThanks!"
     },
     {
+     "number": 7149,
+     "title": "Hotfix/uat linux release artifacts",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-14T12:07:12Z",
+     "updated_at": "2026-10-14T12:07:58Z",
+     "user": "haitaopanhq",
+     "url": "https://github.com/XTLS/Xray-core/pull/7149",
+     "body": ""
+    },
+    {
+     "number": 7131,
+     "title": "Bump uTLS: chrome fingerprint is still Chrome 133",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-11T19:18:14Z",
+     "updated_at": "2026-10-14T12:02:55Z",
+     "user": "FunLay123",
+     "url": "https://github.com/XTLS/Xray-core/issues/7131",
+     "body": "Xray-core main pins utls aa6edf4, so `fingerprint: \"chrome\"` (also the default and ECH) sends Chrome 133.\nuTLS 6ebdceb (2026-10-06) adds HelloChrome_155 (verified against branded Chrome) and makes it HelloChrome_Auto.\n\nCaptured ClientHellos (JA4):\n- Xray 26.10.10 `chrome`:       t13d1516h2_8daaf6152771_d8a2da3f94cd\n- Xray + utls 6ebdceb:          t13d1517h2_8daaf6152771_cb7bf5808d99\n- Google Chrome 155 (Linux):    t13d1517h2_8daaf6152771_cb7bf5808d99\nAfter the bump, only randomized values differ (GREASE, keys, ECH payload, extension order).\n\nIn Russia the current `chrome` fingerprint appears to be detected and blocked by TSPU.\n\nProposal: bump utls to >= 6ebdceb and add \"hellochrome_155\" to the fingerprint map."
+    },
+    {
+     "number": 7103,
+     "title": "feat(xdns): add DoT and DoH support with the new configuration syntax (#6718)",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-07T23:53:32Z",
+     "updated_at": "2026-10-14T11:53:20Z",
+     "user": "HPPC114514",
+     "url": "https://github.com/XTLS/Xray-core/pull/7103",
+     "body": "基于更新后的 XDNS 配置结构#6718 重新实现加密 DNS 支持。隧道域名与记录类型使用 `domains[].names/types`，递归解析器端点使用 `resolvers[].addrs`。\r\n\r\n- 新增 DoT：默认端口为 `853`，支持 TLS 连接复用、DNS 长度分帧、事务 ID 与问题匹配，以及后续请求触发重连。\r\n- 新增 DoH：默认端口为 `443`，默认路径为 `/dns-query`；保留自定义路径和查询参数，使用 HTTPS POST，支持连接复用及 HTTP/2 协商。\r\n- 使用系统信任根校验端点域名或 IP，拒绝 HTTP 重定向及无效 DNS 响应。\r\n- 每个加密端点最多允许 16 个并发请求，单次超时为 10 秒；不自动重放结果不明的请求。\r\n- 接入现有 TCP 拨号器，保留调用方上下文及 socket 配置，并检查加密 XDNS 与其他接管拨号的 mask 的组合。\r\n- 完善 deadline、取消和关闭流程，修复轮询重复发送旧载荷的问题。\r\n\r\n保留现有 UDP/TCP 传输模块、protobuf 配置结构和记录类型默认值。允许显式混合明文与加密解析器，不添加隐式明文回退。\r\n\r\n## 配置示例\r\n\r\n```json\r\n{\r\n  \"type\": \"xdns\",\r\n  \"settings\": {\r\n    \"domains\": [\r\n      {\r\n        \"names\": [\"tunnel.example.com\"],\r\n        \"types\": [16]\r\n      }\r\n    ],\r\n    \"resolvers\": [\r\n      {\r\n        \"addrs\": [\r\n          \"dot://resolver.example:853\",\r\n          \"doh://resolver.example/dns-query\"\r\n        ]\r\n      }\r\n    ]\r\n  }\r\n}\r\n```\r\n\r\n包含 DoT/DoH 时，XDNS 应位于 UDP mask 配置列表末尾。解析器的启动域名解析及代理拨号应独立于同一个 XDNS 出站，避免循环依赖。"
+    },
+    {
+     "number": 7139,
+     "title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T10:41:06Z",
+     "updated_at": "2026-10-14T11:47:53Z",
+     "user": "ArianPashae",
+     "url": "https://github.com/XTLS/Xray-core/pull/7139",
+     "body": "### Problem\n\nIn `app/dns/nameserver_cached.go`, `merge()` aggregates resolved records for DNS queries and cache lookups (`queryIP`).\n\nWhen dual-stack resolution is enabled (`option.IPv4Enable && option.IPv6Enable` -> `mergeReq == true`), the checks on lines 138 and 153 previously evaluated:\n```go\nif !mergeReq || go_errors.Is(err, errRecordNotFound) {\n    return ips, ttl, err\n}\n```\n\nThe `|| go_errors.Is(err, errRecordNotFound)` condition caused unintended early returns whenever either address family had no record:\n1. **IPv4-only domains** (or cached records where only `rec.A` is present): `rec4.getIPs()` successfully finds IPv4 IPs, but subsequent evaluation of `rec6.getIPs()` returns `errRecordNotFound`. Line 153 early-returned `nil, 0, errRecordNotFound`, completely discarding the IPv4 addresses collected in `allIPs`.\n2. **IPv6-only domains** (or cached records where only `rec.AAAA` is present): `rec4.getIPs()` returns `errRecordNotFound`. Line 138 early-returned `nil, 0, errRecordNotFound`, aborting before `rec6` was ever evaluated.\n3. In `queryIP`, this caused valid cached records for single-family domains to be skipped as cache misses (`if !go_errors.Is(err, errRecordNotFound)`).\n4. Additionally, `ttl < rTTL` was checked before `len(ips) > 0`, which could overwrite `rTTL` with `0` from a non-existent record.\n\n### Solution\n\n1. Removed `|| go_errors.Is(err, errRecordNotFound)` so that `!mergeReq` solely governs early returns for single-family queries, while dual-stack queries proceed to aggregate available IPs into `allIPs` and record missing errors in `errs`.\n2. Updated `rTTL` only when `len(ips) > 0` so non-existent records do not zero out valid TTLs.\n3. Returned `ttl = 0` when `len(allIPs) == 0` to align with downstream TTL handling.\n4. Added comprehensive unit tests in `app/dns/nameserver_cached_test.go` covering:\n   - Single-family IPv4 requests\n   - Single-family IPv6 requests\n   - Dual-stack requests with both A and AAAA records\n   - Dual-stack requests for IPv4-only domains (missing AAAA)\n   - Dual-stack requests for IPv6-only domains (missing A)\n   - Dual-stack requests when neither record exists"
+    },
+    {
+     "number": 7148,
+     "title": "Observatory: Fix average RTT overflow on 32-bit platforms",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T11:07:52Z",
+     "updated_at": "2026-10-14T11:08:21Z",
+     "user": "Cr0WD",
+     "url": "https://github.com/XTLS/Xray-core/pull/7148",
+     "body": "`getStatistics()` computes the average as `time.Duration(int(sum) / cnt)`. `sum` is a `time.Duration` (int64), but `int` is 32 bits on 386/arm/mips/mipsle, so once the samples add up to more than ~2.147 s the sum wraps around. With the default `sampling: 10` that is any outbound slower than ~215 ms.\n\nSeen on a MT7621 router (mipsle, v26.10.10, burstObservatory with leastLoad), `/debug/vars`:\n\n```\n\"average\": -106422465, \"min\": 304477272, \"max\": 416019032, \"deviation\": 430649051\n```\n\nThe deviation is then computed around that wrong average, and leastLoad sorts by it, so node selection on 32-bit builds is effectively random.\n\nThe fix keeps the division in `time.Duration`; it is the same on 64-bit. Running a build with this change on the same router, all averages fall between min and max again and deviations dropped from ~430 ms to 6–132 ms.\n\nThe added test documents the case. It passes on 64-bit with or without the fix (CI is 64-bit); with the old code on a 32-bit build, 10 x 400 ms (4e9 ns) wraps to a negative sum, so the average is wrong.\n\nThe same line was part of #6237 together with unrelated changes; this PR is only this fix.\n"
+    },
+    {
+     "number": 7143,
+     "title": "SS2022 proxy: Correct interrupt behavior and UDP conn change",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T14:50:04Z",
+     "updated_at": "2026-10-14T11:05:46Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7143",
+     "body": "忘了加defer interrupt了 还有名字和其他协议同步了一下\n顺便还有之前关于UDP转发的一行改动我记得改了不知道最后为啥没P上来 ~~可能关机的时候忘记保存了~~"
+    },
+    {
+     "number": 7147,
+     "title": "Bump golang.org/x/net from 0.60.0 to 0.61.0",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-14T10:48:34Z",
+     "updated_at": "2026-10-14T10:57:41Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7147",
+     "body": "Bumps [golang.org/x/net](https://github.com/golang/net) from 0.60.0 to 0.61.0.\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/golang/net/commit/c1d31df183e51b1075a2fd670d6f6f4efb871773\"><code>c1d31df</code></a> go.mod: update golang.org/x dependencies</li>\n<li><a href=\"https://github.com/golang/net/commit/8456a207cc33a21300bb8964ed756e5b681aeeeb\"><code>8456a20</code></a> quic: properly check for allowed frame types in a packet</li>\n<li>See full diff in <a href=\"https://github.com/golang/net/compare/v0.60.0...v0.61.0\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=golang.org/x/net&package-manager=go_modules&previous-version=0.60.0&new-version=0.61.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>"
+    },
+    {
      "number": 7145,
-     "title": "wireguard: batch TUN/UDP I/O, eliminate hot-path allocations, and fix Linux IPv4 routing",
+     "title": "wireguard, udp: batch TUN/UDP I/O, eliminate hot-path allocations, and fix UDP burst drops & Linux IPv4 routing",
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-10-13T21:57:20Z",
-     "updated_at": "2026-10-14T07:05:43Z",
+     "updated_at": "2026-10-14T10:03:51Z",
      "user": "ChownYourLife",
      "url": "https://github.com/XTLS/Xray-core/pull/7145",
-     "body": "## Summary\n\n```mermaid\nflowchart LR\n    GVisor[\"gVisor Stack (CUBIC, 4-16 MiB TCP Buf)\"] -->|\"AsViewList Batch (128)\"| NetTun[\"netTun.Read / Write (BatchSize=128)\"]\n    NetTun -->|\"128-Packet Containers\"| WG[\"wireguard-go Parallel Workers\"]\n    WG -->|\"ReadBatch/WriteBatch (Linux) / UDPAddrPort\"| Bind[\"bind.Send / Receive (BatchSize=128)\"]\n```\n\n```diff\n proxy/wireguard/\n ├── bind.go                 # BatchSize=128, atomic socket, Linux ReadBatch/WriteBatch, UDPAddrPort zero-alloc\n ├── netstack.go             # BatchSize=128, 4096-entry queue, zero-alloc AsViewList read, CUBIC, 4-16 MiB TCP buffers\n ├── tun.go                  # Comparable udpFlowKey (zero-alloc lookup), single-view writeRawUDPPacket\n ├── icmp.go                 # Single-view writeRawICMPPacket\n ├── tun_linux.go            # Add missing IPv4 policy routing table, default route, and netlink rules\n ├── client.go / server.go   # Move traffic counters into bind (remove PacketCounterConnection wrapper)\n ├── performance_test.go     # Regression & allocation tests for batched bind/netTun, TCP options, and UDP flows\n └── wireguard_bench_test.go # Throughput and allocation benchmarks\n```\n\n## Changes\n\n- **`proxy/wireguard/bind.go`, `client.go`, `server.go`:**\n  - Raise `bind.BatchSize()` from `1` to `conn.IdealBatchSize` (`128`), enabling `wireguard-go` to batch up to 128 packets per container across its `runtime.NumCPU()` encryption/decryption goroutines instead of serializing 1-packet containers.\n  - Remove `PacketCounterConnection` wrapper so `bind` retains direct access to `*net.UDPConn` while accounting uplink/downlink stats per batch.\n  - Replace the per-packet mutex lock in `bind.Send` with `atomic.Pointer[bindSocket]`.\n  - Use pooled `ipv4.PacketConn`/`ipv6.PacketConn` `ReadBatch`/`WriteBatch` (`recvmmsg`/`sendmmsg`) on Linux/Android and `ReadFromUDPAddrPort`/`WriteToUDPAddrPort` on `*net.UDPConn` across all platforms to eliminate per-packet `net.UDPAddrFromAddrPort` heap allocations.\n- **`proxy/wireguard/netstack.go`:**\n  - Raise `netTun.BatchSize()` from `1` to `conn.IdealBatchSize` (`128`) and expand `channel.Endpoint` queue depth from `1024` to `4096`.\n  - Replace the unbuffered `incomingPacket chan *buffer.View` and eager `pkt.ToView()` clone in `WriteNotify()` with a coalesced `notifyCh` signal and batched draining of `tun.ep.Read()` directly via `pkt.AsViewList()` (0 allocations per read), and release inbound `PacketBuffer` references in `netTun.Write()`.\n  - Switch gVisor TCP from Reno (`tcp.NewProtocol`) to `tcp.NewProtocolCUBIC`, enable `TCPModerateReceiveBufferOption(true)`, and increase TCP send/receive buffer defaults from `1 MiB` (`4 MiB` max) to `4 MiB` (`16 MiB` max).\n- **`proxy/wireguard/tun.go`, `icmp.go`:**\n  - Replace `map[string]*udpConn` keyed by `src.NetAddr()` with a comparable `udpFlowKey{address, port}` struct (0 allocations per UDP packet lookup).\n  - Construct raw UDP and ICMP packets in `writeRawUDPPacket` and `writeRawICMPPacket` directly inside a single `buffer.NewViewSize(...)` instead of allocating an intermediate `stack.PacketBuffer` and cloning it with `pkt.ToView()`.\n- **`proxy/wireguard/tun_linux.go`:**\n  - Add IPv4 routing table allocation (`netlink.FAMILY_V4`), default route (`0.0.0.0/0`), and `AF_INET` policy rules (`Src` and `OifName`) in `createKernelTun`, matching the existing IPv6 setup.\n- **`proxy/wireguard/performance_test.go`, `wireguard_bench_test.go`:**\n  - Add regression tests and benchmarks covering batched `bind` and `netTun` I/O, reserved header bytes, stats counters, zero-allocation reads/lookups, and end-to-end encrypted WireGuard TCP throughput.\n\n## Project impact\n\n- Significantly increases WireGuard outbound and inbound throughput while cutting per-packet heap allocations by 40%–90% across the TUN, UDP forwarder, and socket bind paths.\n- Fixes IPv4 kernel TUN routing on Linux when `noKernelTun` is `false` and `CAP_NET_ADMIN` is present.\n\n### Architecture Comparison (`wg-quick` vs. Xray-core Before & After)\n"
+     "body": "## Summary\n\n```mermaid\nflowchart LR\n    UDPIn[\"UDP Hub (4096 queue, 7 MiB sockbuf) + Worker (4 MiB pipe, RLock)\"] -->|\"MultiBuffer\"| WGClient[\"UDPConnClient (AddrPort zero-alloc)\"]\n    WGClient -->|\"gVisor (CUBIC, 4-16 MiB TCP/UDP Buf) / kernelTun (7 MiB sockbuf)\"| NetTun[\"netTun (BatchSize=128, 4096 queue, AsViewList)\"]\n    NetTun -->|\"128-Packet Containers\"| WG[\"wireguard-go Parallel Workers\"]\n    WG -->|\"ReadBatch/WriteBatch (Linux) + 7 MiB sockbuf\"| Bind[\"bind.Send / Receive (BatchSize=128)\"]\n```\n\n```diff\n proxy/wireguard/\n ├── bind.go / bind_linux.go # BatchSize=128, atomic socket, 7 MiB RCVBUF/SNDBUF (+FORCE), Linux ReadBatch/WriteBatch, UDPAddrPort\n ├── netstack.go             # BatchSize=128, 4096-entry queue, zero-alloc AsViewList read, CUBIC, 4-16 MiB TCP & UDP stack buffers\n ├── client.go               # Move counters to bind; zero-alloc ReadFromUDPAddrPort/WriteToUDPAddrPort in UDPConnClient\n ├── tun.go                  # Comparable udpFlowKey, 4096-pkt queue, 64-pkt batched ReadMultiBuffer, single-view writeRawUDPPacket\n ├── icmp.go                 # Single-view writeRawICMPPacket\n ├── tun_linux.go            # Add missing IPv4 policy routing table/rules + 7 MiB UDP socket buffers\n ├── server.go               # Move traffic counters into bind\n └── *_test.go               # Regression, allocation, and throughput benchmarks\n transport/internet/udp/\n └── hub.go                  # 4096-pkt default hub capacity, 7 MiB UDP socket buffers, zero-alloc WriteToUDPAddrPort\n app/proxyman/inbound/\n └── worker.go               # RLock fast-path for active UDP flows, 4 MiB pipe limit (was 16 KiB / ~13 packets)\n```\n\n## Changes\n\n- **`proxy/wireguard/bind.go`, `bind_linux.go`, `bind_other.go`, `client.go`, `server.go`:**\n  - Raise `bind.BatchSize()` from `1` to `conn.IdealBatchSize` (`128`), enabling `wireguard-go` to batch up to 128 packets per container across its `runtime.NumCPU()` encryption/decryption goroutines.\n  - Set `7 MiB` UDP socket buffers (`SetReadBuffer`/`SetWriteBuffer` + `SO_RCVBUFFORCE`/`SO_SNDBUFFORCE` on Linux when `CAP_NET_ADMIN` is present), matching upstream `wireguard-go`.\n  - Remove `PacketCounterConnection` wrapper so `bind` retains direct access to `*net.UDPConn` while accounting uplink/downlink stats per batch.\n  - Use pooled `ipv4.PacketConn`/`ipv6.PacketConn` `ReadBatch`/`WriteBatch` (`recvmmsg`/`sendmmsg`) on Linux/Android and `ReadFromUDPAddrPort`/`WriteToUDPAddrPort` across all platforms in both `bind` and `UDPConnClient`.\n- **`proxy/wireguard/netstack.go`:**\n  - Raise `netTun.BatchSize()` from `1` to `conn.IdealBatchSize` (`128`) and expand `channel.Endpoint` queue depth from `1024` to `4096`.\n  - Replace the unbuffered `incomingPacket chan *buffer.View` and eager `pkt.ToView()` clone in `WriteNotify()` with a coalesced `notifyCh` signal and batched draining of `tun.ep.Read()` directly via `pkt.AsViewList()` (0 allocations per read), and release inbound `PacketBuffer` references in `netTun.Write()`.\n  - Switch gVisor TCP from Reno (`tcp.NewProtocol`) to `tcp.NewProtocolCUBIC`, enable `TCPModerateReceiveBufferOption(true)`, and set both TCP and stack-level (UDP) send/receive buffer defaults to `4 MiB` (`16 MiB` max) instead of gVisor's `32 KiB`/`212 KiB` UDP defaults.\n- **`proxy/wireguard/tun.go`, `icmp.go`:**\n  - Replace `map[string]*udpConn` keyed by `src.NetAddr()` with a comparable `udpFlowKey{address, port}` struct (0 allocations per UDP packet lookup).\n  - Increase per-flow `udpQueueLimit` from `1024` to `4096` and batch `udpConn.ReadMultiBuffer()` up to `64` packets per call via `popBatch`.\n  - Construct raw UDP and ICMP packets in `writeRawUDPPacket` and `writeRawICMPPacket` directly inside a single `buffer.NewViewSize(...)`.\n- **`proxy/wireguard/tun_linux.go`:**\n  - Add IPv4 routing table allocation (`netlink.FAMILY_V4`), default route (`0.0.0.0/0`), and `AF_INET` policy rules (`Src` and `OifName`) in `createKernelTun`, matching IPv6, and configure `7 MiB` UDP socket buffers on `kernelTun` "
     },
     {
      "number": 6684,
@@ -389,17 +510,6 @@
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nHello,\nI'm experiencing what appears to be a memory/connection leak with Xray-core v26.3.27, specifically with the XHTTP+REALITY inbound. I noticed this issue (#5828) was closed after a fix in the xtls/reality dependency was merged into this same version, but I'm still seeing similar symptoms.\nVersion:\nXray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\nCode\nSetup:\n~150 concurrent users, VLESS + XHTTP + REALITY inbound (plus a second VLESS + XHTTP + TLS inbound on the same server).\nInbound config:\n{\n\"tag\": \"XHTTP-REALITY\",\n\"port\": 2053,\n\"protocol\": \"vless\",\n\"settings\": {\n\"clients\": [],\n\"decryption\": \"mlkem768x25519plus.native.600s.REDACTED\",\n\"encryption\": \"mlkem768x25519plus.native.0rtt.REDACTED\"\n},\n\"streamSettings\": {\n\"network\": \"xhttp\",\n\"security\": \"reality\",\n\"xhttpSettings\": {\n\"mode\": \"auto\",\n\"path\": \"/\"\n},\n\"realitySettings\": {\n\"target\": \"Google.com:443\",\n\"shortIds\": [\"7acd6597b255f7e5\"],\n\"privateKey\": \"REDACTED\",\n\"serverNames\": [\"play.google.com\"],\n\"fingerprint\": \"chrome\",\n\"publicKey\": \"REDACTED\"\n}\n}\n}\nJson\nObserved behavior:\nMonitored RSS and established connection count over several days using ps, ss -tn state established, and /proc//status.\nWith mode: auto:\nRSS grew continuously from ~89MB to ~379MB over 2 days without decreasing\nEstablished connections on the xhttp port grew to ~2100-2500 (with only ~150 users)\nFile descriptors grew proportionally to 4500+\nAfter switching to mode: packet-up on one inbound, connections initially dropped to ~50-60, but over the following days RSS and connection count climbed again, reaching 600MB+ RSS and 2400+ established connections after ~2 days.\nRestarting the process resets RSS/connections to baseline, after which the pattern repeats.\nQuestion:\nSince this version already includes the reality dependency fix mentioned in this issue's resolution, is this a separate/residual leak, or could there be a related root cause still present? I'm happy to provide full logs, RSS growth data over time, or capture heap/goroutine profiles (pprof) if someone can point me to the right steps.\nThanks!\n\n### Reproduction Method\n\nSetup a VLESS + XHTTP + REALITY inbound with ~150 concurrent users. Monitor RSS memory and established connection count over several days using `ps`, `ss -tn state established`, and `/proc/<pid>/status`. Memory grows continuously without ever decreasing, and only resets after restarting the process.\n\n### Client config\n\nXray version: 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\n\nServer inbound config:\n{\n  \"tag\": \"XHTTP-REALITY\",\n  \"port\": 2053,\n  \"protocol\": \"vless\",\n  \"settings\": {\n    \"clients\": [],\n    \"decryption\": \"mlkem768x25519plus.native.600s.REDACTED\",\n    \"encryption\": \"mlkem768x25519plus.native.0rtt.REDACTED\"\n  },\n  \"streamSettings\": {\n    \"network\": \"xhttp\",\n    \"security\": \"reality\",\n    \"xhttpSettings\": {\n      \"mode\": \"auto\",\n      \"path\": \"/\"\n    },\n    \"realitySettings\": {\n      \"target\": \"Google.com:443\",\n      \"shortIds\": [\"7acd6597b255f7e5\"],\n      \"privateKey\": \"REDACTED\",\n      \"serverNames\": [\"play.google.com\"],\n      \"fingerprint\": \"chrome\",\n      \"publicKey\": \"REDACTED\"\n    }\n  }\n}\n\n### Server config\n\nXray version: 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\n\nInbound config:\n{\n  \"tag\": \"XHTTP-REALITY\",\n  \"port\": 2053,\n  \"protocol\": \"vless\",\n  \"settings\": {\n    \"clients\": [],\n    \"decryption\": \"mlkem768x25519plu"
     },
     {
-     "number": 7136,
-     "title": "Lua: Add sandbox mechanism",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T02:03:08Z",
-     "updated_at": "2026-10-14T05:51:21Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136",
-     "body": "From https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6133901345\r\n\r\n脚本默认运行在沙盒模式\r\nBase64 内联的脚本无法提权\r\n本地文件可以使用命令签名，并配合 xray 启动参数提权\r\n\r\n```sh\r\n$ ./xray ed25519\r\nPrivateKey: 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8\r\nPublicKey: kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n\r\n$ ./xray lua sign -key 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8 test.lua\r\n```\r\n\r\n```lua\r\n-- @xray:privileged-signature=cc5JRC0CX09xK-xxDUWmXmSoXKRCYhNuHOZCluVRUrMPPCC576AnZjM9ah1wpuaATIyy2JstVPNxoHGcqBGyBA\r\nlocal log = require(\"xray.log\")\r\n\r\nlocal success, err = pcall(function()\r\n    os.execute(\"echo 'Warning: OS command executed!'\")\r\nend)\r\nif not success then\r\n    log.Error(\"Failed to exec: \", err)\r\nend\r\n\r\nfunction HandleRoute()\r\n    log.Info(\"Choosing the direct outbound\")\r\n    return \"direct\"\r\nend\r\n```\r\n\r\n```sh\r\n$ ./xray run --lua-privileged-pubkey=kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n```"
-    },
-    {
      "number": 6748,
      "title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
      "is_pr": true,
@@ -409,28 +519,6 @@
      "user": "Risaro",
      "url": "https://github.com/XTLS/Xray-core/pull/6748",
      "body": "This stacks on #6745. Until that one is merged the diff here also contains its commit.\n\n### What it adds\n\nA `Storage` implementation for Google Drive, selected with `\"service\": \"Google Drive\"`, where `remoteFolder` is a Drive folder id and `secrets` holds ClientID, ClientSecret and RefreshToken.\n\n### No SDK\n\nPlain `net/http`, zero new entries in `go.mod`. It sits behind the same five method `Storage` interface as the local backend, so another provider is one more file and still no dependency.\n\n### How it works\n\nPaths are flattened into single names, so `streams/abc/c2s/000000000.seg` becomes `streams~abc~c2s~000000000.seg`, because Drive has no cheap path lookup and creating nested folders would cost a request per level.\n\nA name to id cache is filled from every listing, so a download costs one request instead of two. The access token is cached and refreshed on expiry or on a 401.\n\nRequests are retried on 429 and 5xx with a jittered backoff capped at 2 seconds. Jitter matters here: at concurrency 32 every request hits the rate limit at the same moment, and synchronised retries only make it worse. A request whose context is already cancelled is not retried at all.\n\n### Measurements\n\nBoth ends on a server in the Netherlands, against a real Google Drive account.\n\nRaw storage:\n\n* 4 sequential puts of 256 KiB: 199 KiB/s\n* 8 parallel puts of 256 KiB: 1637 KiB/s\n* 8 parallel gets of 256 KiB: 2453 KiB/s\n* listing a folder of 13 objects: 250 ms\n* an uploaded object becomes listable after about 200 ms, so the listing is fresh enough to drive the log\n\nTransport, 10 MB pushed through the WAL:\n\n* segment 128 KiB, concurrency 16: 1187 KiB/s\n* segment 256 KiB, concurrency 16: 1513 KiB/s\n* segment 256 KiB, concurrency 32: 1849 KiB/s\n* segment 512 KiB, concurrency 32: 2111 KiB/s\n\nReal proxy, curl through SOCKS into VLESS over XDRIVE over Google Drive:\n\n* 50 MB in 21.6 s, 2258 KiB/s, about 18.5 Mbit/s, byte identical\n* the first byte takes about 2 s, so bulk transfer is comfortable and interactive use is not\n\nMux, 30 parallel requests, which is roughly one web page:\n\n* without mux: 23675 ms and 30 sessions\n* with mux.cool at concurrency 8: 8605 ms and 4 sessions\n\nStability: 12 of 12 live runs against Drive.\n\n### Tests\n\nA fake Drive server on `httptest` covers upload, listing, download, delete, token caching and retries, and the whole transport is run over it. Live tests against a real account live in the same file and skip unless `XRAY_XDRIVE_DRIVE_SECRETS` points at a credentials file, so nothing here needs secrets in CI.\n\n### Known limits\n\nCredentials sit on the client, so this is for self hosted use. One outbound should enable mux.cool, otherwise every TCP connection becomes its own session with its own files. The HTTP client does not go through Xray's own dialer yet, so `sockopt` and a dialer proxy are not applied to Drive requests.\n"
-    },
-    {
-     "number": 7131,
-     "title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-11T19:18:14Z",
-     "updated_at": "2026-10-14T00:27:23Z",
-     "user": "FunLay123",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131",
-     "body": "Xray-core main pins utls aa6edf4, so `fingerprint: \"chrome\"` (also the default and ECH) sends Chrome 133.\nuTLS 6ebdceb (2026-10-06) adds HelloChrome_155 (verified against branded Chrome) and makes it HelloChrome_Auto.\n\nCaptured ClientHellos (JA4):\n- Xray 26.10.10 `chrome`:       t13d1516h2_8daaf6152771_d8a2da3f94cd\n- Xray + utls 6ebdceb:          t13d1517h2_8daaf6152771_cb7bf5808d99\n- Google Chrome 155 (Linux):    t13d1517h2_8daaf6152771_cb7bf5808d99\nAfter the bump, only randomized values differ (GREASE, keys, ECH payload, extension order).\n\nIn Russia the current `chrome` fingerprint appears to be detected and blocked by TSPU.\n\nProposal: bump utls to >= 6ebdceb and add \"hellochrome_155\" to the fingerprint map."
-    },
-    {
-     "number": 7139,
-     "title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T10:41:06Z",
-     "updated_at": "2026-10-13T21:15:00Z",
-     "user": "ArianPashae",
-     "url": "https://github.com/XTLS/Xray-core/pull/7139",
-     "body": "### Problem\n\nIn `app/dns/nameserver_cached.go`, `merge()` aggregates resolved records for DNS queries and cache lookups (`queryIP`).\n\nWhen dual-stack resolution is enabled (`option.IPv4Enable && option.IPv6Enable` -> `mergeReq == true`), the checks on lines 138 and 153 previously evaluated:\n```go\nif !mergeReq || go_errors.Is(err, errRecordNotFound) {\n    return ips, ttl, err\n}\n```\n\nThe `|| go_errors.Is(err, errRecordNotFound)` condition caused unintended early returns whenever either address family had no record:\n1. **IPv4-only domains** (or cached records where only `rec.A` is present): `rec4.getIPs()` successfully finds IPv4 IPs, but subsequent evaluation of `rec6.getIPs()` returns `errRecordNotFound`. Line 153 early-returned `nil, 0, errRecordNotFound`, completely discarding the IPv4 addresses collected in `allIPs`.\n2. **IPv6-only domains** (or cached records where only `rec.AAAA` is present): `rec4.getIPs()` returns `errRecordNotFound`. Line 138 early-returned `nil, 0, errRecordNotFound`, aborting before `rec6` was ever evaluated.\n3. In `queryIP`, this caused valid cached records for single-family domains to be skipped as cache misses (`if !go_errors.Is(err, errRecordNotFound)`).\n4. Additionally, `ttl < rTTL` was checked before `len(ips) > 0`, which could overwrite `rTTL` with `0` from a non-existent record.\n\n### Solution\n\n1. Removed `|| go_errors.Is(err, errRecordNotFound)` so that `!mergeReq` solely governs early returns for single-family queries, while dual-stack queries proceed to aggregate available IPs into `allIPs` and record missing errors in `errs`.\n2. Updated `rTTL` only when `len(ips) > 0` so non-existent records do not zero out valid TTLs.\n3. Returned `ttl = 0` when `len(allIPs) == 0` to align with downstream TTL handling.\n4. Added comprehensive unit tests in `app/dns/nameserver_cached_test.go` covering:\n   - Single-family IPv4 requests\n   - Single-family IPv6 requests\n   - Dual-stack requests with both A and AAAA records\n   - Dual-stack requests for IPv4-only domains (missing AAAA)\n   - Dual-stack requests for IPv6-only domains (missing A)\n   - Dual-stack requests when neither record exists"
     },
     {
      "number": 7124,
@@ -510,17 +598,6 @@
      "body": "as asked in #6795: the TUN inbound gets a small TCP/IP stack of its own instead of gVisor's (gVisor stays in go.mod for WireGuard and the ICMP helper). one goroutine reads the device and hands each segment to its connection, which is the buf.Reader and buf.Writer the dispatcher works with, so buffers from the outbound go to the tun as they are. TCP has window scaling, SACK, a congestion window and a retransmit timer that follows the round trip; UDP and ICMP echo behave as before\n\nthe second commit lets Linux do the segmentation (IFF_VNET_HDR, TUNSETOFFLOAD): Xray reads and writes segments of up to 64 KB instead of one packet per syscall\n\none stream at MTU 1500 downloads at 380 MB/s instead of 162 and takes 3.9 CPU-seconds per GB instead of 11.1; with the offload it is 2100 MB/s and 0.69. an idle TCP connection holds 14 KB of heap instead of 28. behind an emulated 100 Mbit link both keep up with the kernel's own TCP\n\nweaker than gVisor: the window is fixed (256 KB, 1 MB with the offload), so without the offload one connection over a 100 ms round trip gets 1.6 MB/s where main gets 4.4, and IP fragments are dropped, not reassembled. only Linux was run: the Windows, macOS, iOS, FreeBSD and Android devices are moved to the new interface and compile, nothing more\n\n<details>\n<summary>throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, Xray on 4 cores with GOMAXPROCS=4, load and target on cores of their own, freedom outbound to a local target. main (836a6fed), the stack and the stack with the offload take turns sample by sample; median of 5, MB/s of payload and CPU-seconds of Xray (user + system) per GB. 1 stream moves 2 GB, 8 streams 256 MB each\n\n```\n                       MB/s                      CPU s/GB\nMTU    case            main   stack  offload     main   stack  offload\n1500   download 1       162     380     2100     11.1     3.9     0.69\n1500   upload   1       233     354     3460      9.9     4.4     0.53\n1500   download 8       378    1244     4763      7.5     3.1     0.82\n1500   upload   8       398     357     2860      8.7     5.5     0.77\n9000   download 1       330    1035     1658      5.7     1.5     0.92\n9000   upload   1       456     939     3052      4.6     1.9     0.67\n9000   download 8      1465    3402     5082      2.3     1.2     0.82\n9000   upload   8      1359    1812     2938      3.0     1.3     0.82\n```\n\nthe MTU 9000 rows are from an earlier run, when the PC was doing other work as well, so their levels may read low\n\nwithout the offload, upload on 8 streams is a tenth behind main: one goroutine reads the tun and its queue of 500 packets overflows (78386 packets dropped there, 116531 for main)\n</details>\n\n<details>\n<summary>behind a link (the router case)</summary>\n\nthe load runs in a second namespace behind a link played in user space (rate, delay, drop-tail queue), the namespace of Xray forwards into the tun. \"kernel\" is the same link without Xray. median of 3, MB/s, in brackets the percent of data packets the link dropped\n\n```\n100 Mbit, 10 ms round trip   kernel       main         stack        offload\ndownload 1                   9.6 (0.4)    8.8 (0.5)    9.4 (0.1)    8.9 (0.9)\nupload   1                   9.7 (0.3)    8.7 (0.1)    9.4 (0.1)    9.5 (0.0)\ndownload 8                   9.1 (1.8)    8.7 (1.4)    8.9 (1.6)    8.9 (1.6)\nupload   8                   9.4 (1.8)    8.4 (1.5)    9.3 (1.5)    9.1 (1.6)\n\n50 Mbit, 20 ms round trip, 1 % random loss\ndownload 1                   0.7 (1.0)    0.6 (1.0)    0.8 (1.0)    0.8 (1.4)\nupload   1                   0.7 (0.9)    0.7 (1.0)    0.7 (1.1)    0.7 (1.1)\ndownload 8                   4.4 (1.7)    3.6 (1.6)    4.1 (1.8)    4.3 (1.9)\nupload   8                   3.6 (2.8)    3.7 (2.4)    3.8 (2.6)    4.0 (2.6)\n\n100 Mbit, 100 ms round trip\ndownload 1                   8.1 (0.5)    4.4 (3.5)    1.6 (0.0)    3.8 (0.6)\nupload   1                   7.4 (1.4)    6.1 (1.1)    2.4 (0.0)    6.5 (1.2)\ndownload 8                   5.1 (1.5)    4.7 (2"
     },
     {
-     "number": 7103,
-     "title": "feat(xdns): add DoT and DoH support with the new configuration syntax (#6718)",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-07T23:53:32Z",
-     "updated_at": "2026-10-12T23:21:44Z",
-     "user": "HPPC114514",
-     "url": "https://github.com/XTLS/Xray-core/pull/7103",
-     "body": "基于更新后的 XDNS 配置结构#6718 重新实现加密 DNS 支持。隧道域名与记录类型使用 `domains[].names/types`，递归解析器端点使用 `resolvers[].addrs`。\r\n\r\n- 新增 DoT：默认端口为 `853`，支持 TLS 连接复用、DNS 长度分帧、事务 ID 与问题匹配，以及后续请求触发重连。\r\n- 新增 DoH：默认端口为 `443`，默认路径为 `/dns-query`；保留自定义路径和查询参数，使用 HTTPS POST，支持连接复用及 HTTP/2 协商。\r\n- 使用系统信任根校验端点域名或 IP，拒绝 HTTP 重定向及无效 DNS 响应。\r\n- 每个加密端点最多允许 16 个并发请求，单次超时为 10 秒；不自动重放结果不明的请求。\r\n- 接入现有 TCP 拨号器，保留调用方上下文及 socket 配置，并检查加密 XDNS 与其他接管拨号的 mask 的组合。\r\n- 完善 deadline、取消和关闭流程，修复轮询重复发送旧载荷的问题。\r\n\r\n保留现有 UDP/TCP 传输模块、protobuf 配置结构和记录类型默认值。允许显式混合明文与加密解析器，不添加隐式明文回退。\r\n\r\n## 配置示例\r\n\r\n```json\r\n{\r\n  \"type\": \"xdns\",\r\n  \"settings\": {\r\n    \"domains\": [\r\n      {\r\n        \"names\": [\"tunnel.example.com\"],\r\n        \"types\": [16]\r\n      }\r\n    ],\r\n    \"resolvers\": [\r\n      {\r\n        \"addrs\": [\r\n          \"dot://resolver.example:853\",\r\n          \"doh://resolver.example/dns-query\"\r\n        ]\r\n      }\r\n    ]\r\n  }\r\n}\r\n```\r\n\r\n包含 DoT/DoH 时，XDNS 应位于 UDP mask 配置列表末尾。解析器的启动域名解析及代理拨号应独立于同一个 XDNS 出站，避免循环依赖。"
-    },
-    {
      "number": 7132,
      "title": "Lua: Support inline scripts; Add `./xray base64 encode/decode [-gzip]` command",
      "is_pr": true,
@@ -574,24 +651,292 @@
      "user": "CluvexStudio",
      "url": "https://github.com/XTLS/Xray-core/pull/7121",
      "body": "for https://github.com/XTLS/Xray-core/pull/6878#issuecomment-6095112915\n\n-- `masqueSettings.xmux`, the same fields and rules as XHTTP. one XMUX connection is one CONNECT-IP tunnel with its own netstack, so maxConnections is the number of tunnels, maxConcurrency and cMaxReuseTimes count flows, and hMaxReusableSecs stops a tunnel from taking new flows and closes it once they are done. hMaxRequestTimes doesn't apply since a tunnel only makes one request. maxConnections defaults to 1 because masque is mostly h3, the other defaults are XHTTP's\n-- hKeepAlivePeriod works like in XHTTP: h3 keeps quic-go's 10s, h2 now defaults to chrome's 45s instead of the fixed 10s ping\n-- Mux.Cool is forbidden on a masque inbound except pure XUDP, the same line XHTTP uses in #4128, and the json level refusal of `mux` is gone with it\n-- the User-Agent defaults to chrome's like the other http transports. an explicit \"\" still sends none, which is what the official warp client does\n-- the default tls fingerprint stays: h2 already uses chrome via uTLS, and h3 can't parrot chrome because that means a 1250-byte initial and zero-length connection ids, while masque needs room for 1280-byte packets from the start and warp wants 20-byte ids\n\ntested against warp over h2: three tunnels from one device all work at the same time, they stay up through 75s idle with the 45s keepalive, and a short hMaxReusableSecs rotates to a new tunnel and closes the old one. h3 i couldn't test live, quic doesn't get through on the network i'm on right now\n\n\n"
-    },
-    {
-     "number": 7115,
-     "title": "masque/warp: make warp.publicKey optional (CA/pcs verify for custom SNI)",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-09T11:00:45Z",
-     "updated_at": "2026-10-12T09:02:34Z",
-     "user": "Ahmad-2213",
-     "url": "https://github.com/XTLS/Xray-core/issues/7115",
-     "body": "Greetings.\n### Background\n[`#6878`](https://github.com/XTLS/Xray-core/pull/6878) added WARP over MASQUE. `warp.publicKey` pins the server leaf SPKI (`transport/internet/masque/warp.go:57-70`), correct for the default self-signed backend (`consumer-masque.cloudflareclient.com` → `162.159.198.2`, `CN=masque...`, `IaU7...`, leaf-only, no chain per author note).\n\n### Problem\n`infra/conf/transport_method.go:825-828` mandates the pin via `parseWarpPublicKey` → `decodeWarpKey:914-918` (`empty key` error). `infra/conf/masque_test.go:173` enforces it.\n\nWith a custom SNI to a WARP IP (`tlsSettings.serverName=www.cloudflare.com`, `masqueSettings.host=cloudflareaccess.com`, same split Aether `--masque-sni` uses), the presented leaf is the rotating CDN `WE1/Google` cert, not the enrollment key. Forcing a leaf SPKI pin there gives per-PoP/rotation `the WARP endpoint's key doesn't match \"publicKey\"` (`warp.go:69`), and the leaf hash changes while `WE1/R4` CAs are stable (`xray tls ping -ip 162.159.198.11 www.cloudflare.com`).\n\n### Proposal\nAllow empty `warp.publicKey` in `infra/conf` only; transport already supports it (`warp.go:57 if len(publicKey)>0`, otherwise only client-cert setup, standard verify preserved):\n```go\n// transport_method.go:825\nvar publicKey []byte\nif strings.TrimSpace(c.Warp.PublicKey) != \"\" {\n    publicKey, err = parseWarpPublicKey(c.Warp.PublicKey)\n    ...\n}\n\n\n"
     }
    ],
    "comments": [
     {
+     "id": 6170730371,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T14:29:07Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170730371",
+     "body": "> ~不过 DoH 这么先进的东西似乎没遇到过只支持 h1 的，话说 h1 那个复用，上一个 req 发完不用等 resp 就能发下一个还是~\r\n\r\n1.1 应该是要等，顺序发送，~懒得写 test 验证了~，worker 对于 h2 h3 肯定是能作用上就是了"
+    },
+    {
+     "id": 6170710795,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T14:28:09Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170710795",
+     "body": "```go\r\nfunc TestXxx3(t *testing.T) {\r\n\tserver := httptest.NewUnstartedServer(\r\n\t\thttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\r\n\t\t\tw.Write([]byte(\"ok\"))\r\n\t\t}),\r\n\t)\r\n\r\n\tserver.EnableHTTP2 = true\r\n\r\n\tserver.StartTLS()\r\n\tdefer server.Close()\r\n\r\n\ttlsCfg := &gotls.Config{\r\n\t\tNextProtos:         []string{\"h2\", \"http/1.1\"},\r\n\t\tInsecureSkipVerify: true,\r\n\t}\r\n\r\n\ttr := &http.Transport{\r\n\t\tForceAttemptHTTP2: true,\r\n\t\tDialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {\r\n\t\t\tconn, err := net.Dial(network, server.Listener.Addr().String())\r\n\t\t\tif err != nil {\r\n\t\t\t\treturn nil, err\r\n\t\t\t}\r\n\t\t\ttlsConn := tls.UClient(conn, tlsCfg, &utls.HelloChrome_Auto)\r\n\t\t\terr = tlsConn.(*tls.UConn).HandshakeContext(ctx)\r\n\t\t\t// tlsConn := tls.Client(conn, tlsCfg)\r\n\t\t\t// err = tlsConn.(*tls.Conn).HandshakeContext(ctx)\r\n\t\t\tif err != nil {\r\n\t\t\t\t_ = conn.Close()\r\n\t\t\t\treturn nil, err\r\n\t\t\t}\r\n\t\t\tstate := tlsConn.(interface{ ConnectionState() gotls.ConnectionState }).ConnectionState()\r\n\t\t\tfmt.Println(\"NegotiatedProtocol\", state.NegotiatedProtocol)\r\n\t\t\treturn tlsConn, nil\r\n\t\t},\r\n\t}\r\n\r\n\tclient := &http.Client{\r\n\t\tTransport: tr,\r\n\t}\r\n\r\n\tresp := common.Must2(client.Do(common.Must2(http.NewRequest(\"POST\", \"https://a.com/path\", strings.NewReader(\"hello\")))))\r\n\tfmt.Println(resp.Proto)\r\n\tresp.Body.Close()\r\n}\r\n```\r\n\r\n现在这个 test 可以过了，不过动了 UConn 需要 @Fangliding 看下\r\n\r\n输出\r\n\r\n```shell\r\nNegotiatedProtocol h2\r\nHTTP/2.0\r\n```\r\n\r\n注释 `server.EnableHTTP2 = true` 后输出\r\n\r\n```shell\r\nNegotiatedProtocol http/1.1\r\nHTTP/1.1\r\n```"
+    },
+    {
+     "id": 6170481423,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T14:17:11Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170481423",
+     "body": "@Meo597 The idea is different: locally authorizing the execution of specific bytes inside a sandbox. The GUI accepts remote configuration, and the design does not aim to defend against a malicious GUI itself.\r\n\r\nI've deleted the message for now. I'm still testing:\r\n\r\n1. Approved SHA-256 digests and purposes (DNS/router) are supplied in advance for each core instance. These approvals do not come from subscriptions and cannot be modified by updaters.\r\n2. All bytes read are checked. That same buffer is compiled, without rereading the file.\r\n3. The purpose is supplied by the core's DNS/router code, not by imported JSON.\r\n4. An admitted script always remains sandboxed.\r\n5. Approvals remain immutable while the instance is running. In the initial version, updating or revoking them requires closing the old instance and creating a new one.\r\n\r\nCost and compatibility:\r\n\r\n1. Configurations without Lua require no additional steps.\r\n2. Lua users will need initial approval and renewed approval after any file change.\r\n3. An embedding client supplies approvals through the existing `core.NewWithContext`; no shared global approval list is needed.\r\n4. Approval does not make the script itself safe: DNS access, modification of returned data, and resource limits remain separate concerns.\n\nTwo separate safeguards are needed:\n\n1. Admission: which code is allowed to execute.\n2. Sandboxing: what the running code can do and how many resources it can use.\n\nThis proposal addresses the first task."
+    },
+    {
+     "id": 6170408103,
+     "issue": 7150,
+     "issue_title": "WireGuard: Use UDP GSO on Linux",
+     "created_at": "2026-10-14T14:13:35Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7150#issuecomment-6170408103",
+     "body": "#7145 "
+    },
+    {
+     "id": 6170316990,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T14:09:08Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170316990",
+     "body": "~~不过 DoH 这么先进的东西似乎没遇到过只支持 h1 的，话说 h1 那个复用，上一个 req 发完不用等 resp 就能发下一个还是~~"
+    },
+    {
+     "id": 6170232935,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T14:05:00Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170232935",
+     "body": "确定问题在哪了，一个是 `interface{ ConnectionState() gotls.ConnectionState }` 一个是 `interface{ ConnectionState() utls.ConnectionState }`，官方的描述没问题，实现了前者确实可以抛弃 http2 transport\r\n\r\n```\r\n\t// To support ALPN protocol negotiation, the returned net.Conn should be\r\n\t// a *tls.Conn or implement the same ConnectionState method as *tls.Conn.\r\n\tDialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)\r\n```\r\n\r\n现在重新包一层然后做个 copy utls.ConnectionState to gotls.ConnectionState 应该就可以只使用 http transport 了"
+    },
+    {
+     "id": 6170164642,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T14:01:39Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170164642",
+     "body": "@svlavr 暂时不会有特权模式，全部在沙盒因此也不需要签名\r\n\r\n沙盒模式的威胁模型只有下游第三方 GUI 接受了远程下发的配置\r\n\r\n特权模式的威胁模型是本地恶意程序有权修改 lua 而且 xray TUN 模式，客户端不大可能去改 lua 文件权限"
+    },
+    {
+     "id": 6169770844,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T13:42:31Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169770844",
+     "body": "既要接收机场下发的 geodata 和 script 字段\r\n又要自己加一个多余的立即下载功能，故意绕过 xray 的安全校验\r\n\r\n那就是故意在写后门"
+    },
+    {
+     "id": 6169360819,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T13:22:11Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169360819",
+     "body": "~~不过外部更新程序下载 lua 防不了，只能默认沙盒模式，况且它本来就不需要多么开放，限制不能从 assets 加载可能不太实用~~"
+    },
+    {
+     "id": 6169259284,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T13:16:54Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6169259284",
+     "body": "跑了一下 test 虽然会看 ConnectionState() 但似乎始终都用 http/1.1 来发，还是得区分 http2 transport，我先看下"
+    },
+    {
+     "id": 6169205308,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T13:14:08Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169205308",
+     "body": "> 然后突然意识到微软的文件扩展名真是一个伟大的发明... 检查扩展名就不用搞这么麻烦了\r\n\r\n别搞。。。文件实际内容完全可以与扩展名无关，即使限制了 geo 只能下载 `.dat`、lua 只能加载 `.lua` 也没覆盖外部更新程序"
+    },
+    {
+     "id": 6168976443,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T13:02:38Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168976443",
+     "body": "@LjhAUMEM UA"
+    },
+    {
+     "id": 6168504343,
+     "issue": 7146,
+     "issue_title": "Why is RoutingService.SubscribeRoutingStats disabled by passing nil routingStats?",
+     "created_at": "2026-10-14T12:37:17Z",
+     "user": "Li-xiaotong-cauc",
+     "url": "https://github.com/XTLS/Xray-core/issues/7146#issuecomment-6168504343",
+     "body": "> 1. It's just some legacy code\n\nJust found a related issue submitted around June this year. I may have an alternative implementation approach. Thanks."
+    },
+    {
+     "id": 6168216368,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T12:21:53Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168216368",
+     "body": "@Fangliding 对了你看下我改的 https://github.com/XTLS/Xray-core/commit/676a600edbd21e036102b82e84c3541ba56c9eea 没问题吧，测一下新旧互连"
+    },
+    {
+     "id": 6168181241,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T12:19:53Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168181241",
+     "body": "> 现在我记得会读了 不确定\r\n\r\n如果是真的话那就方便很多了，不过这个要么得 uTLS 回调 HTTP 库，要么得把 uTLS 中的指针传进 HTTP 库，~~不然它咋读~~"
+    },
+    {
+     "id": 6168152700,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T12:18:14Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6168152700",
+     "body": "给 geodata 写一个完美兼容的头，而 lua 会认为是非法字符过不了语法检查必定直接报错也可以\r\n\r\n然后突然意识到微软的文件扩展名真是一个伟大的发明...\r\n检查扩展名就不用搞这么麻烦了"
+    },
+    {
+     "id": 6168106709,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T12:15:36Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168106709",
+     "body": "现在我记得会读了 不确定"
+    },
+    {
+     "id": 6168100968,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T12:15:16Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168100968",
+     "body": "~~除非服务端只支持 h1 那么才可以内层 h1，但这个要预先设置，比如 XHTTP alpn 只设 h1 不会改浏览器指纹，只决定内层为 h1~~"
+    },
+    {
+     "id": 6168085528,
+     "issue": 7146,
+     "issue_title": "Why is RoutingService.SubscribeRoutingStats disabled by passing nil routingStats?",
+     "created_at": "2026-10-14T12:14:20Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7146#issuecomment-6168085528",
+     "body": "It's just some legacy code"
+    },
+    {
+     "id": 6168062702,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T12:13:00Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168062702",
+     "body": "> 内层 h2c 啥意思，不是肯定会进行 tls 协商吗，最多加个 DialTLSContext 适配上 utls 就行了吧\r\n\r\n以前探索过，Golang HTTP 貌似没开放读取 DialTLSContext（比如 uTLS）ALPN 协商结果来决定内层 HTTP 版本，所以只能 h2"
+    },
+    {
+     "id": 6167883829,
+     "issue": 7131,
+     "issue_title": "Bump uTLS: chrome fingerprint is still Chrome 133",
+     "created_at": "2026-10-14T12:02:55Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7131#issuecomment-6167883829",
+     "body": "https://t.me/projectXtls/3583"
+    },
+    {
+     "id": 6167736394,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T11:54:05Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167736394",
+     "body": "内层 h2c 啥意思，不是肯定会进行 tls 协商吗，最多加个 DialTLSContext 适配上 utls 就行了吧\r\n\r\n```\r\n\t// Protocols is the set of protocols supported by the transport.\r\n\t//\r\n\t// If Protocols includes UnencryptedHTTP2 and does not include HTTP1,\r\n\t// the transport will use unencrypted HTTP/2 for requests for http:// URLs.\r\n\t//\r\n\t// If Protocols is nil, the default is usually HTTP/1 only.\r\n\t// If ForceAttemptHTTP2 is true, or if TLSNextProto contains an \"h2\" entry,\r\n\t// the default is HTTP/1 and HTTP/2.\r\n\tProtocols *Protocols\r\n```\r\nhttps://pkg.go.dev/net/http#Transport"
+    },
+    {
+     "id": 6167718871,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T11:53:00Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6167718871",
+     "body": "资产路径解析的确不适合\r\n也可以让 lua 编译期去强行看 geodata 的 config 但有点破坏抽象\r\n\r\n一个攻击路径是，下发了非法的 geodata\r\n下次再下发 script\r\n这样就不需要 cron 撞大运了，也很隐蔽\r\n\r\n所以必须得严格校验 geodata\r\n\r\n我在想有没有一种可能：精心构造的 geodata 既可以通过标准的 protobuf 检测\r\n又能让 lua 编译成功\r\n\r\n跟 gpt 搏斗了一会儿（对话总是被阻断，可能是让我做 cyber security 认证）\r\n他真的找到了办法\r\n\r\n所以 geodata 会走 lua 编译器语法检查，如果合法就报错"
+    },
+    {
+     "id": 6167501048,
+     "issue": 7139,
+     "issue_title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
+     "created_at": "2026-10-14T11:41:04Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7139#issuecomment-6167501048",
+     "body": "this was bug-3 in https://github.com/XTLS/Xray-core/pull/4659#issue-3024991199, which i fixed, and this PR is going to reintroduce it!"
+    },
+    {
+     "id": 6167486018,
+     "issue": 7139,
+     "issue_title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
+     "created_at": "2026-10-14T11:40:09Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7139#issuecomment-6167486018",
+     "body": "厉害了，我基本都忘干净了\r\n只是有点当时的印象：这里没问题\r\n本来准备等空下来的时候再 review"
+    },
+    {
+     "id": 6167358486,
+     "issue": 7139,
+     "issue_title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
+     "created_at": "2026-10-14T11:32:19Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7139#issuecomment-6167358486",
+     "body": "empty-response is cached for 300s, `errRecordNotFound` means the response to the previous request hasn’t arrived yet, so we shouldn’t retrieve only the response for one type of IP from the cache."
+    },
+    {
+     "id": 6167307686,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T11:29:14Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167307686",
+     "body": "UA 也是改成默认 Chrome 那个，目前没遇到问题，你对齐 DNS 和 TLS 那两处 DoH 的行为就行"
+    },
+    {
+     "id": 6167254749,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T11:25:55Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167254749",
+     "body": "需要和 Xray 内其它请求一样改成内层 h2c，外层默认 Chrome 指纹，反正有 `tlsConfig`，想用别的指纹的自己设置\r\n\r\nh3 由于是 hy 的魔改版 quic-go 所以默认是 Chrome 指纹吧"
+    },
+    {
+     "id": 6167179058,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T11:21:13Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167179058",
+     "body": "非 h3 没有走 utls，走的话应该是设置 DialTLSContext，http2 transport 不是弃用了都用 http transport 了吗"
+    },
+    {
+     "id": 6167091531,
+     "issue": 7140,
+     "issue_title": "XDNS: add DOH",
+     "created_at": "2026-10-14T11:15:59Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167091531",
+     "body": "看了下代码，你这个 DoH 如果用 unsafe(golang) 指纹是还支持 h1 的？"
+    },
+    {
+     "id": 6165177585,
+     "issue": 7136,
+     "issue_title": "Lua: Add sandbox mechanism",
+     "created_at": "2026-10-14T09:25:23Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6165177585",
+     "body": "`4c0f3a94` Problems/suggestions:\n\n1. After inline scripts were disabled, [unreachable code remained](https://github.com/XTLS/Xray-core/blob/4c0f3a94c527267c5e6754660f38e68fd3d3818e/common/lua/program.go#L33-L36). `go vet` fails. Remove the decoder and add rejection tests for both inline formats.\n2. [Addresses were hidden through `tostring`](https://github.com/XTLS/Xray-core/blob/4c0f3a94c527267c5e6754660f38e68fd3d3818e/common/lua/program.go#L124-L137), but `string.format(\"%p\", {})` still returns an address. Verified. Restrict object formatting too.\n3. [IP slices are passed to Lua without copying](https://github.com/XTLS/Xray-core/blob/4c0f3a94c527267c5e6754660f38e68fd3d3818e/common/lua/luar.go#L11-L21). `ips[1][1] = 127` modified the test DNS client's original slice. Make the data read-only or copy it, including the IP bytes.\n4. There is a timeout, but no memory limit. [Active Lua states are also created without a limit](https://github.com/XTLS/Xray-core/blob/4c0f3a94c527267c5e6754660f38e68fd3d3818e/common/lua/pool.go#L79-L86). Limit the number of states and operations that allocate large amounts of memory.\n5. I agree with [Fangliding's point](https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6137989834) about DNS. Through the [DNS API](https://github.com/XTLS/Xray-core/blob/4c0f3a94c527267c5e6754660f38e68fd3d3818e/app/dns/lua.go#L107-L125), a script can query arbitrary domains. Disabling `os` does not remove this capability. DNS access needs to be explicitly accounted for and restricted for untrusted scripts.\n6. [A signature immediately enables `os` and `io`](https://github.com/XTLS/Xray-core/blob/4c0f3a94c527267c5e6754660f38e68fd3d3818e/common/lua/program.go#L60-L66). A signed script is not necessarily safe. I agree with [RPRX](https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6160069969): remove privileged mode and signatures for now. If needed later, consider them in a separate PR.\n\nPoints 3–5 existed before this PR, but the sandbox does not address them."
+    },
+    {
      "id": 6164411434,
      "issue": 7143,
-     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "issue_title": "SS2022 proxy: Correct interrupt behavior and UDP conn change",
      "created_at": "2026-10-14T08:41:09Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6164411434",
@@ -600,7 +945,7 @@
     {
      "id": 6163980683,
      "issue": 7143,
-     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "issue_title": "SS2022 proxy: Correct interrupt behavior and UDP conn change",
      "created_at": "2026-10-14T08:15:27Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6163980683",
@@ -609,7 +954,7 @@
     {
      "id": 6163926468,
      "issue": 7143,
-     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "issue_title": "SS2022 proxy: Correct interrupt behavior and UDP conn change",
      "created_at": "2026-10-14T08:12:07Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6163926468",
@@ -654,7 +999,7 @@
     {
      "id": 6162877141,
      "issue": 7145,
-     "issue_title": "wireguard: batch TUN/UDP I/O, eliminate hot-path allocations, and fix Linux IPv4 routing",
+     "issue_title": "wireguard, udp: batch TUN/UDP I/O, eliminate hot-path allocations, and fix UDP burst drops & Linux IPv4 routing",
      "created_at": "2026-10-14T07:05:43Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7145#issuecomment-6162877141",
@@ -663,7 +1008,7 @@
     {
      "id": 6162816346,
      "issue": 7145,
-     "issue_title": "wireguard: batch TUN/UDP I/O, eliminate hot-path allocations, and fix Linux IPv4 routing",
+     "issue_title": "wireguard, udp: batch TUN/UDP I/O, eliminate hot-path allocations, and fix UDP burst drops & Linux IPv4 routing",
      "created_at": "2026-10-14T07:01:30Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7145#issuecomment-6162816346",
@@ -717,7 +1062,7 @@
     {
      "id": 6160779056,
      "issue": 7145,
-     "issue_title": "wireguard: batch TUN/UDP I/O, eliminate hot-path allocations, and fix Linux IPv4 routing",
+     "issue_title": "wireguard, udp: batch TUN/UDP I/O, eliminate hot-path allocations, and fix UDP burst drops & Linux IPv4 routing",
      "created_at": "2026-10-14T04:17:41Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7145#issuecomment-6160779056",
@@ -1041,7 +1386,7 @@
     {
      "id": 6149005957,
      "issue": 7143,
-     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "issue_title": "SS2022 proxy: Correct interrupt behavior and UDP conn change",
      "created_at": "2026-10-13T15:24:53Z",
      "user": "ChownYourLife",
      "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6149005957",
@@ -1050,7 +1395,7 @@
     {
      "id": 6149002666,
      "issue": 7143,
-     "issue_title": "SS2022: Correct interrupt behavior and UDP conn change",
+     "issue_title": "SS2022 proxy: Correct interrupt behavior and UDP conn change",
      "created_at": "2026-10-13T15:24:43Z",
      "user": "ChownYourLife",
      "url": "https://github.com/XTLS/Xray-core/pull/7143#issuecomment-6149002666",
@@ -1838,119 +2183,110 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6126395459",
      "body": "> bool 就 bool 呗 实际上这些功能字段设计不一定就非得长这样 这些字段就是提出之后 patt 那些人跟AI说了 AI再弄的 不同的人设计出不同的接口是完全正常的事 谁优谁劣很难说 也没有人类讨论是否就非得写成这样\r\n> \r\n> 各种TUN的需要的东西八成隔壁也处理过 你说用隔壁的设计接口处理不好也是不太可能的\r\n\r\n 这些字段主要是根据他们 PR 的实现原理来设计的，Windows 上有更精细的 WFP 控制且以后也能有 `autoSystemDnsToGateway`\r\n\r\n> @RPRX tried reading from the tun straight into buf on linux with offload: readv into 8k buffers, segments that arrive in order go to the reader as they are. the copy leaves user time (0.16 to 0.09 s/GB on an upload), but system time grows by as much (0.40 to 0.45), so cpu per GB stays at 0.55. one stream uploads 8% faster, 8 streams and downloads are the same\r\n> \r\n> it's about 150 lines plus tests. can send it if you want it for the 8%, otherwise i'd move on to the next points\r\n\r\n这个以后再想更好的优化方式吧，~~现在 XDRIVE 更急一些，记得开允许维护者修改 PR~~"
-    },
-    {
-     "id": 6125269698,
-     "issue": 7130,
-     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "created_at": "2026-10-12T13:29:31Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6125269698",
-     "body": "@RPRX tried reading from the tun straight into buf on linux with offload: readv into 8k buffers, segments that arrive in order go to the reader as they are. the copy leaves user time (0.16 to 0.09 s/GB on an upload), but system time grows by as much (0.40 to 0.45), so cpu per GB stays at 0.55. one stream uploads 8% faster, 8 streams and downloads are the same\n\nit's about 150 lines plus tests. can send it if you want it for the 8%, otherwise i'd move on to the next points\n"
-    },
-    {
-     "id": 6125057101,
-     "issue": 7131,
-     "issue_title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "created_at": "2026-10-12T13:17:04Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131#issuecomment-6125057101",
-     "body": "> 3\\. [@Fangliding](https://github.com/Fangliding) Understood. Note that Xray is already on an untagged commit (aa6edf4, 6 commits after v1.8.2), so I thought a pinned commit was acceptable.\n\n用 pinned commit 是异常情况 因为我在 utls 加了 ECH 的 ALPN 伪装后也不能催他们发版 所以xray这边只好指定commit以实装这个功能\n\n> Chrome 155 is the current stable channel, so most real Chrome traffic already looks like 155 and 133 is the outlier now.\n\n这是说不准的 因为大量的其他使用 chromium 的框架（如 electron）和使用 chromium 内核还未同步上游浏览器都会发出旧的指纹 所谓 chrome 133 是因为 133 更改了指纹 实际使用它的版本 是 133~154 不要觉得它很远古"
-    },
-    {
-     "id": 6124968805,
-     "issue": 7130,
-     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "created_at": "2026-10-12T13:11:48Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6124968805",
-     "body": "> 那我再说一个点，比如以 TUN 为例的话，TUN 修过的问题 sing-tun 库应该基本上也修过，就比如 `autoSystemDnsToGateway` 和 `autoSystemWfpBlockLeak` 我看了下类似隔壁的 strict_route，即使假设那个库是 MPL 但如果它暴露的接口就只有这个 bool 呢？\r\n> \r\n> 虽然是修了同样的问题，但 Xray 分成了两个选项，大概前者多支持了 FreeBSD，后者多覆盖了系统 DoH、多了 \"misconfigtun\"\r\n> \r\n> ~当然关于后三点我没看隔壁库~，只是想表达两件事：那些个代码隔壁不一定合，要加选项时对选项的设计/粒度的把控也不一样\r\n\r\nbool 就 bool 呗 实际上这些功能字段设计不一定就非得长这样 这些字段就是提出之后 patt 那些人跟AI说了 AI再弄的 不同的人设计出不同的接口是完全正常的事 谁优谁劣很难说 也没有人类讨论是否就非得写成这样\r\n\r\n各种TUN的需要的东西八成隔壁也处理过 你说用隔壁的设计接口处理不好也是不太可能的"
-    },
-    {
-     "id": 6124882505,
-     "issue": 7130,
-     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "created_at": "2026-10-12T13:06:56Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6124882505",
-     "body": "> @Fangliding went through the 32 `fix:` commits of mipstack against tcp_lightweight.go. 22 are for things this stack doesn't have, or for the library's own plumbing: syn cookies, timestamps and paws, time-wait, keepalive with a user timeout, bbr and rack, fragments, icmp errors, the socket api, its output queue\r\n> \r\n> the other 10 touch what it does have, and there it already behaves as those commits end up: a fin alone is taken at a closed window, a reset with the fin's number is accepted, a closed window is probed at snd.una-1 without a new byte, sack blocks are checked against what was sent, the retransmit timer restarts only on a new cumulative ack, close doesn't wait for a blocked write\r\n> \r\n> three things differ and all are small: unanswered probes are not counted by the stack (the idle timeout of the policy ends such a connection), the send window is taken from every ack that is not old, and the sack blocks of an old ack are not read. the last two only show with reordering, i can add them\r\n> \r\n> the ten\r\n> ```\r\n> 2b7ccf43  fin at a zero window          same\r\n> 39ddc205  reset at the fin's sequence   same, and any reset inside the window is taken\r\n> 0c9ab6d1  probe form, reserved bits     same\r\n> bc81cf56  rto restart                   same\r\n> a05283d6  close with a blocked write    the write ends and the connection is reset\r\n> f63e1546  scaled window stuck at zero   a read below half of the window sends an update\r\n> 976adac5  options in the mss            data segments carry no options\r\n> 3766b07d  limit of unanswered probes    not counted, the idle timeout ends it\r\n> 332a03e2  window update rule            taken from every ack that is not old\r\n> f099b179  old ack, dsack                old acks are dropped whole, blocks below snd.una ignored\r\n> ```\r\n\r\n我的意思是 要替换掉整个 gvisor 栈在其他 proxy 也使用的话 （https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6111566552）\r\n不仅限于本地 TUN"
-    },
-    {
-     "id": 6124685539,
-     "issue": 7130,
-     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "created_at": "2026-10-12T12:55:17Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6124685539",
-     "body": "@Fangliding went through the 32 `fix:` commits of mipstack against tcp_lightweight.go. 22 are for things this stack doesn't have, or for the library's own plumbing: syn cookies, timestamps and paws, time-wait, keepalive with a user timeout, bbr and rack, fragments, icmp errors, the socket api, its output queue\n\nthe other 10 touch what it does have, and there it already behaves as those commits end up: a fin alone is taken at a closed window, a reset with the fin's number is accepted, a closed window is probed at snd.una-1 without a new byte, sack blocks are checked against what was sent, the retransmit timer restarts only on a new cumulative ack, close doesn't wait for a blocked write\n\nthree things differ and all are small: unanswered probes are not counted by the stack (the idle timeout of the policy ends such a connection), the send window is taken from every ack that is not old, and the sack blocks of an old ack are not read. the last two only show with reordering, i can add them\n\n<details><summary>the ten</summary>\n\n```\n2b7ccf43  fin at a zero window          same\n39ddc205  reset at the fin's sequence   same, and any reset inside the window is taken\n0c9ab6d1  probe form, reserved bits     same\nbc81cf56  rto restart                   same\na05283d6  close with a blocked write    the write ends and the connection is reset\nf63e1546  scaled window stuck at zero   a read below half of the window sends an update\n976adac5  options in the mss            data segments carry no options\n3766b07d  limit of unanswered probes    not counted, the idle timeout ends it\n332a03e2  window update rule            taken from every ack that is not old\nf099b179  old ack, dsack                old acks are dropped whole, blocks below snd.una ignored\n```\n\n</details>\n"
-    },
-    {
-     "id": 6124443783,
-     "issue": 7121,
-     "issue_title": "MASQUE client: Support XMUX (`\"maxConnections\": 1` by default); Use Chrome's User-Agent by default",
-     "created_at": "2026-10-12T12:40:09Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7121#issuecomment-6124443783",
-     "body": "> MASQUE 以 h3 为主所以可以默认 maxConnections 1，给它加上 XMUX 是为了用户可以自定义 HTTP 的行为\n\n@RPRX done, maxConnections defaults to 1 now, the rest of the xmux defaults stay the same so h2 can still be tuned\n\nabout mux.cool, it's a target check at the top of the outbound's Process, `v1.mux.cool` gets an error there. same place vless and vmess look at the target domain, they switch the command and we refuse instead. json configs were already refused in #6807, this one is for protobuf and api configs. if you had a certain spot in xhttp in mind just point at it and i'll match it\n"
-    },
-    {
-     "id": 6122683612,
-     "issue": 7132,
-     "issue_title": "Lua: Support inline scripts; Add `./xray base64 encode/decode [-gzip]` command",
-     "created_at": "2026-10-12T10:44:11Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6122683612",
-     "body": "根据测试 https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6111049598\r\n几百字节就有收益，随便写写就超了\r\n\r\ncli 不比 gui\r\n此命令主要还是为 gzip 服务"
-    },
-    {
-     "id": 6121754990,
-     "issue": 7132,
-     "issue_title": "Lua: Support inline scripts; Add `./xray base64 encode/decode [-gzip]` command",
-     "created_at": "2026-10-12T09:45:19Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6121754990",
-     "body": "~~差不多吧不过我不确定支持可选的 gzip 是否有必要~~"
-    },
-    {
-     "id": 6121103243,
-     "issue": 6748,
-     "issue_title": "XDRIVE transport: Add the Google Drive and \"template\" backend",
-     "created_at": "2026-10-12T09:03:39Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6121103243",
-     "body": "https://github.com/XTLS/Xray-core/issues/7115#issuecomment-6121055143 @Ahmad-2213 "
-    },
-    {
-     "id": 6121055143,
-     "issue": 7115,
-     "issue_title": "masque/warp: make warp.publicKey optional (CA/pcs verify for custom SNI)",
-     "created_at": "2026-10-12T09:00:25Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7115#issuecomment-6121055143",
-     "body": "@Ahmad-2213 其实你可以让 AI 改代码后你先测测有没有提升，然后发个 PR，~~毕竟我都没弄 Google Drive API 测试，别等下对 Google 实名了~~\n\n你多想想理论，调大 VLESS Mux 的 concurrency 肯定能减少对 XDRIVE 传输层的“传入连接”从而减少一些 API 调用，~~这就是为啥 mux 也需大整~~\n\nXDRIVE 应当改为每条“传入连接（VLESS Mux）”都对应一条 TCP/QUIC 而不应 mux over mux，另外后续讨论都发到 https://github.com/XTLS/Xray-core/pull/6748 ~~别东一块西一块的~~"
-    },
-    {
-     "id": 6120802333,
-     "issue": 7115,
-     "issue_title": "masque/warp: make warp.publicKey optional (CA/pcs verify for custom SNI)",
-     "created_at": "2026-10-12T08:43:26Z",
-     "user": "Ahmad-2213",
-     "url": "https://github.com/XTLS/Xray-core/issues/7115#issuecomment-6120802333",
-     "body": "Today , I've got some time to test different params & various settings for `xdrive`; I found that using only one mux worker e.g. concurrency 1024 can reduce the overhead & makes the flow more fluent; though the critical problems remain in the code.\nofcurse , having only one worker comes with tradeoffs , though this is crucial for latency , especially for `xdrive` .\n~~you may have seen the TGs multiple requests/s , this alone would shape most of the concurrency of traffic...~~\n~~I'm not sure whether the policy settings would also take part here , will handshake timeout of 4s interrupt the flow?, what about uplink/downlink only for in-flight requests?~~ \n"
-    },
-    {
-     "id": 6120742739,
-     "issue": 7130,
-     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "created_at": "2026-10-12T08:39:35Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6120742739",
-     "body": "> 它只是个三转四模块而已啊 没有什么很需要定制的内部细节\r\n\r\n~~还有一个点我一开始就想到了但没提：这个 TCP/IP 栈用于 WG、MASQUE 的话就涉及特征问题了，到时候可能要加一些自定义的选项，虽然都 WG 了特征也就那样，MASQUE 还有得救但那个 h2 CONNECT-IP 就很呃，且 WARP 本身呃，总之一言难尽就~~"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3286,
+     "title": "fix: show locked xray settings page for servers without write access",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T14:03:06Z",
+     "updated_at": "2026-10-14T14:03:06Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3286",
+     "body": ""
+    },
+    {
+     "number": 3247,
+     "title": "feat: api tests",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-01T10:44:28Z",
+     "updated_at": "2026-10-14T13:57:19Z",
+     "user": "MrMirDan",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3247",
+     "body": ""
+    },
+    {
+     "number": 3239,
+     "title": "feature: cover test gateway service config import",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-09-28T14:46:48Z",
+     "updated_at": "2026-10-14T13:52:32Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3239",
+     "body": "feature add test for  gateway service config import"
+    },
+    {
+     "number": 3256,
+     "title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-04T06:16:41Z",
+     "updated_at": "2026-10-14T11:32:44Z",
+     "user": "Rev0Lucius",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256",
+     "body": "При попытках подключения к селф-хост серверу и amnezia free - коннекта не происходит.\nНа пк, при этом, все в порядке и ключ рабочий\nIPhone 8\niOS 16.7.16\nAmnezia ver. 5.0.3.0 (Sep 18 2026)\n"
+    },
+    {
+     "number": 3285,
+     "title": "Xray: нет выбора fingerprint в клиенте; с fp=chrome Reality не подключается в моей сети",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-14T11:19:33Z",
+     "updated_at": "2026-10-14T11:19:33Z",
+     "user": "spongegot",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3285",
+     "body": "**Что наблюдаю**\nПрофиль Xray из Amnezia с fp=chrome не подключается. На сервере в логе множество:\n`REALITY: processed invalid connection from <IP клиента>: failed to read client hello`\n\nНа одном и том же сервере и профиле в v2rayNG (Xray 26.3.27) fp=chrome не работает, fp=firefox работает. Throne с fp=firefox тоже работает. В tcpdump на сервере от клиента приходит один сегмент 1300 байт, продолжения нет. Гипотеза (не проверена): увеличенный ClientHello у Chrome (пост-квантовый ключ) режется по пути провайдером.\n\n**Проблема в клиенте**\nВ настройках Xray нет выбора fingerprint. В экспортированном amnezia_xray_config.json есть \"xray_fingerprint\": \"chrome\", но после замены на \"firefox\" и импорта файла значение не применяется.\n\n**Просьба**\nВернуть выбор fingerprint в настройки Xray и/или применять поле при импорте.\n\n- Клиент Amnezia: 5.0.3.0\n- ОС клиента: Windows 11 26H2\n- Сервер: Ubuntu 22.04, свой VPS, Docker-контейнер amnezia-xray, Xray 26.7.28"
+    },
+    {
+     "number": 3284,
+     "title": "Xray: DNS Amnezia (172.29.172.254) блокируется на сервере новым Xray-core, клиент «подключён», но сайты не открываются",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-14T11:16:36Z",
+     "updated_at": "2026-10-14T11:16:36Z",
+     "user": "spongegot",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3284",
+     "body": "**Проблема**\nКлиент Amnezia (Windows) подключается по Xray (VLESS + Reality, flow xtls-rprx-vision, TCP). Статус «Подключено», но все сайты выдают ERR_TIMED_OUT.\n\n**Причина (из лога сервера, loglevel info)**\nВ контейнере amnezia-xray работает Xray 26.7.28. В логе:\n\n```\napp/dispatcher: default route for udp:172.29.172.254:53\nproxy/freedom: blocked target: udp:172.29.172.254:53, blackholing connection for 44s\n```\n\n172.29.172.254 это Amnezia DNS внутри docker-сети. Новый `freedom` outbound блокирует приватные адреса по умолчанию, поэтому все DNS-запросы клиента уходят в чёрную дыру (см. раздел finalRules в документации Xray: https://xtls.github.io/config/outbounds/freedom.html). В server.json от Amnezia единственный outbound это `{\"protocol\": \"freedom\"}` без finalRules.\n\n**Возможное решение**\nДобавить в freedom разрешающее правило для адреса Amnezia DNS:\n\n```json\n{\"protocol\": \"freedom\", \"settings\": {\"finalRules\": [{\"action\": \"allow\", \"port\": \"53\", \"ip\": [\"172.29.172.254\"]}]}}\n```\n\nКонфиг с таким правилом проходит `xray run -test`. Работу через клиент Amnezia я проверить не смог (мешает другая проблема, см. отдельный issue про fingerprint), так что это предположение, а не подтверждённый фикс.\n\n**Окружение**\n- Клиент Amnezia: 5.0.3.0\n- ОС клиента: Windows 11 26H2\n- Сервер: Ubuntu 22.04, свой VPS, Docker-контейнер amnezia-xray, Xray 26.7.28\n\nПохожий симптом в обсуждении: https://github.com/amnezia-vpn/amnezia-client/discussions/2172"
+    },
+    {
+     "number": 3283,
+     "title": "[Linux] DNS-leak protection blocks LAN DNS — `310.blockDNS` evaluated before `300.allowLAN`",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-14T11:08:25Z",
+     "updated_at": "2026-10-14T11:08:25Z",
+     "user": "ilyapichugin78-hash",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3283",
+     "body": "## Summary\n\nWith the AmneziaVPN tunnel up, the client firewall rejects **all DNS traffic to LAN resolvers**\n(the router, a local Pi-hole, `192.168.x.x`, …). The `300.allowLAN` anchor is clearly intended to\npermit local-network traffic, but `310.blockDNS` runs ahead of it, so that intent is unreachable\nfor port 53.\n\n## Root cause\n\n`client/platforms/linux/daemon/linuxfirewall.cpp`, `LinuxFirewall::install()` (branch `dev`):\n\n```cpp\ninstallAnchor(IPv4, QStringLiteral(\"320.allowDNS\"), {});          // line 216\n\ninstallAnchor(Both,  QStringLiteral(\"310.blockDNS\"), {            // line 218\n                                                            QStringLiteral(\"-p udp --dport 53 -j REJECT\"),\n                                                            QStringLiteral(\"-p tcp --dport 53 -j REJECT\"),\n                                                        });\n\ninstallAnchor(IPv4, QStringLiteral(\"300.allowLAN\"), {             // line 222\n                                                            QStringLiteral(\"-d 10.0.0.0/8 -j ACCEPT\"),\n                                                            ...\n                                                            QStringLiteral(\"-d 192.168.0.0/16 -j ACCEPT\"),\n                                                            ...\n                                                        });\ninstallAnchor(IPv6, QStringLiteral(\"300.allowLAN\"), { ... });     // line 230\n```\n\n`installAnchor()` links each anchor's placeholder chain into the root `amnvpn.anchors` chain\n**in insertion order** — `installAnchor()` calls `linkChain(..., false)`, which appends with `-A`,\nand the placeholder \"stays locked into place in the root chain without being removed or recreated,\nensuring the intended precedence order\" (comment at `linuxfirewall.cpp:150-152`).\n\nObserved runtime precedence, filter table (`iptables-save`, `amnvpn.anchors`):\n\n```\n 1. amnvpn.a.000.allowLoopback\n 2. amnvpn.a.320.allowDNS\n 3. amnvpn.a.310.blockDNS     <- rejects udp/tcp dport 53\n 4. amnvpn.a.300.allowLAN     <- permits 192.168.0.0/16 etc.\n 5. amnvpn.a.290.allowDHCP\n 6. amnvpn.a.200.allowVPN\n 7. amnvpn.a.130.allowMarkedXray\n 8. amnvpn.a.120.blockNets\n 9. amnvpn.a.110.allowNets\n10. amnvpn.a.400.allowPIA\n11. amnvpn.a.100.blockAll\n```\n\nA DNS query to a LAN resolver (e.g. `192.168.1.1:53`) is REJECTed at step 3 and never reaches\nthe `-d 192.168.0.0/16 -j ACCEPT` at step 4.\n\n`320.allowDNS` only permits the resolver addresses from the connection profile, and only via the\ntunnel interface — so a LAN resolver can never match it:\n\n```\n-A amnvpn.320.allowDNS -d 1.1.1.1/32 -o amn0+ -p udp -m udp --dport 53 -j ACCEPT\n-A amnvpn.320.allowDNS -d 1.0.0.1/32 -o amn0+ -p tcp -m tcp --dport 53 -j ACCEPT\n```\n\n## Evidence — live counters (filter table)\n\n```\namnvpn.310.blockDNS   udp dpt:53  REJECT   320 pkts  24584 bytes\namnvpn.310.blockDNS   tcp dport:53  REJECT     3 pkts    188 bytes\namnvpn.320.allowDNS   1.1.1.1 via amn0+ tcp    337 pkts  27560 bytes\namnvpn.320.allowDNS   1.0.0.1 via amn0+ tcp    225 pkts  18336 bytes\namnvpn.300.allowLAN   192.168.0.0/16 ACCEPT  2792 pkts   351K bytes   <- non-DNS LAN traffic flows\n```\n\nThe 320 rejected UDP packets are LAN/resolver queries that never left the machine.\n\n## Reproduction\n\n1. Connect with a profile whose `DNS=` points at a public resolver (e.g. `1.1.1.1`).\n2. With the tunnel up: `dig @1.1.1.1 example.com` works; `dig @192.168.1.1 example.com` fails.\n3. A device on the same LAN with no VPN resolves the same name fine.\n\n## Suggested fix\n\nMove the `310.blockDNS` `installAnchor` call below the `300.allowLAN` calls (both families), so the\nLAN allow is evaluated before the DNS block. `320.allowDNS` stays first so the profile's resolvers\nkeep working:\n\n```cpp\ninstallAnchor(IPv4, QStringLiteral(\"320.allowDNS\"), {});\ninstallAnchor(IPv4, QStringLiteral(\"300.allowLAN\"), { ... });\ninstallAnchor(IPv6, QStringLiteral(\"300.allowLAN\"), { ... });\ninstallAnchor(Both,  QStringLiteral(\"310.blockDNS\"), { ... });   // moved down\n```\n\nE"
+    },
+    {
+     "number": 3282,
+     "title": "fix: reconnect on Linux only after network is back from suspend",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T10:31:20Z",
+     "updated_at": "2026-10-14T10:31:20Z",
+     "user": "homka122",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3282",
+     "body": "## Problem\n\nOn Linux, AmneziaWG has no connectivity after resuming from suspend until the user reconnects by hand.\n\n`LinuxNetworkWatcherWorker::NMStateChanged()` emits `wakeup` when NetworkManager goes to `NM_STATE_ASLEEP` / `NM_STATE_DISABLED`, and `wakeup` is connected to `VpnConnection::reconnectToVpn()`. So the reconnect starts while the machine is **going to sleep**, and the new `activate` reaches the daemon right after resume, when Wi-Fi is not associated yet and there is no default gateway:\n\n```\n13:18:47 NetworkManager: sleep requested\n13:18:47 LinuxNetworkWatcherWorker : NMStateChanged 10\n13:18:47 Reconnect triggered. Reconnecting to the server\n13:18:48 kernel: PM: suspend entry (deep)\n13:18:55 kernel: PM: suspend exit\n13:18:55 NetworkManager state is now DISCONNECTED\n13:18:55 Command received: activate\n13:18:57 LinuxRouteMonitor : Adding exclusion route for <endpoint>/32\n13:18:57 getGatewayAndIface: no gateway found\n13:18:57 LinuxRouteMonitor : No default gateway available, skipping exclusion route\n13:18:57 WireguardGo : ERROR: (amn0) peer(...) - Failed to send handshake initiation\n13:18:57 LinuxRouteMonitor : Adding route to 0.0.0.0/1\n13:18:57 LinuxRouteMonitor : Adding route to 128.0.0.0/1\n13:18:58 NetworkManager state is now CONNECTED_GLOBAL\n13:18:58 LinuxNetworkWatcherWorker : NMStateChanged 70\n13:18:58 \"Reconnect triggered on Reconnecting during inappropriate state: %2; ignoring slot\"\n```\n\nThe tunnel is up with `0.0.0.0/1` + `128.0.0.0/1` via `amn0` but without the `/32` exclusion route to the endpoint, so the handshake packets are routed into the tunnel itself, and the kill switch blocks everything else. When the uplink does come back (`CONNECTED_GLOBAL`), `networkChanged` is ignored because the connection is still in `Reconnecting`, so nothing repairs the state.\n\n## Fix\n\nDo not reconnect on `ASLEEP` / `DISABLED`; reconnect only on `CONNECTED_GLOBAL`. After resume the connection is still `Connected`, so the `networkChanged` at `CONNECTED_GLOBAL` performs a single reconnect when the default gateway exists, and the exclusion routes are installed normally. `wakeup` is only consumed by `reconnectToVpn()` on Linux, so nothing else is affected. The kill switch keeps `allowDHCP` / `allowLAN` while the old tunnel is still configured, so NetworkManager can bring the uplink back up after resume.\n\nThis is the network-watcher part of #2684, without the unrelated firewall / cgroup / routing-table changes (that PR no longer applies to `dev`).\n\nRelated: #3037, #2997 (same symptom, exclusion route skipped because there was no gateway at connect time, but triggered by reboot or server switching, which this PR does not address).\n\n## Testing\n\nReproduced on Fedora 44 (kernel 7.2, NetworkManager, Wi-Fi, S3 `deep` sleep) with AmneziaVPN 5.0.1.5 + AmneziaWG; the log above is from that machine. The fix has not been built locally (no Qt 6 toolchain); relying on CI for the build.\n"
+    },
+    {
+     "number": 1303,
+     "title": "The drop-down list in the \"Split Tunneling Applications\" menu is not clickable",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2024-12-14T05:14:44Z",
+     "updated_at": "2026-10-14T09:14:15Z",
+     "user": "mitro4",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1303",
+     "body": "The drop-down list in the \"Split Tunneling Applications\" menu is not clickable \r\n[Выпадающий список в меню \"Раздельное туннелирование приложений\" не кликабелен]\r\n\r\nThe drop-down list in the \"Split Tunneling Applications\" menu is not clickable. The only option available is \"Apps in the list should not work through VPN\" , the second option cannot be selected\r\n\r\nВыпадающий список в меню \"Раздельное туннелирование приложений\" не кликабелен. Доступен вариант только \"Приложения из списка не должны работать через VPN\" , второй вариант выбрать невозможно \r\n\r\nSystem info : \r\nAMD Radeon RX 7900 XTX\r\nProcessor\tAMD Ryzen 7 7800X3D 8-Core Processor              4.20 GHz\r\nInstalled RAM\t32,0 GB (27,7 GB usable)\r\n\r\nEdition\tWindows 10 Pro\r\nVersion\t22H2\r\nOS build\t19045.5247\r\nExperience\tWindows Feature Experience Pack 1000.19060.1000.0\r\n\r\n\r\nScreenshot: \r\n![image](https://github.com/user-attachments/assets/8b887784-095b-4348-bdb6-f118761e5ad4)\r\n"
+    },
     {
      "number": 3281,
      "title": "fix: fix missing includes",
@@ -1974,17 +2310,6 @@
      "body": ""
     },
     {
-     "number": 3239,
-     "title": "feature: cover test gateway service config import",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-09-28T14:46:48Z",
-     "updated_at": "2026-10-13T19:25:35Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3239",
-     "body": "feature add test for  gateway service config import"
-    },
-    {
      "number": 3274,
      "title": "**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления",
      "is_pr": false,
@@ -2005,17 +2330,6 @@
      "user": "krutpik",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1965",
      "body": "Добавьте возможность иcключать программы через название процесса, как это сделано в nekobox"
-    },
-    {
-     "number": 3247,
-     "title": "feat: api tests",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-01T10:44:28Z",
-     "updated_at": "2026-10-13T15:44:12Z",
-     "user": "MrMirDan",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3247",
-     "body": ""
     },
     {
      "number": 3262,
@@ -2192,20 +2506,27 @@
      "user": "vinser",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3260",
      "body": "### Summary\n\nWhen changing the SNI field (\"Server name (sni)\") for the **Xray** protocol via the Amnezia-client UI, the server-side `server.json` inside the `amnezia-xray` container is updated only in `realitySettings.serverNames`. The `realitySettings.dest` field is **not** updated and keeps the original default value (e.g. `www.googletagmanager.com:443`).\n\nAs a result, the server continues to fetch and present the TLS certificate of the old `dest` host, while advertising a different SNI to clients. This creates a mismatch between the requested SNI and the returned certificate.\n\n### Affected setup\n\n- Protocol: **Xray (VLESS + REALITY, xtls-rprx-vision)**\n- Server: Amnezia self-hosted VPS, protocol installed via Amnezia-client (Docker container `amnezia-xray`)\n- Container entrypoint: `dumb-init /opt/amnezia/start.sh`\n- Config path inside container: `/opt/amnezia/xray/server.json`\n- Clients used for testing: **sing-box 1.14.x** (TUN mode, strict certificate verification), plus Amnezia mobile clients (Android)\n\n### Steps to reproduce\n\n1. Install Xray protocol on a clean VPS via the Amnezia client (Docker container `amnezia-xray`).\n2. In the Amnezia client UI, open the Xray protocol settings and change the **\"Server name (SNI)\"** field from the default value (e.g. `www.googletagmanager.com`) to another domain, for example `files.pythonhosted.org`.\n3. Apply changes.\n4. On the server, inspect the container config:\n   ```bash\n   docker exec -it amnezia-xray cat /opt/amnezia/xray/server.json\n   ```\n\n### Actual behavior\n\nThe config contains a **mismatch**:\n\n```json\n\"realitySettings\": {\n    \"dest\": \"www.googletagmanager.com:443\",\n    \"fingerprint\": \"chrome\",\n    \"privateKey\": \"...\",\n    \"serverNames\": [\n        \"files.pythonhosted.org\"\n    ],\n    \"shortIds\": [\n        \"...\"\n    ]\n}\n```\n\n- `serverNames` — updated to the new SNI entered in the UI.\n- `dest` — **left unchanged** at the old default (`www.googletagmanager.com:443`).\n\nBecause REALITY uses `dest` as the source of the certificate it presents during the handshake, the server returns a certificate valid for `*.google-analytics.com` / `*.googletagmanager.com` while the client expects `files.pythonhosted.org`.\n\n### Expected behavior\n\nChanging the SNI in the UI should update **both** `serverNames` **and** `dest` (or at least provide a separate field / automatic synchronization), so that the presented certificate matches the advertised SNI.\n\n### Impact\n\n- **sing-box** (and any client that strictly verifies the certificate) fails to connect with:\n  ```\n  x509: certificate is valid for *.google-analytics.com, ..., not files.pythonhosted.org\n  ```\n- Amnezia mobile clients appear to work because they do not strictly verify the returned certificate, which **masks the bug** during normal use.\n- The mismatched SNI/certificate pair is an anomaly in TLS traffic that can be flagged by DPI systems, potentially putting the server IP at risk of being blocked.\n\n### Workaround\n\nManually editing `dest` inside the container fixes the issue:\n\n```bash\ndocker cp amnezia-xray:/opt/amnezia/xray/server.json /root/server.json\n# edit \"dest\" to match \"serverNames\", e.g. \"files.pythonhosted.org:443\"\npython3 -m json.tool /root/server.json > /dev/null && echo \"JSON OK\"\ndocker cp /root/server.json amnezia-xray:/opt/amnezia/xray/server.json\ndocker restart amnezia-xray\n```\n\nHowever, this is fragile: any subsequent change to the Xray protocol via the Amnezia client UI (adding a client, changing SNI, etc.) overwrites `server.json` and reverts `dest` back to the old default, requiring the manual fix again.\n\n### Suggested fix\n\nIn the Amnezia-client code that generates `server.json` for the Xray protocol, when the user changes the SNI, update `realitySettings.dest` accordingly (e.g. set `dest` to `<new_sni>:443`), or add an explicit `dest`/`target` field in the UI so both values can be configured and kept in sync.\n\n### Environment\n\n- Amnezia-client version: _5.0.3.0_\n- Desktop OS: Windows 11\n- Server OS: Debian 13\n- Con"
-    },
-    {
-     "number": 2767,
-     "title": "Latest Amnesia version doesn't work on Ubuntu 22.04",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-06-24T18:39:10Z",
-     "updated_at": "2026-10-12T13:38:16Z",
-     "user": "berdachuk",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2767",
-     "body": "**Describe the bug**  \nAmneziaVPN does not start on Ubuntu 22.04 after upgrading to the latest version.\n\n**To Reproduce**  \nSteps to reproduce the behavior:\n1. Download and install the latest version, `4.8.19.0`.\n2. Start the application from the menu — nothing happens.\n3. Start it from the terminal:\n```bash\n$ AmneziaVPN\n```\n4. See the error:\n```text\n/opt/AmneziaVPN/client/bin/AmneziaVPN: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.36' not found (required by /opt/AmneziaVPN/client/bin/AmneziaVPN)\n/opt/AmneziaVPN/client/bin/AmneziaVPN: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found (required by /opt/AmneziaVPN/client/bin/AmneziaVPN)\n```\n\n**Expected behavior**  \nThe application should start and work normally.\n\n**Desktop (please complete the following information):**\n- OS: Ubuntu\n- Version: 22.04\n\n**Additional context**  \nThe latest AmneziaVPN version that I am able to start is `AmneziaVPN_4.8.11.4_linux_x64.tar.zip`.  \nHowever, it shows `Error 1111: ApiUpdateRequestError`."
     }
    ],
    "comments": [
+    {
+     "id": 6167365582,
+     "issue": 3256,
+     "issue_title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
+     "created_at": "2026-10-14T11:32:44Z",
+     "user": "spongegot",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256#issuecomment-6167365582",
+     "body": "У меня похожий симптом на self-hosted Xray, причину нашёл в конфиге сервера, детали здесь: #3285"
+    },
+    {
+     "id": 6164983460,
+     "issue": 1303,
+     "issue_title": "The drop-down list in the \"Split Tunneling Applications\" menu is not clickable",
+     "created_at": "2026-10-14T09:14:15Z",
+     "user": "koutsenko",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1303#issuecomment-6164983460",
+     "body": "Any ETA for this feature? It's era of smart coding agents now"
+    },
     {
      "id": 6152116607,
      "issue": 3274,
@@ -2331,15 +2652,6 @@
      "user": "Vitalik93",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3274#issuecomment-6127380877",
      "body": "На IOS можно просто поставить DefaultVPN. Насчёт MTU - согласен, только на 1280 стало нормальную скорость выдавать. Дополнительно ещё выставил ContentPaddingAddition на значение по умолчанию (10-100), т.к. его зачем то убрали из конфигурации установки в последней версии приложения."
-    },
-    {
-     "id": 6125417154,
-     "issue": 2767,
-     "issue_title": "Latest Amnesia version doesn't work on Ubuntu 22.04",
-     "created_at": "2026-10-12T13:38:15Z",
-     "user": "10110111",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2767#issuecomment-6125417154",
-     "body": "Version 5.0.3.0 is compatible with Ubuntu 22.04."
     }
    ]
   },

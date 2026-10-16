@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-16T11:23:53Z",
- "since": "2026-10-14T11:23:53Z",
+ "generated_at": "2026-10-16T16:39:17Z",
+ "since": "2026-10-14T16:39:17Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -83,7 +83,7 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-12T20:06:52Z",
-     "updated_at": "2026-10-16T10:11:35Z",
+     "updated_at": "2026-10-16T11:43:20Z",
      "user": "Justsomebuddy",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1381",
      "body": "## Summary\n\nOnly the plain TCP dial is bounded (5 s). After the TCP connection succeeds:\n\n- the WebSocket HTTP upgrade has **no deadline**;\n- the WSS TLS handshake has **no deadline** (the default `TLSHandshakeTimeout` of 10 s does not apply because the transport is built by hand);\n- the SOCKS negotiation has **no deadline**.\n\nA peer — or a middlebox — that accepts the TCP connection but never completes the handshake therefore holds the dial open until the peer is removed entirely, wasting the whole backoff cycle on a dead attempt.\n\n## Fix\n\nIntroduce a shared `wsDialTimeout` (15 s, a variable so tests can shorten it) and apply it to each stage:\n\n- `http.Client.Timeout` for the ws/wss upgrade (the websocket library turns it into a deadline for the handshake only, so the upgraded connection is not affected);\n- `TLSHandshakeTimeout` for the WSS TLS handshake, which also bounds a dial the transport may finish in the background after the request is cancelled;\n- a context-bounded SOCKS negotiation via `DialContext` when the proxy supports it (the `x/net` SOCKS5 dialer does).\n\nFiles: `src/core/link_ws.go`, `src/core/link_wss.go`, `src/core/link_socks.go`.\n\n## Tests\n\n- `TestWSDialTimeout`, `TestWSSDialTimeout`, `TestSOCKSDialTimeout`: a server accepts TCP and never answers; each dial must be abandoned at the timeout (1 s in the tests). Without the change all three fail.\n- `TestWSDialTimeoutSparesUpgradedConn`: an upgraded ws/wss connection keeps working after the timeout has passed.\n- The shared test logger now sets its call depth up front: `gologme/log` sets it lazily on first output, which the race detector flags when several goroutines log for the first time at once.\n\n`go test ./...` passes, and the new tests pass under `-race`.\n\nClosing the per-dial transport, so that cancelled dials do not leave sockets behind, is a separate follow-up: #1383.\n"
@@ -114,6 +114,17 @@
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2598,
+     "title": "Fix build with MSVC 2019",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-16T15:56:48Z",
+     "updated_at": "2026-10-16T16:02:12Z",
+     "user": "Vort",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2598",
+     "body": ""
+    },
     {
      "number": 2597,
      "title": "fix typos",
@@ -197,15 +208,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6168897324",
      "body": "В этом `#if !defined(ANDROID) && (BOOST_VERSION >= 108100) // boost::json since 1.75, boost::url since 1.81` ?\nВсё нормально, так оставить.\nСейчас у меня в /usr/include/boost/version.hpp\nв Bookworm \n`#define BOOST_VERSION 108100`\n`#define BOOST_LIB_VERSION \"1_81\"`\nВ Trixie\n`#define BOOST_VERSION 108300`\n`#define BOOST_LIB_VERSION \"1_83\"`\nУсловие BOOST_VERSION >= 108100 выполняется и там, и там.\n\nЗапись в debian/control \nBuild-Depends:   libboost-program-options-dev **(>= 1.83)** \nпредотвращает использование в Bookworm старой 1.74, которая там по умолчанию (имеется метапакет и наверняка так и останется),поэтому и 1.81, и 1.83 годятся.\nВот если вдруг в Bookworm завезут 1.83 (которая в Trixie) вместо 1.81, нужно будет поменять то, что после `|`.\nПочему они сделали так, а в backports положили 1.83, но тоже не весь комплект с метапакетом, не знаю.\n\nА в Trixie в качестве такой же добавки имеется 1.88\n\n\n\n"
-    },
-    {
-     "id": 6167706668,
-     "issue": 2591,
-     "issue_title": "[Debian] Bookworm package build error",
-     "created_at": "2026-10-14T11:52:15Z",
-     "user": "orignal",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2591#issuecomment-6167706668",
-     "body": "А  в коде то что писать?"
     }
    ]
   },
@@ -215,6 +217,83 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7175,
+     "title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T07:16:03Z",
+     "updated_at": "2026-10-16T16:22:58Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175",
+     "body": "#7174 bolted a second Lua mask onto header-custom, which was the wrong way around. One `lua` mask covers all of it now: it is both a `tcpMasks` and a `udpMasks` entry, and the script decides what it does by the hooks it defines.\n\n-- `HandleHeader(stream, address, role)`, TCP: a free handshake before any traffic, with `stream:Write`, `stream:Read` and `stream:Sleep`. Return a string or an error and the connection is dropped\n-- `HandleHeaderWrite(header, address, role)` and `HandleHeaderRead(packet, address, role)`, UDP: prefix every packet with a header, and strip it on the other side by returning its length, or `nil` to drop the packet\n-- `HandleNoise(plan, address, role)` is the old noise hook, so `noise`'s `script` is gone (it has not been in a release yet)\n-- `role` is `client` or `server`, so one file serves both ends\n-- a hook the script does not define is not wrapped at all: a noise only script leaves TCP connections alone and never touches a packet\n-- the module is `xray.finalmask` now, with `Random` and `RandomBetween`\n\n```json\n{\n    \"udpMasks\": [{\"type\": \"lua\", \"settings\": {\"script\": \"mask.lua\", \"reset\": \"30-60\"}}]\n}\n```\n\nPer call it takes at most 64 noise packets and 65535 bytes of noise, 1024 bytes of header, and 65535 bytes each way in a handshake. A packet hook gets 1s, a handshake 30s. A UDP header is one Lua call per packet, the benchmarks in the package cover its cost.\n\nThe static lists can follow later, the same script can already do what they do.\n"
+    },
+    {
+     "number": 6356,
+     "title": "REALITY fails with www.microsoft.com target when Certificate TLS record is 8273 bytes (>8192 hardcoded limit)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-06-21T23:08:17Z",
+     "updated_at": "2026-10-16T15:19:58Z",
+     "user": "fanyangCS",
+     "url": "https://github.com/XTLS/Xray-core/issues/6356",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meets the requirements.\n- [x] I confirm that I have read the documentation and understand the relevant configuration items.\n- [x] I provide a minimal, sanitized reproduction and logs; secrets such as UUID, private key, public key, and shortId are redacted.\n- [x] I searched existing issues and did not find an exact duplicate for this server-side REALITY target Certificate record size failure.\n- [x] The problem can be reproduced on the latest release.\n\n### Description\n\n`VLESS + TCP + REALITY + Vision` fails when using `www.microsoft.com:443` as REALITY `dest` / `serverNames` on Xray-core `v26.3.27`.\n\nThis is not a direct TLS rejection by Microsoft: direct `openssl s_client` and `curl` from the same server to `www.microsoft.com:443` succeed. The failure appears to be caused by the REALITY server-side target handshake parser rejecting a Microsoft TLS Certificate record whose length is slightly larger than the hardcoded `8192` byte limit in `github.com/xtls/reality`.\n\nIn this environment, Microsoft returns a TLS Certificate record length that leads REALITY to log `Certificate: 8273`, which is larger than `size = 8192`, and then the REALITY connection is rejected with `handshake did not complete successfully`.\n\n### Environment\n\n- Xray-core: `Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)`\n- OS: Linux x86_64\n- Protocol: VLESS + TCP + REALITY + `xtls-rprx-vision`\n- REALITY dest/serverName: `www.microsoft.com:443` / `www.microsoft.com`\n- Client REALITY fingerprint: `chrome`\n\n### Sanitized server config shape\n\n```jsonc\n{\n  \"log\": { \"loglevel\": \"debug\" },\n  \"inbounds\": [\n    {\n      \"listen\": \"0.0.0.0\",\n      \"port\": 443,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [\n          {\n            \"id\": \"<redacted-uuid>\",\n            \"flow\": \"xtls-rprx-vision\"\n          }\n        ],\n        \"decryption\": \"none\"\n      },\n      \"streamSettings\": {\n        \"network\": \"tcp\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"show\": true,\n          \"dest\": \"www.microsoft.com:443\",\n          \"xver\": 0,\n          \"serverNames\": [\"www.microsoft.com\"],\n          \"privateKey\": \"<redacted>\",\n          \"shortIds\": [\"<redacted>\"]\n        }\n      }\n    }\n  ],\n  \"outbounds\": [{ \"protocol\": \"freedom\", \"tag\": \"direct\" }]\n}\n```\n\nClient uses matching VLESS REALITY settings with:\n\n```text\nsecurity=reality\nsni=www.microsoft.com\nfp=chrome\nflow=xtls-rprx-vision\ntype=tcp\n```\n\n### Reproduction\n\n1. Start Xray server with REALITY `dest: \"www.microsoft.com:443\"`, `serverNames: [\"www.microsoft.com\"]`, `show: true`.\n2. Use a matching Xray client on the same host or from another host.\n3. Send a request through the client, for example:\n\n```bash\ncurl --socks5-hostname 127.0.0.1:<local-socks-port> https://www.google.com/generate_204\n```\n\nObserved client-side result:\n\n```text\ncurl: (35) Recv failure: Connection reset by peer\nHTTP=000 ERR=Recv failure: Connection reset by peer\n```\n\n### REALITY debug log\n\nRelevant sanitized server-side REALITY logs:\n\n```text\nREALITY remoteAddr: 127.0.0.1:<port>\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.ClientVer: [26 3 27]\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.ClientTime: 2026-06-21 ... UTC\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.ClientShortId: [<redacted>]\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.conn == conn: true\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5524 Server Hello: 127\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5397 Change Cipher Spec: 6\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5391 Encrypted Extensions: 51\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5340 Certificate: 8273\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.isHandshakeComplete.Load(): false\ntransport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:<port>: handshake did not complete successfully\n```\n\n### Direct TLS to Microsoft succeeds\n\n"
+    },
+    {
+     "number": 7135,
+     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T01:29:50Z",
+     "updated_at": "2026-10-16T14:50:12Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135",
+     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
+    },
+    {
+     "number": 7179,
+     "title": "TUN inbound: Read large TCP segments straight into Xray-core's buffers on Linux",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T11:24:49Z",
+     "updated_at": "2026-10-16T14:42:57Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7179",
+     "body": "as RPRX asked in #7130 and #7156. on linux the tun is opened with offload, so one read gives up to 64 KiB of one TCP stream. that is now read with readv into eight 8 KiB buffers of xray, and a segment of 4 KiB or more that comes in order stays in them and goes on with the headers trimmed, nothing copied. smaller and out of order segments, UDP and ICMP are copied as before. the buffers are not cleared before the read, only what was read goes on. other systems, android, WireGuard and MASQUE work as before\n\non a veth pair with 1500 MTU, 30 samples each: one upload stream 3714 to 3839 MB/s (+3.4%), eight 3264 to 3425 (+4.9%), downloads the same. the copy leaves user time (0.145 to 0.085 s/GB) but the kernel now copies into buffers that are not in the cache and system time grows by about as much, so CPU per GB stays where it was\n"
+    },
+    {
+     "number": 7151,
+     "title": "WireGuard outbound: Keep the device when its setup fails",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-14T14:15:39Z",
+     "updated_at": "2026-10-16T14:41:53Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151",
+     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
+    },
+    {
+     "number": 7180,
+     "title": "XHTTP stream-up behind an HTTP/1.1 Nginx upstream truncates uploads",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-16T14:29:39Z",
+     "updated_at": "2026-10-16T14:29:39Z",
+     "user": "bazuchan",
+     "url": "https://github.com/XTLS/Xray-core/issues/7180",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nLarge uploads through XHTTP `stream-up` fail for me when Nginx forwards the XHTTP requests to Xray over HTTP/1.1. Curl reports that it sent the whole body, but the destination receives only part of it, or the connection fails before the destination can parse the request.\n\nI reduced this to a local Docker setup with a synthetic JSON body. There is no CDN, external API, authentication header, or TLS in the minimal reproduction.\n\nTested versions:\n- Xray main, commit `0f3d884786f9ec73d3be8899cb6b9e1e6dd3c41e`.\n- Binary: `Xray 26.10.10 Custom (go1.27.1 linux/amd64)`.\n- Nginx image: `nginx:1.28-alpine`.\n- Curl image: `curlimages/curl:8.12.1`.\n- I also reproduced the HTTP/1.1 problem on Xray v26.3.27 / Go 1.26.1.\n\nThe test body is 1,385,909 bytes. In the minimal run shown in the logs, the destination received **7,999 bytes followed by EOF**, while curl reported the full upload and got HTTP 503 after about 5 ms. The received length varies between runs. I expected the destination to receive the complete body and return HTTP 200.\n\nTwo changes make the same test pass:\n- Set `scStreamUpServerSecs: -1` on the XHTTP **server inbound**. This disables the POST response keepalive, so it has an idle-timeout trade-off.\n- Leave response keepalive enabled, but change Nginx's backend hop to HTTP/2 using `grpc_pass`. Xray still uses XHTTP `stream-up`, not the gRPC transport.\n\nOn the main build, the original HTTP/1.1 setup delivered 0/10 bodies intact. Disabling response keepalive passed 4/4. HTTP/2 upstream passed 6/6 fast uploads and another 2/2 uploads limited to 32 KiB/s, lasting about 42 seconds each. For those slow tests I set the server response padding interval to one second. The HTTP/2 tests covered HTTP forwarding and HTTPS CONNECT with synthetic bodies. The release v26.3.27 also passed 4/4 fast HTTP/2-upstream tests. Direct XHTTP without Nginx passed both control probes.\n\nI suspect the early POST response interacts with Go's HTTP/1 request-body handling. The server log contains `http: invalid Read on closed Body`. The stream-up handler reads the POST body while writing response padding, without enabling HTTP/1 full duplex. Nginx removes the client's `Connection: close` header in this setup, so the backend is taking a different HTTP/1 response path from the direct connection.\n\nThis is not a confirmed complete explanation: I also tested an experimental `EnableFullDuplex` change, and it only passed 4/10 probes; the others stalled after receiving a body prefix. On the v26.3.27 baseline, a full capture showed that Nginx received and forwarded identical decoded POST bodies, yet bytes were missing at the destination. So I do not think the evidence points to Nginx simply dropping bytes from the upload.\n\nRelevant handler: https://github.com/XTLS/Xray-core/blob/0f3d884786f9ec73d3be8899cb6b9e1e6dd3c41e/transport/internet/splithttp/hub.go#L198-L242\n\nCould the concurrent POST body reads and response keepalive writes be handled differently for HTTP/1 upstreams?\n\n### Reproduction Method\n\nAttach `public-repro.tar.gz` from this report. It contains the Dockerfile, Compose file, exact combined Xray config, Nginx config, and a small Python receiver. It generates its own synthetic body; no private request or credentials are needed.\n\nThe topology is:\n\n```text\ncurl -> Xray HTTP inbound :8080\n     -> VLESS / XHTTP stream-up outbound\n     -> Nginx :80\n     -> Xray VLESS / XHTTP inbound :144"
+    },
+    {
+     "number": 7170,
+     "title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T21:56:47Z",
+     "updated_at": "2026-10-16T11:49:19Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170",
+     "body": "every Drive request of xdrive has a 60 s limit for the whole request, body included. on a slow line that is too short for big segments: with segmentBytes at 4 MiB the reader fetches 8 at once, at 0.5 MiB/s that takes 64 s, so every attempt times out the same way and after 8 of them the connection is gone. the growing segments talked about in #6748 would hit it even sooner\n\nnow a request ends only after 60 s without progress: no answer that long after the body went out, or no byte of either body, so a stuck request is still cut at 60 s. there is a unit test for slow and stuck requests, and in a Drive simulator at 0.5 MiB/s down main fails with 4 MiB segments while this passes at 0.48 MiB/s\n"
+    },
     {
      "number": 6732,
      "title": "Proposal: user-configurable traffic shaping profiles for XMC / FinalMask (follow-up to #6487)",
@@ -236,28 +315,6 @@
      "user": "VariatezzZ",
      "url": "https://github.com/XTLS/Xray-core/issues/7162",
      "body": "服务端入站 vless-tcp-reality，客户端和服务端相同版本，裸核使用\n676a6000以后仅服务端出现SIGSEGV，回退低于676a6000即恢复，配置未动。\n\n核心崩溃堆栈日志：\n[1.log](https://github.com/user-attachments/files/33490416/1.log)\n\n问的AI分析的根因：\n```\n新 reality（Go1.27 同步）把 Conn.rawInput 由 bytes.Buffer 值改成\n*bytes.Buffer 指针池化（另加 smallInput，见 conn.go:113-128,888-973，\n空闲还会 Put+置nil 再换新 Buffer）。\n而 inbound.go:577-586、outbound.go:278-287 仍用\nrawInput = (*bytes.Buffer)(unsafe.Pointer(p+r.Offset))，\n偏移处现在只有 8 字节指针，被当成整个 Buffer 结构体解释，\nw.rawInput 即为野指针，读即崩。"
-    },
-    {
-     "number": 7151,
-     "title": "WireGuard outbound: Keep the device when its setup fails",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:15:39Z",
-     "updated_at": "2026-10-16T10:50:55Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151",
-     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
-    },
-    {
-     "number": 7135,
-     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T01:29:50Z",
-     "updated_at": "2026-10-16T10:34:51Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135",
-     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
     },
     {
      "number": 6748,
@@ -291,17 +348,6 @@
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7176",
      "body": "close #7162"
-    },
-    {
-     "number": 7170,
-     "title": "XDRIVE transport: End a request that stalls, not one that runs long",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-15T21:56:47Z",
-     "updated_at": "2026-10-16T08:38:01Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7170",
-     "body": "every Drive request of xdrive has a 60 s limit for the whole request, body included. on a slow line that is too short for big segments: with segmentBytes at 4 MiB the reader fetches 8 at once, at 0.5 MiB/s that takes 64 s, so every attempt times out the same way and after 8 of them the connection is gone. the growing segments talked about in #6748 would hit it even sooner\n\nnow a request ends only after 60 s without progress: no answer that long after the body went out, or no byte of either body, so a stuck request is still cut at 60 s. there is a unit test for slow and stuck requests, and in a Drive simulator at 0.5 MiB/s down main fails with 4 MiB segments while this passes at 0.48 MiB/s\n"
     },
     {
      "number": 7172,
@@ -401,17 +447,6 @@
      "user": "kunsonx",
      "url": "https://github.com/XTLS/Xray-core/pull/2762",
      "body": "基于 https://github.com/XTLS/Xray-core/pull/2757 基础上 实现 outbound wireguard 非用户空间模式。\r\n\r\nsys wireguard device + sysnetstack\r\n\r\nrequirements:\r\n\r\n1. cap CAP_NET_ADMIN \r\n2. ptables \r\n3. net.ipv4.conf.all.src_valid_mark=1\r\n4. modprobe wireguard\r\n5. net.ipv6.conf.all.disable_ipv6 (启用 IPv6)\r\n\r\n@yuhan6665 请检阅。"
-    },
-    {
-     "number": 7175,
-     "title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-16T07:16:03Z",
-     "updated_at": "2026-10-16T07:25:36Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7175",
-     "body": "#7174 bolted a second Lua mask onto header-custom, which was the wrong way around. One `lua` mask covers all of it now: it is both a `tcpMasks` and a `udpMasks` entry, and the script decides what it does by the hooks it defines.\n\n-- `HandleHeader(stream, address, role)`, TCP: a free handshake before any traffic, with `stream:Write`, `stream:Read` and `stream:Sleep`. Return a string or an error and the connection is dropped\n-- `HandleHeaderWrite(header, address, role)` and `HandleHeaderRead(packet, address, role)`, UDP: prefix every packet with a header, and strip it on the other side by returning its length, or `nil` to drop the packet\n-- `HandleNoise(plan, address, role)` is the old noise hook, so `noise`'s `script` is gone (it has not been in a release yet)\n-- `role` is `client` or `server`, so one file serves both ends\n-- a hook the script does not define is not wrapped at all: a noise only script leaves TCP connections alone and never touches a packet\n-- the module is `xray.finalmask` now, with `Random` and `RandomBetween`\n\n```json\n{\n    \"udpMasks\": [{\"type\": \"lua\", \"settings\": {\"script\": \"mask.lua\", \"reset\": \"30-60\"}}]\n}\n```\n\nPer call it takes at most 64 noise packets and 65535 bytes of noise, 1024 bytes of header, and 65535 bytes each way in a handshake. A packet hook gets 1s, a handshake 30s. A UDP header is one Lua call per packet, the benchmarks in the package cover its cost.\n\nThe static lists can follow later, the same script can already do what they do.\n"
     },
     {
      "number": 7171,
@@ -841,97 +876,153 @@
      "user": "Cr0WD",
      "url": "https://github.com/XTLS/Xray-core/pull/7148",
      "body": "`getStatistics()` computes the average as `time.Duration(int(sum) / cnt)`. `sum` is a `time.Duration` (int64), but `int` is 32 bits on 386/arm/mips/mipsle, so once the samples add up to more than ~2.147 s the sum wraps around. With the default `sampling: 10` that is any outbound slower than ~215 ms.\n\nSeen on a MT7621 router (mipsle, v26.10.10, burstObservatory with leastLoad), `/debug/vars`:\n\n```\n\"average\": -106422465, \"min\": 304477272, \"max\": 416019032, \"deviation\": 430649051\n```\n\nThe deviation is then computed around that wrong average, and leastLoad sorts by it, so node selection on 32-bit builds is effectively random.\n\nThe fix keeps the division in `time.Duration`; it is the same on 64-bit. Running a build with this change on the same router, all averages fall between min and max again and deviations dropped from ~430 ms to 6–132 ms.\n\nThe added test documents the case. It passes on 64-bit with or without the fix (CI is 64-bit); with the old code on a 32-bit build, 10 x 400 ms (4e9 ns) wraps to a negative sum, so the average is wrong.\n\nThe same line was part of #6237 together with unrelated changes; this PR is only this fix.\n"
-    },
-    {
-     "number": 7154,
-     "title": "README.md: Add V2Mac to macOS arm64 in GUI Clients",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:24:19Z",
-     "updated_at": "2026-10-14T16:17:14Z",
-     "user": "LordVersA",
-     "url": "https://github.com/XTLS/Xray-core/pull/7154",
-     "body": "Add V2Mac, a native macOS client for Xray-core, to the README GUI Clients list.\n\nIt is an open source (GPL-3.0) SwiftUI menu bar app for Apple Silicon (macOS 26+): subscriptions, VLESS/VMess/Trojan/Shadowsocks/Hysteria2, latency tests, routing and TUN mode. Since it runs only on arm64, it gets its own `macOS arm64` group next to `macOS arm64 & x64`.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-    },
-    {
-     "number": 7150,
-     "title": "WireGuard: Use UDP GSO on Linux",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:07:25Z",
-     "updated_at": "2026-10-14T15:19:37Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7150",
-     "body": "With kernel TUN (Linux with CAP_NET_ADMIN, the usual case on servers),\nwireguard-go hands Send up to 128 encrypted datagrams of one TSO packet at\nonce, and the bind writes them with one sendmsg each. Each one then goes\nthrough the UDP/IP stack on its own, so upload costs about twice the CPU of\nkernel WireGuard.\n\nNow each run of equal-sized datagrams goes out as one sendmsg with\nUDP_SEGMENT, as wireguard-go's own bind does. This is only for a plain UDP\nsocket: with finalmask or dialerProxy the conn is not one and nothing changes,\nand in gVisor mode Send gets one packet per call, so nothing changes there\neither. If the kernel rejects UDP_SEGMENT (EIO without checksum offload,\nEMSGSIZE or EINVAL when a segment does not fit the path MTU), the bind stops\nusing it and sends one by one as before.\n\n2 vCPU KVM guest, Linux 6.8, kernel TUN, iperf3 with 4 streams through a\nWireGuard server on the internet, Mbit/s:\n\n|                  | upload    | CPU cores per Gbit/s |\n|------------------|-----------|----------------------|\n| main             | 732-848   | 1.82                 |\n| this PR          | 1181-1204 | 0.80                 |\n| kernel WireGuard | 1213      | 0.87                 |\n\nUpload on that path tops out near 1.2 Gbit/s, so the CPU column is the better\nmeasure. Download is unchanged (892 vs 902). Behind a VLESS + REALITY inbound\non the same server it looks the same: upload 917-1037 -> 1106-1119 Mbit/s, and\nthe server's CPU per Gbit/s goes from about 1.5 to 0.8-1.0.\n\nTests cover grouping datagrams into runs, loopback round trips (IPv4, IPv6,\ndual-stack socket to IPv4) with reserved bytes and stats, and the fallback.\n"
-    },
-    {
-     "number": 7152,
-     "title": "WireGuard outbound: Resolve the endpoint with Xray's DNS for the socket too",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:15:58Z",
-     "updated_at": "2026-10-14T14:52:55Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7152",
-     "body": "The peer endpoints are resolved with Xray's DNS (resolveLocal), but the UDP\nsocket for them is dialed with the endpoint string, and DialSystem resolves a\nname with the system resolver unless sockopt.domainStrategy is set. With a\nname that only Xray's DNS resolves (hosts entries, DoH only setups), the\ndevice never came up: \"failed to dial to dest > lookup ...: no such host\".\n\nlistenFunc now resolves the name with resolveLocal first when it dials\ndirectly. With dialerProxy or finalmask the name is passed on as before, so a\nchained proxy still resolves it on its side.\n\nThe test helpers in client_test.go are the same as in #7151; whichever of the\ntwo goes in second needs a small rebase, which I will do.\n"
-    },
-    {
-     "number": 7153,
-     "title": "WireGuard: Make the scenario test send traffic",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:16:02Z",
-     "updated_at": "2026-10-14T14:48:22Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7153",
-     "body": "TestWireguard never sent anything (it had a FIXME saying the server does not\nreceive). The server got its peer through Peers, which the inbound ignores\nsince it reads Users, and the two public key variables had each other's names.\nAlso, the server's netstack drops packets to loopback addresses, so the client\nnow dials the server's tunnel address and the server's freedom outbound\nredirects to the test server. The test now moves 3 x 1 MB through the tunnel.\n"
-    },
-    {
-     "number": 7146,
-     "title": "Why is RoutingService.SubscribeRoutingStats disabled by passing nil routingStats?",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-14T07:09:32Z",
-     "updated_at": "2026-10-14T12:37:17Z",
-     "user": "Li-xiaotong-cauc",
-     "url": "https://github.com/XTLS/Xray-core/issues/7146",
-     "body": "Hi, I’m currently exploring the RoutingService API while building a small Xray management console.\n\nI noticed that SubscribeRoutingStats is still defined in the proto and implemented in command.go, and TestRoute also has PublishResult support.\n\nHowever, in the production service registration path, RoutingService is created with:\n\n    NewRoutingServer(router, nil)\n\nAs a result, SubscribeRoutingStats always returns:\n\n    Routing statistics not enabled.\n\nI also checked the repository history and found that this seems to have been the case for a very long time. I did not find any production code path that passes a real stats.Channel into NewRoutingServer; only tests seem to do so.\n\nSo I’m curious about the original design intent:\n\n1. Was SubscribeRoutingStats intentionally disabled in normal runtime?\n2. If so, what was the main reason — performance overhead, privacy concerns, unfinished design, or something else?\n3. Is there any officially supported way to enable routing statistics in current Xray-core?\n4. Is this API kept mainly for compatibility/testing, or is there any plan to make it usable in production?\n\nI’m not requesting a feature change here — I mainly want to understand the historical/design reason behind this behavior.\n\nThanks!"
-    },
-    {
-     "number": 7149,
-     "title": "Hotfix/uat linux release artifacts",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T12:07:12Z",
-     "updated_at": "2026-10-14T12:07:58Z",
-     "user": "haitaopanhq",
-     "url": "https://github.com/XTLS/Xray-core/pull/7149",
-     "body": ""
-    },
-    {
-     "number": 7131,
-     "title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-11T19:18:14Z",
-     "updated_at": "2026-10-14T12:02:55Z",
-     "user": "FunLay123",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131",
-     "body": "Xray-core main pins utls aa6edf4, so `fingerprint: \"chrome\"` (also the default and ECH) sends Chrome 133.\nuTLS 6ebdceb (2026-10-06) adds HelloChrome_155 (verified against branded Chrome) and makes it HelloChrome_Auto.\n\nCaptured ClientHellos (JA4):\n- Xray 26.10.10 `chrome`:       t13d1516h2_8daaf6152771_d8a2da3f94cd\n- Xray + utls 6ebdceb:          t13d1517h2_8daaf6152771_cb7bf5808d99\n- Google Chrome 155 (Linux):    t13d1517h2_8daaf6152771_cb7bf5808d99\nAfter the bump, only randomized values differ (GREASE, keys, ECH payload, extension order).\n\nIn Russia the current `chrome` fingerprint appears to be detected and blocked by TSPU.\n\nProposal: bump utls to >= 6ebdceb and add \"hellochrome_155\" to the fingerprint map."
-    },
-    {
-     "number": 7139,
-     "title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-13T10:41:06Z",
-     "updated_at": "2026-10-14T11:47:53Z",
-     "user": "ArianPashae",
-     "url": "https://github.com/XTLS/Xray-core/pull/7139",
-     "body": "### Problem\n\nIn `app/dns/nameserver_cached.go`, `merge()` aggregates resolved records for DNS queries and cache lookups (`queryIP`).\n\nWhen dual-stack resolution is enabled (`option.IPv4Enable && option.IPv6Enable` -> `mergeReq == true`), the checks on lines 138 and 153 previously evaluated:\n```go\nif !mergeReq || go_errors.Is(err, errRecordNotFound) {\n    return ips, ttl, err\n}\n```\n\nThe `|| go_errors.Is(err, errRecordNotFound)` condition caused unintended early returns whenever either address family had no record:\n1. **IPv4-only domains** (or cached records where only `rec.A` is present): `rec4.getIPs()` successfully finds IPv4 IPs, but subsequent evaluation of `rec6.getIPs()` returns `errRecordNotFound`. Line 153 early-returned `nil, 0, errRecordNotFound`, completely discarding the IPv4 addresses collected in `allIPs`.\n2. **IPv6-only domains** (or cached records where only `rec.AAAA` is present): `rec4.getIPs()` returns `errRecordNotFound`. Line 138 early-returned `nil, 0, errRecordNotFound`, aborting before `rec6` was ever evaluated.\n3. In `queryIP`, this caused valid cached records for single-family domains to be skipped as cache misses (`if !go_errors.Is(err, errRecordNotFound)`).\n4. Additionally, `ttl < rTTL` was checked before `len(ips) > 0`, which could overwrite `rTTL` with `0` from a non-existent record.\n\n### Solution\n\n1. Removed `|| go_errors.Is(err, errRecordNotFound)` so that `!mergeReq` solely governs early returns for single-family queries, while dual-stack queries proceed to aggregate available IPs into `allIPs` and record missing errors in `errs`.\n2. Updated `rTTL` only when `len(ips) > 0` so non-existent records do not zero out valid TTLs.\n3. Returned `ttl = 0` when `len(allIPs) == 0` to align with downstream TTL handling.\n4. Added comprehensive unit tests in `app/dns/nameserver_cached_test.go` covering:\n   - Single-family IPv4 requests\n   - Single-family IPv6 requests\n   - Dual-stack requests with both A and AAAA records\n   - Dual-stack requests for IPv4-only domains (missing AAAA)\n   - Dual-stack requests for IPv6-only domains (missing A)\n   - Dual-stack requests when neither record exists"
     }
    ],
    "comments": [
+    {
+     "id": 6218818658,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T15:27:18Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6218818658",
+     "body": "Ai said this:\n\non the hook bitmask. a shared mask gives every state one answer and costs an atomic load per call, and more to the point it is what lets a mask decide not to wrap a connection at all when its hook is missing, which a live lookup cannot undo after the fact. clearing bits and never setting them makes dynamic registration impossible by construction instead of by convention, which is the property you asked for. a live lookup would always match the state that is about to run and would leave room for re-registration, but four `GetGlobal` lookups are about 4% of one header hook call on a packet, and states would then start behaving differently from one another, which is harder to reason about than one shared answer. the real cost of probing once is a script that defines a hook conditionally, by time or by chance, which can be probed wrong, so the docs should say hooks are defined at the top level, and logging the hooks found at init would make a typo visible instead of silent.\n\non the declaration style. globals need no core change, they are the shape dns and router already ship, and there is nothing for the engine to inject; the cost is that a mistake is silent, `HandleHeaderWirte` simply means no hook and the mask passes traffic through instead of failing. a returned table is explicit and discoverable, a natural place for metadata later, and it lets a hook be a closure instead of a global, but it needs `PCall(0, 1)` plus per state storage in core, and the engine would then want to inject `unregister`, which dns and router can never honour, so that debt lands on the two that cannot unload. a register call is the only one of the three that allows registration inside a closure or a branch, which is exactly what several state instances cannot support, so ruling it out is right. globals now, with a standalone unload function later if one is ever needed, leaves the least behind.\n\non permission levels. gating early costs little and spares you reviewing the same risk twice; the counter risk is freezing the wrong split while nothing uses it yet. the surface here is narrow: no filesystem, no new sockets, only the connection the mask was handed, with caps on bytes and packets and a timeout per hook. the one api that can hold a pooled state is `stream:Sleep`, and a blocking api has to respect the state context or the timeout is decoration and a level buys nothing. a split that should survive contact is everything that only produces bytes, the noise plan, the header builder and the packet view, at the lowest level, with raw stream read and write plus sleep one level above, so that `register` simply does not install the stream object below that level and no call site has to change when signing comes back.\n"
+    },
+    {
+     "id": 6218818101,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T15:27:16Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6218818101",
+     "body": "bitmask is in. the engine keeps an `atomic.Uint32`, the first state fills it and `validate` rejects a script with no hook at all. a hook a script drops is cleared for the whole engine so every other state short circuits it too, and bits only ever get cleared, never set, so nothing can register one later even by accident. the wrap decision stays where it was: a mask whose hook the script doesn't define returns the raw conn and isn't wrapped at all, the bit only decides whether an already wrapped conn still goes into Lua. two tests for it, one drops `HandleHeaderWrite` after the first packet and the rest go out bare, one drops `HandleNoise` and a new destination gets no noise either.\n\nagreed on keeping the globals, and the injected `unregister` is the right reason. two more in favour: `NewState` runs the chunk with `L.PCall(0, 0, nil)`, so whatever a script returns is dropped today and the table would need a core change first, and `HandleDNSQuery`/`HandleRoute` are already released (#6823 merged at 09:01 on the 10th, v26.10.10 tagged at 09:21 the same day), so globals are the released convention and not only the current one. starting from zero i'd have said the table, since that's what pooled plugin hosts tend to do (kong plugins end with `return Handler`, plain lua modules `return M`), but with those two released and unable to unload, a standalone function later beats a table field they'd never implement.\n"
+    },
+    {
+     "id": 6218671867,
+     "issue": 6356,
+     "issue_title": "REALITY fails with www.microsoft.com target when Certificate TLS record is 8273 bytes (>8192 hardcoded limit)",
+     "created_at": "2026-10-16T15:19:57Z",
+     "user": "xxX-Fox-Xxx",
+     "url": "https://github.com/XTLS/Xray-core/issues/6356#issuecomment-6218671867",
+     "body": "I can confirm this issue on **Xray 26.6.27**, managed by **3x-ui 3.6.0**, running on **Ubuntu 24.04**.\n\nVLESS TCP + REALITY + Vision stopped passing traffic when using `www.microsoft.com:443` as the REALITY target. The server accepted connections, but websites would not load through the VPN.\n\nPacket capture showed that port 443 was reachable and the TCP handshake completed. The client then sent approximately 1.9 KB of initial data. The server acknowledged it and closed the connection with FIN, without sending any TLS payload. The client kept retrying.\n\nTo isolate the failure, we ran a temporary Xray client on the VPS and connected to the existing inbound over loopback. The same failure occurred locally, so neither the home network nor ISP filtering was required to reproduce it. Ordinary TLS connections from the VPS to Microsoft succeeded.\n\nAn isolated test server using the same REALITY credentials produced these diagnostic lines:\n\n```text\nhs.c.conn == conn: true\nCertificate: 8273\nhs.c.isHandshakeComplete.Load(): false\nhandshake did not complete successfully\n```\n\nREALITY authentication passed, but processing the target’s response failed. Microsoft returned a **8273-byte Certificate TLS record**, exceeding the **8192-byte limit** in the REALITY implementation used by this version.\n\nThis explains why checking port availability and establishing an ordinary TLS connection to the target did not reveal the problem: the failure occurred inside REALITY’s handshake processing.\n\nConnectivity was restored by changing the server target and updating the client SNI consistently:\n\n```text\nServer target:      www.nvidia.com:443\nServer serverNames: [\"www.nvidia.com\"]\nClient SNI:         www.nvidia.com\n```\n\nUUIDs, keys, short IDs, port 443 and `flow=xtls-rprx-vision` were preserved. After the change, HTTPS requests through the production TCP inbound returned HTTP 200 with both `chrome` and `firefox` fingerprints. Connectivity from the previously affected home network was also restored.\n\nClients need to refresh their subscriptions or update the SNI in manually imported profiles. NVIDIA worked for this deployment; the suitability of a target should be tested for each server.\n\nThese results confirm the existing issue on version 26.6.27, not a regression in a release containing the fix. The core was not upgraded during this investigation."
+    },
+    {
+     "id": 6218490385,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T15:10:41Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6218490385",
+     "body": "@CluvexStudio You can also send the above to an AI to let it weigh the trade-offs."
+    },
+    {
+     "id": 6218479252,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T15:10:05Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6218479252",
+     "body": "维持当前的隐式契约比较好，因为如果给 return {xxxx} 的话，引擎大概率会给此 table 注入一个 unregister\r\n我不想让 dns 和 router 这种不能卸载的再多一个未实现的函数，文档还要加一堆额外说明\r\n未来的卸载可以直接提供一个独立的函数去做，这样比较优雅"
+    },
+    {
+     "id": 6218056232,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-10-16T14:47:37Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6218056232",
+     "body": "`Test_ListenXHAndDial_QUIC`\r\n`Test_listenHTTPUpgradeAndDial_TLS`\r\n`panic: test timed`"
+    },
+    {
+     "id": 6218016123,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-10-16T14:45:31Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6218016123",
+     "body": "为什么test失败了"
+    },
+    {
+     "id": 6217964089,
+     "issue": 7179,
+     "issue_title": "TUN inbound: Read large TCP segments straight into Xray-core's buffers on Linux",
+     "created_at": "2026-10-16T14:42:57Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7179#issuecomment-6217964089",
+     "body": "啥东西\r\n我只觉得这提升好小("
+    },
+    {
+     "id": 6217958531,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T14:42:41Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6217958531",
+     "body": "仔细想了一下，这种池化的 hook 最多允许 reload 和卸载\r\n但绝不允许动态注册，处理不了这么复杂的情况，因为多个 state instance 内部状态不一致\r\n如果给了 xxx.register 那么意味着语法上可以在闭包里做\r\n因此只能是维持现状，或者是脚本结尾 return {xxxx} 二选一\r\n这变成了纯粹的风格取舍，哪种看起来顺眼，这方面我总是选择困难，成熟的开源项目喜欢怎么干\r\n以及还得考虑 dns 和 router 事实上不允许卸载，否则空的规则会出事的，不能让这俩为它背上技术债，隐含着它俩支持卸载的意思\r\n我也不想出现有全局的、dns/router、fm 三种不同的注册方式，最多 2"
+    },
+    {
+     "id": 6217936013,
+     "issue": 7151,
+     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
+     "created_at": "2026-10-16T14:41:36Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6217936013",
+     "body": "@LjhAUMEM 我的意思是现在 XDNS 服务端不是监听 UDP/53 嘛，从支持高达 4k 的 `edns0` 来看应该有响应分片这种东西？\r\n\r\n~~然后就是这个能不能突破 4k~~"
+    },
+    {
+     "id": 6217879969,
+     "issue": 7179,
+     "issue_title": "TUN inbound: Read large TCP segments straight into Xray-core's buffers on Linux",
+     "created_at": "2026-10-16T14:38:38Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7179#issuecomment-6217879969",
+     "body": "@Fangliding 你来给他解释吧，~~不过小 buf、多次 syscall 和大 buf、两次 copy 相比哪个更快还真不好说~~"
+    },
+    {
+     "id": 6217558170,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T14:22:08Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6217558170",
+     "body": "对于 fm 和未来的全局脚本\r\n不是必须所有 hook 而是交给脚本决定\r\n\r\n首先我能确定的就是池化的 scriptEngine 要维护一个 bitmask 并且所有 LState 实例都听它的\r\n某个实例卸载了，那么所有的都被短路，即便不同 state 内部状态不一致\r\n事实上也不太可能会有这样的写法，但设计上必须要有，谁知道以后会堆出什么样的代码呢\r\n\r\n全局的 scriptEngine 将维护一个 registry 仍可以有多个实例，但 hook 点是 state 独享\r\n\r\n目前暂时想到那么多\r\n对于这个 PR 可以先把池化的 scriptEngine 的 bitmask 实现了，这样脚本没 hook 的可以短路避免开销\r\n\r\n另一个是因为支持多 hook 点，有个代码风格的问题\r\n现在是隐式的，我没想好是在全局 return 一个接口 table\r\n还是一个 xxx.register\r\n还是维持现状\r\n以及全局性脚本和池化的这种脚本原则上可以不一致，因为全局型必定到处 hook 极大概率动态卸载\r\n而池化的基本是稳定的\r\n\r\n别的大型开源项目一般喜欢怎么干，有参考价值，避免代码坏味道"
+    },
+    {
+     "id": 6217169365,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T14:01:32Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6217169365",
+     "body": "yeah, better to settle it now than refactor it later.\n\n-- 1. the engine probes the four hooks once when it builds the pool and keeps them in a struct, and `validate` errors if a script defines none. the point of caching isn't the lookup, it's that a mask whose hook isn't defined returns the raw conn and never gets wrapped, so TCP keeps `Splice` and a packet doesn't go through anything. four `GetGlobal` lookups cost about 4% of one header hook call on a packet and the cached read about 0.03%, so checking live is affordable too if you want scripts to unload hooks later. but a conn that was never wrapped can't grow a hook back, so unloading needs the engine rebuilt and a reload already does that. a global script that isn't pooled can just call `defined()` live, it's the same function.\n\n-- 2. globals, same as `HandleDNSQuery` and `HandleRoute`. i'd rather keep one convention for every script type than have finalmask declare its hooks differently. if you want explicit declaration (`fm.OnNoise(f)`) this is the moment for all three and i'll do it here first, it also gives you the unloading from 1 and lets a hook be a closure instead of a global.\n\n-- 3. nothing here reaches outside the conn the mask was handed: the script reads and writes that conn during the handshake, builds a header, fills a noise plan, all bounded (65535 bytes each way per handshake, 1024 bytes of header, 64 packets and 65535 bytes of noise per call). the one that can hold a pooled state is `stream:Sleep`, and the hook's timeout cuts it short now instead of parking the state for a minute. for the level, `register` can't see it today and `Program.privileged` is unexported, so tell me which you want, `register func(*glua.LState, Level)` or an exported accessor, and i'll put the stream object behind it.\n"
+    },
+    {
+     "id": 6215651233,
+     "issue": 7151,
+     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
+     "created_at": "2026-10-16T12:37:11Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6215651233",
+     "body": "懒得看，你公网测试能跑通直接 pr 上来 ~然后 xdns 维护就可以交给你了~ ~我不想研究这个，只想研究 rust~"
+    },
+    {
+     "id": 6215614538,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-10-16T12:34:58Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6215614538",
+     "body": "这相当于把 fm.lua 提前开始了，可以接受但是架构必须得确定好\r\n以避免后面返工做大重构甚至难以重构，以及避免 api 大幅变动导致原脚本失效\r\n\r\n需要 tradeoff 的是\r\n\r\n1. 一个脚本多个 hook 点，我没想好给 scriptEngine 加若干 bool 还是直接调 LState 实例看 func 是否存在\r\n得结合小的基准和代码丑陋程度以及脚本未来会不会自己卸载 hook 来看。或许池化脚本可以缓存，未来的全局脚本不缓存\r\n\r\n2. hook 的接入维持现状还是在 Lua 脚本顶层显式声明\r\n\r\n3. 如果有不安全的操作权限模型现在就得定下来，这也是为什么我没删除 privileged 和 sign 只是注释掉的原因，RegisterLua 的时候可以判定编程器里的授权等级来注册 api 或 loader，即便暂不开放签名和特权，只要认为可能有风险就要加判定预先做好等级控制，以后改起来方便，不用再回来 review 风险"
+    },
+    {
+     "id": 6215030710,
+     "issue": 7151,
+     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
+     "created_at": "2026-10-16T12:00:40Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6215030710",
+     "body": "[Draft implementation — full diff against upstream](https://github.com/svlavr/Xray-core/compare/0f3d884786f9ec73d3be8899cb6b9e1e6dd3c41e...f1b151d6df9ee5d41012922f9905ecb4116aeb55)\n\n@LjhAUMEM this is a draft of RPRX's idea. The diff includes opt-in authoritative TCP support for XDNS (`tcpOnly`), UDP `TC` replies to trigger TCP retry, large DNS replies with packet batching, and QUIC shutdown fixes.\n\nFor review: the UDP-to-TCP retry path, reply batching, and connection cleanup. Local tests so far:\n\n1. TCP and DoH deliver a response carrying 64 KB of data without loss.\n2. Direct QUIC over XDNS: streams and datagrams work in both directions.\n3. Hysteria: successful authentication, rejection, and shutdown without hanging.\n4. `-race` passes for XDNS, Hysteria, and MASQUE, including repeated runs.\n5. `go build ./...` passes.\n"
+    },
     {
      "id": 6214347709,
      "issue": 6732,
@@ -2346,348 +2437,6 @@
      "body": "~~说来要是把平常 push 和 release 的构建分开操作也不是不行，push 的时候可以少构建几个重要性不高的~~\r\n~~但是要不要完全打包 geodata 之类的以及要不要保持和 release 一样的编译参数就是另一个问题了~~"
     },
     {
-     "id": 6173003728,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T16:21:33Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6173003728",
-     "body": "uconn的问题感觉要不和utls上游沟通一下 他们能改就最好了 而且这个功能有用"
-    },
-    {
-     "id": 6172917151,
-     "issue": 7154,
-     "issue_title": "README.md: Add V2Mac to macOS arm64 in GUI Clients",
-     "created_at": "2026-10-14T16:17:14Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7154#issuecomment-6172917151",
-     "body": "0fork 5star("
-    },
-    {
-     "id": 6171748841,
-     "issue": 7150,
-     "issue_title": "WireGuard: Use UDP GSO on Linux",
-     "created_at": "2026-10-14T15:19:37Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7150#issuecomment-6171748841",
-     "body": "This is not the batching from #7145. It only changes Send when the conn under the bind is a plain UDP socket on Linux; receive, gVisor mode, finalmask and dialerProxy stay as they are. Through a VLESS + REALITY inbound on a 2 vCPU server, upload went from 917-1037 to 1106-1119 Mbit/s and the server's CPU per Gbit/s from about 1.5 to 0.8-1.0. Like kernel TUN vs gVisor, it is a faster path where it applies and the current path everywhere else. Would you take it in some form, or is it a no either way?\n"
-    },
-    {
-     "id": 6171747795,
-     "issue": 7151,
-     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
-     "created_at": "2026-10-14T15:19:34Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6171747795",
-     "body": "It does change behavior when init fails. On main, a failed IpcSet or Up leaves the device that NewDevice already started running, and the next init creates another one on the same TUN. TestClientInitRetryKeepsOneDevice from this PR fails on main: five failed inits take the goroutine count from 100 to 460, and those devices keep reading packets from the shared TUN. It happens when an endpoint name does not resolve at the first connection.\n"
-    },
-    {
-     "id": 6171264159,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T14:55:17Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6171264159",
-     "body": "为什么都来霍霍 wg，吓哭了，质量明显没 4RH1T3CT0R7 的高"
-    },
-    {
-     "id": 6171215996,
-     "issue": 7152,
-     "issue_title": "WireGuard outbound: Resolve the endpoint with Xray's DNS for the socket too",
-     "created_at": "2026-10-14T14:52:54Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7152#issuecomment-6171215996",
-     "body": "DialSystem and FinalMask.DialUDP correctly handle domain names using the built-in DNS"
-    },
-    {
-     "id": 6171164962,
-     "issue": 7151,
-     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
-     "created_at": "2026-10-14T14:50:26Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6171164962",
-     "body": "This PR doesn't change any behavior other than adding a new function"
-    },
-    {
-     "id": 6171122809,
-     "issue": 7153,
-     "issue_title": "WireGuard: Make the scenario test send traffic",
-     "created_at": "2026-10-14T14:48:21Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7153#issuecomment-6171122809",
-     "body": "This test file might need to be deleted"
-    },
-    {
-     "id": 6170831601,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T14:34:08Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170831601",
-     "body": "xray 的 geodata downloader 现在会写一个魔法头导致 lua 绝不可能解析成功\r\n顺手修掉了几个 geodata loader 自身的问题，如果构造一个恶意文件会导致 xray reload 时 oom\r\n\r\n还有个问题是 xray 的宽松 json 解析器\r\n如果下游打算全盘接受 json 订阅，会不会导致两边都能运行\r\ntoml yaml 那些我都跑个测试看看\r\n\r\nlua 编译器自身也得要求 .lua 后缀（这样下游自己 bug 瞎搞就找不到我们身上了）"
-    },
-    {
-     "id": 6170824396,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T14:33:47Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170824396",
-     "body": "> 1.1 应该是要等，顺序发送\r\n\r\n不过 transport 似乎会根据连接池选择新开连接，这样 worker 对于 1.1 也能作用上"
-    },
-    {
-     "id": 6170730371,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T14:29:07Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170730371",
-     "body": "> ~不过 DoH 这么先进的东西似乎没遇到过只支持 h1 的，话说 h1 那个复用，上一个 req 发完不用等 resp 就能发下一个还是~\r\n\r\n1.1 应该是要等，顺序发送，~懒得写 test 验证了~，worker 对于 h2 h3 肯定是能作用上就是了"
-    },
-    {
-     "id": 6170710795,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T14:28:09Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170710795",
-     "body": "```go\r\nfunc TestXxx3(t *testing.T) {\r\n\tserver := httptest.NewUnstartedServer(\r\n\t\thttp.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\r\n\t\t\tw.Write([]byte(\"ok\"))\r\n\t\t}),\r\n\t)\r\n\r\n\tserver.EnableHTTP2 = true\r\n\r\n\tserver.StartTLS()\r\n\tdefer server.Close()\r\n\r\n\ttlsCfg := &gotls.Config{\r\n\t\tNextProtos:         []string{\"h2\", \"http/1.1\"},\r\n\t\tInsecureSkipVerify: true,\r\n\t}\r\n\r\n\ttr := &http.Transport{\r\n\t\tForceAttemptHTTP2: true,\r\n\t\tDialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {\r\n\t\t\tconn, err := net.Dial(network, server.Listener.Addr().String())\r\n\t\t\tif err != nil {\r\n\t\t\t\treturn nil, err\r\n\t\t\t}\r\n\t\t\ttlsConn := tls.UClient(conn, tlsCfg, &utls.HelloChrome_Auto)\r\n\t\t\terr = tlsConn.(*tls.UConn).HandshakeContext(ctx)\r\n\t\t\t// tlsConn := tls.Client(conn, tlsCfg)\r\n\t\t\t// err = tlsConn.(*tls.Conn).HandshakeContext(ctx)\r\n\t\t\tif err != nil {\r\n\t\t\t\t_ = conn.Close()\r\n\t\t\t\treturn nil, err\r\n\t\t\t}\r\n\t\t\tstate := tlsConn.(interface{ ConnectionState() gotls.ConnectionState }).ConnectionState()\r\n\t\t\tfmt.Println(\"NegotiatedProtocol\", state.NegotiatedProtocol)\r\n\t\t\treturn tlsConn, nil\r\n\t\t},\r\n\t}\r\n\r\n\tclient := &http.Client{\r\n\t\tTransport: tr,\r\n\t}\r\n\r\n\tresp := common.Must2(client.Do(common.Must2(http.NewRequest(\"POST\", \"https://a.com/path\", strings.NewReader(\"hello\")))))\r\n\tfmt.Println(resp.Proto)\r\n\tresp.Body.Close()\r\n}\r\n```\r\n\r\n现在这个 test 可以过了，不过动了 UConn 需要 @Fangliding 看下\r\n\r\n输出\r\n\r\n```shell\r\nNegotiatedProtocol h2\r\nHTTP/2.0\r\n```\r\n\r\n注释 `server.EnableHTTP2 = true` 后输出\r\n\r\n```shell\r\nNegotiatedProtocol http/1.1\r\nHTTP/1.1\r\n```"
-    },
-    {
-     "id": 6170481423,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T14:17:11Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170481423",
-     "body": "@Meo597 The idea is different: locally authorizing the execution of specific bytes inside a sandbox. The GUI accepts remote configuration, and the design does not aim to defend against a malicious GUI itself.\r\n\r\nI've deleted the message for now. I'm still testing:\r\n\r\n1. Approved SHA-256 digests and purposes (DNS/router) are supplied in advance for each core instance. These approvals do not come from subscriptions and cannot be modified by updaters.\r\n2. All bytes read are checked. That same buffer is compiled, without rereading the file.\r\n3. The purpose is supplied by the core's DNS/router code, not by imported JSON.\r\n4. An admitted script always remains sandboxed.\r\n5. Approvals remain immutable while the instance is running. In the initial version, updating or revoking them requires closing the old instance and creating a new one.\r\n\r\nCost and compatibility:\r\n\r\n1. Configurations without Lua require no additional steps.\r\n2. Lua users will need initial approval and renewed approval after any file change.\r\n3. An embedding client supplies approvals through the existing `core.NewWithContext`; no shared global approval list is needed.\r\n4. Approval does not make the script itself safe: DNS access, modification of returned data, and resource limits remain separate concerns.\n\nTwo separate safeguards are needed:\n\n1. Admission: which code is allowed to execute.\n2. Sandboxing: what the running code can do and how many resources it can use.\n\nThis proposal addresses the first task."
-    },
-    {
-     "id": 6170408103,
-     "issue": 7150,
-     "issue_title": "WireGuard: Use UDP GSO on Linux",
-     "created_at": "2026-10-14T14:13:35Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7150#issuecomment-6170408103",
-     "body": "#7145 "
-    },
-    {
-     "id": 6170316990,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T14:09:08Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170316990",
-     "body": "~~不过 DoH 这么先进的东西似乎没遇到过只支持 h1 的，话说 h1 那个复用，上一个 req 发完不用等 resp 就能发下一个还是~~"
-    },
-    {
-     "id": 6170232935,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T14:05:00Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170232935",
-     "body": "确定问题在哪了，一个是 `interface{ ConnectionState() gotls.ConnectionState }` 一个是 `interface{ ConnectionState() utls.ConnectionState }`，官方的描述没问题，实现了前者确实可以抛弃 http2 transport\r\n\r\n```\r\n\t// To support ALPN protocol negotiation, the returned net.Conn should be\r\n\t// a *tls.Conn or implement the same ConnectionState method as *tls.Conn.\r\n\tDialTLSContext func(ctx context.Context, network, addr string) (net.Conn, error)\r\n```\r\n\r\n现在重新包一层然后做个 copy utls.ConnectionState to gotls.ConnectionState 应该就可以只使用 http transport 了"
-    },
-    {
-     "id": 6170164642,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T14:01:39Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170164642",
-     "body": "@svlavr 暂时不会有特权模式，全部在沙盒因此也不需要签名\r\n\r\n沙盒模式的威胁模型只有下游第三方 GUI 接受了远程下发的配置\r\n\r\n特权模式的威胁模型是本地恶意程序有权修改 lua 而且 xray TUN 模式，客户端不大可能去改 lua 文件权限"
-    },
-    {
-     "id": 6169770844,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T13:42:31Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169770844",
-     "body": "既要接收机场下发的 geodata 和 script 字段\r\n又要自己加一个多余的立即下载功能，故意绕过 xray 的安全校验\r\n\r\n那就是故意在写后门"
-    },
-    {
-     "id": 6169360819,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T13:22:11Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169360819",
-     "body": "~~不过外部更新程序下载 lua 防不了，只能默认沙盒模式，况且它本来就不需要多么开放，限制不能从 assets 加载可能不太实用~~"
-    },
-    {
-     "id": 6169259284,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T13:16:54Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6169259284",
-     "body": "跑了一下 test 虽然会看 ConnectionState() 但似乎始终都用 http/1.1 来发，还是得区分 http2 transport，我先看下"
-    },
-    {
-     "id": 6169205308,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T13:14:08Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169205308",
-     "body": "> 然后突然意识到微软的文件扩展名真是一个伟大的发明... 检查扩展名就不用搞这么麻烦了\r\n\r\n别搞。。。文件实际内容完全可以与扩展名无关，即使限制了 geo 只能下载 `.dat`、lua 只能加载 `.lua` 也没覆盖外部更新程序"
-    },
-    {
-     "id": 6168976443,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T13:02:38Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168976443",
-     "body": "@LjhAUMEM UA"
-    },
-    {
-     "id": 6168504343,
-     "issue": 7146,
-     "issue_title": "Why is RoutingService.SubscribeRoutingStats disabled by passing nil routingStats?",
-     "created_at": "2026-10-14T12:37:17Z",
-     "user": "Li-xiaotong-cauc",
-     "url": "https://github.com/XTLS/Xray-core/issues/7146#issuecomment-6168504343",
-     "body": "> 1. It's just some legacy code\n\nJust found a related issue submitted around June this year. I may have an alternative implementation approach. Thanks."
-    },
-    {
-     "id": 6168216368,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T12:21:53Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168216368",
-     "body": "@Fangliding 对了你看下我改的 https://github.com/XTLS/Xray-core/commit/676a600edbd21e036102b82e84c3541ba56c9eea 没问题吧，测一下新旧互连"
-    },
-    {
-     "id": 6168181241,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T12:19:53Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168181241",
-     "body": "> 现在我记得会读了 不确定\r\n\r\n如果是真的话那就方便很多了，不过这个要么得 uTLS 回调 HTTP 库，要么得把 uTLS 中的指针传进 HTTP 库，~~不然它咋读~~"
-    },
-    {
-     "id": 6168152700,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T12:18:14Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6168152700",
-     "body": "给 geodata 写一个完美兼容的头，而 lua 会认为是非法字符过不了语法检查必定直接报错也可以\r\n\r\n然后突然意识到微软的文件扩展名真是一个伟大的发明...\r\n检查扩展名就不用搞这么麻烦了"
-    },
-    {
-     "id": 6168106709,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T12:15:36Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168106709",
-     "body": "现在我记得会读了 不确定"
-    },
-    {
-     "id": 6168100968,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T12:15:16Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168100968",
-     "body": "~~除非服务端只支持 h1 那么才可以内层 h1，但这个要预先设置，比如 XHTTP alpn 只设 h1 不会改浏览器指纹，只决定内层为 h1~~"
-    },
-    {
-     "id": 6168085528,
-     "issue": 7146,
-     "issue_title": "Why is RoutingService.SubscribeRoutingStats disabled by passing nil routingStats?",
-     "created_at": "2026-10-14T12:14:20Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/issues/7146#issuecomment-6168085528",
-     "body": "It's just some legacy code"
-    },
-    {
-     "id": 6168062702,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T12:13:00Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168062702",
-     "body": "> 内层 h2c 啥意思，不是肯定会进行 tls 协商吗，最多加个 DialTLSContext 适配上 utls 就行了吧\r\n\r\n以前探索过，Golang HTTP 貌似没开放读取 DialTLSContext（比如 uTLS）ALPN 协商结果来决定内层 HTTP 版本，所以只能 h2"
-    },
-    {
-     "id": 6167883829,
-     "issue": 7131,
-     "issue_title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "created_at": "2026-10-14T12:02:55Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131#issuecomment-6167883829",
-     "body": "https://t.me/projectXtls/3583"
-    },
-    {
-     "id": 6167736394,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T11:54:05Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167736394",
-     "body": "内层 h2c 啥意思，不是肯定会进行 tls 协商吗，最多加个 DialTLSContext 适配上 utls 就行了吧\r\n\r\n```\r\n\t// Protocols is the set of protocols supported by the transport.\r\n\t//\r\n\t// If Protocols includes UnencryptedHTTP2 and does not include HTTP1,\r\n\t// the transport will use unencrypted HTTP/2 for requests for http:// URLs.\r\n\t//\r\n\t// If Protocols is nil, the default is usually HTTP/1 only.\r\n\t// If ForceAttemptHTTP2 is true, or if TLSNextProto contains an \"h2\" entry,\r\n\t// the default is HTTP/1 and HTTP/2.\r\n\tProtocols *Protocols\r\n```\r\nhttps://pkg.go.dev/net/http#Transport"
-    },
-    {
-     "id": 6167718871,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-14T11:53:00Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6167718871",
-     "body": "资产路径解析的确不适合\r\n也可以让 lua 编译期去强行看 geodata 的 config 但有点破坏抽象\r\n\r\n一个攻击路径是，下发了非法的 geodata\r\n下次再下发 script\r\n这样就不需要 cron 撞大运了，也很隐蔽\r\n\r\n所以必须得严格校验 geodata\r\n\r\n我在想有没有一种可能：精心构造的 geodata 既可以通过标准的 protobuf 检测\r\n又能让 lua 编译成功\r\n\r\n跟 gpt 搏斗了一会儿（对话总是被阻断，可能是让我做 cyber security 认证）\r\n他真的找到了办法\r\n\r\n所以 geodata 会走 lua 编译器语法检查，如果合法就报错"
-    },
-    {
-     "id": 6167501048,
-     "issue": 7139,
-     "issue_title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
-     "created_at": "2026-10-14T11:41:04Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7139#issuecomment-6167501048",
-     "body": "this was bug-3 in https://github.com/XTLS/Xray-core/pull/4659#issue-3024991199, which i fixed, and this PR is going to reintroduce it!"
-    },
-    {
-     "id": 6167486018,
-     "issue": 7139,
-     "issue_title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
-     "created_at": "2026-10-14T11:40:09Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7139#issuecomment-6167486018",
-     "body": "厉害了，我基本都忘干净了\r\n只是有点当时的印象：这里没问题\r\n本来准备等空下来的时候再 review"
-    },
-    {
-     "id": 6167358486,
-     "issue": 7139,
-     "issue_title": "fix(dns): fix cache record merge for dual-stack queries on single-family domains",
-     "created_at": "2026-10-14T11:32:19Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7139#issuecomment-6167358486",
-     "body": "empty-response is cached for 300s, `errRecordNotFound` means the response to the previous request hasn’t arrived yet, so we shouldn’t retrieve only the response for one type of IP from the cache."
-    },
-    {
-     "id": 6167307686,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T11:29:14Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167307686",
-     "body": "UA 也是改成默认 Chrome 那个，目前没遇到问题，你对齐 DNS 和 TLS 那两处 DoH 的行为就行"
-    },
-    {
-     "id": 6167254749,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-14T11:25:55Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167254749",
-     "body": "需要和 Xray 内其它请求一样改成内层 h2c，外层默认 Chrome 指纹，反正有 `tlsConfig`，想用别的指纹的自己设置\r\n\r\nh3 由于是 hy 的魔改版 quic-go 所以默认是 Chrome 指纹吧"
-    },
-    {
      "id": 6137264458,
      "issue": 7130,
      "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
@@ -2709,6 +2458,61 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3166,
+     "title": "feature/add local proxy",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-14T07:38:12Z",
+     "updated_at": "2026-10-16T16:13:52Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3166",
+     "body": "add local proxy"
+    },
+    {
+     "number": 3272,
+     "title": "[Bug] GUI hangs on \"Reconnecting\" after system suspend/resume on Linux (state machine stuck)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-11T07:21:18Z",
+     "updated_at": "2026-10-16T15:21:06Z",
+     "user": "ioval01",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3272",
+     "body": "**Describe the bug**\nПосле выхода системы из режима сна (systemctl suspend) клиент AmneziaVPN (GUI) бесконечно висит в состоянии «Переподключение…» и никогда не восстанавливает соединение автоматически. Туннель при этом здоров: amneziawg-go успешно проходит handshake, маршруты восстанавливаются. Проблема исключительно во внутренней state machine приложения — она застревает в состоянии Reconnecting и игнорирует собственные попытки переподключиться. Помогает только ручное отключение/подключение в GUI или перезапуск приложения.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1) Запустить AmneziaVPN и подключиться к self-hosted серверу (протокол AmneziaWG).\n2) Убедиться, что соединение работает (открывается YouTube и другие сайты через туннель).\n3) Перевести систему в режим сна: systemctl suspend.\n4) Разбудить систему (открыть крышку / нажать клавишу).\n5) Не трогая GUI AmneziaVPN, подождать 30–60 секунд.\n\n**Expected behavior**\nКлиент должен автоматически переподключиться после пробуждения системы.\n\n**Log files**\n[2026-10-11 07:06:56.945Z] [DEBUG] AmneziaVPN  : Reconnect triggered. Reconnecting to the server\n[2026-10-11 07:06:56.946Z] [DEBUG] AmneziaVPN LocalSocketController : Deactivating\n[2026-10-11 07:06:56.946Z] [DEBUG] AmneziaVPN  : VpnProtocol::setConnectionState \"Отключено\"\n[2026-10-11 07:06:56.955Z] [DEBUG] AmneziaVPN LocalSocketController : Parse command: disconnected\n[2026-10-11 07:06:56.955Z] [WARNING] AmneziaVPN  : \"Reconnect triggered on Reconnecting during inappropriate state: %2; ignoring slot\"\n[2026-10-11 07:06:59.728Z] [DEBUG] AmneziaVPN  : VpnConnection::onConnectionStateChanged: Successfully cleared saved routes\n[2026-10-11 07:07:04.002Z] [WARNING] AmneziaVPN  : \"Reconnect triggered on Reconnecting during inappropriate state: %2; ignoring slot\"\n[2026-10-11 07:07:04.002Z] [WARNING] AmneziaVPN  : \"Reconnect triggered on Reconnecting during inappropriate state: %2; ignoring slot\"\n\n**Screenshots**\n\n\n**Desktop:**\nOS: EndeavourOS (Arch Linux), x86_64, kernel 6.x\nVersion: AmneziaVPN 5.0.3.0 (de93650), собран 18 Sep 2026\nПротокол: AmneziaWG (amneziawg-go userspace daemon, container amnezia-awg2)\nМенеджер питания: systemd-logind, systemctl suspend\n\n**Smartphone:**\nДесктопный баг\n\n**Server (please complete the following information):**\nOS: self-hosted, AmneziaWG (amnezia-awg2 container), установлен через Amnezia self-hosted скрипт.\nСервер работает стабильно, handshake проходит успешно после resume — проблема не на стороне сервера.\n\n**Additional context**\namneziawg-go успешно завершает handshake после пробуждения системы (подтверждено в логах: Handshake completed with: suVVt8+...).\nМаршруты 0.0.0.0/1 и 128.0.0.0/1 через amn0 восстанавливаются автоматически.\nIP-адрес 10.8.1.10/32 на amn0 восстанавливается автоматически.\nПроблема воспроизводится на каждом цикле suspend/resume.\nРучное disconnect/reconnect в GUI немедленно решает проблему — это подтверждает, что туннель, маршруты и сеть в порядке, ломается только state machine приложения.\nДополнительно в логах присутствуют предупреждения Failed to flush DNS при каждом изменении состояния соединения. Вероятно, это связано с тем, что в системе не используется systemd-resolved или resolvconf (Amnezia не находит «подходящий DNS manager»), но это не является причиной зависания — баг воспроизводится независимо от наличия DNS-менеджера.\n"
+    },
+    {
+     "number": 3294,
+     "title": "Приложение один сплошной БАГ (читаем все вместе)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-16T13:12:32Z",
+     "updated_at": "2026-10-16T14:13:34Z",
+     "user": "jozheph34-max",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3294",
+     "body": "/."
+    },
+    {
+     "number": 2511,
+     "title": "Amnezia VPN Error 305",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-04-22T15:34:30Z",
+     "updated_at": "2026-10-16T13:44:06Z",
+     "user": "igorgurochkin",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2511",
+     "body": "Всем привет! Столкнулся с ошибкой 305 при попытке подключиться к серверу. Как пофиксить?\n\nВидел, что уже кто то сталкивался с подобным, но я к сожалению не особо разбираюсь в матчасти(\n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6c1523de-dc2d-442a-80fa-73598d1bd235\" />"
+    },
+    {
+     "number": 3223,
+     "title": "[macOS][VLESS] Split tunnel exclusion for connected LAN subnet routes via router and breaks LAN access",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-27T10:48:44Z",
+     "updated_at": "2026-10-16T13:03:29Z",
+     "user": "renosaza",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3223",
+     "body": "## Summary\n\nOn macOS, AmneziaVPN site-based split tunneling in “Addresses from the list should not be accessed via VPN” mode breaks access to a directly connected LAN subnet when that subnet is added to the exclusion list. The client installs the subnet route via the LAN router instead of on-link via Wi-Fi.\n\n## Environment\n\n- macOS 27.0 (26A428), Wi-Fi `en0`\n- AmneziaVPN 5.0.3.0 and 5.0.2.1 macOS `.pkg` builds (both reproduced)\n- Amnezia Premium, VLESS/XRay connection\n- LAN: `192.168.31.0/24`; Mac: `192.168.31.105`; router: `192.168.31.1`\n- Site-based split tunneling enabled, “Addresses from the list should not be accessed via VPN”, with `192.168.31.0/24` in the list\n\n## Reproduction\n\n1. Connect Wi-Fi on `192.168.31.0/24` and confirm a LAN host such as `192.168.31.47` is reachable directly.\n2. Add `192.168.31.0/24` to site-based split tunneling exclusions and connect VLESS.\n3. Run `netstat -rn -f inet`, `route -n get 192.168.31.47`, and `ping 192.168.31.47`.\n\n## Actual\n\nThe client creates this route:\n\n```text\n192.168.31/24  192.168.31.1  UGSc  en0\n```\n\nThe LAN host does not answer. An Ethernet capture on `en0` shows ICMP packets for `192.168.31.47` sent to the router's MAC address, not the LAN host's MAC. The router can return `Destination Port Unreachable`.\n\nRemoving `192.168.31.0/24` from the exclusion list removes the bad gateway route, but traffic for the LAN subnet then follows the VPN `/1` route and the host remains unreachable. A temporary direct on-link route for the subnet through `en0` immediately restores ping and ARP resolution of the LAN host. All temporary routes were removed after diagnosis.\n\n## Expected\n\nThe connected `192.168.31.0/24` subnet should remain reachable on-link through `en0` while the VPN is connected. If explicitly excluded, the client should not route same-subnet packets through `192.168.31.1`.\n\n## Related reports\n\n- #2830 reports a different Windows route-capture problem affecting connected LAN subnets.\n- #2937 / #2973 concern loss of CIDR prefix during input normalization; the full `/24` is present in the route here, so this is separate.\n"
+    },
     {
      "number": 3274,
      "title": "**## AmneziaVPN 5 / AmneziaWG 3.1** — решение проблемы низкой скорости и потери пакетов после обновления",
@@ -2754,17 +2558,6 @@
      "body": "При попытках подключения к селф-хост серверу и amnezia free - коннекта не происходит.\nНа пк, при этом, все в порядке и ключ рабочий\nIPhone 8\niOS 16.7.16\nAmnezia ver. 5.0.3.0 (Sep 18 2026)\n"
     },
     {
-     "number": 2511,
-     "title": "Amnezia VPN Error 305",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-04-22T15:34:30Z",
-     "updated_at": "2026-10-15T20:38:41Z",
-     "user": "igorgurochkin",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2511",
-     "body": "Всем привет! Столкнулся с ошибкой 305 при попытке подключиться к серверу. Как пофиксить?\n\nВидел, что уже кто то сталкивался с подобным, но я к сожалению не особо разбираюсь в матчасти(\n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6c1523de-dc2d-442a-80fa-73598d1bd235\" />"
-    },
-    {
      "number": 2011,
      "title": "ErrorCode: 305, Timeout connecting to the server",
      "is_pr": false,
@@ -2796,17 +2589,6 @@
      "user": "vkamn",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3290",
      "body": ""
-    },
-    {
-     "number": 3166,
-     "title": "feature/add local proxy",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-09-14T07:38:12Z",
-     "updated_at": "2026-10-15T14:38:06Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3166",
-     "body": "add local proxy"
     },
     {
      "number": 2695,
@@ -2884,31 +2666,36 @@
      "user": "NickVs2015",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3195",
      "body": "add otp authorisation"
-    },
-    {
-     "number": 3286,
-     "title": "fix: show locked xray settings page for servers without write access",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-14T14:03:06Z",
-     "updated_at": "2026-10-14T14:03:06Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3286",
-     "body": ""
-    },
-    {
-     "number": 3239,
-     "title": "feature: cover test gateway service config import",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-09-28T14:46:48Z",
-     "updated_at": "2026-10-14T13:52:32Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3239",
-     "body": "feature add test for  gateway service config import"
     }
    ],
    "comments": [
+    {
+     "id": 6218696076,
+     "issue": 3272,
+     "issue_title": "[Bug] GUI hangs on \"Reconnecting\" after system suspend/resume on Linux (state machine stuck)",
+     "created_at": "2026-10-16T15:21:06Z",
+     "user": "ilyushqa",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3272#issuecomment-6218696076",
+     "body": "Duplicate of https://github.com/amnezia-vpn/amnezia-client/issues/1658"
+    },
+    {
+     "id": 6216837845,
+     "issue": 2511,
+     "issue_title": "Amnezia VPN Error 305",
+     "created_at": "2026-10-16T13:44:06Z",
+     "user": "Kos1va",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2511#issuecomment-6216837845",
+     "body": "Мне кажется, тут скорее всего ТСПУ МТСа уже палили этот айпишник и внесли его в списки. В той статье, что я скидывал, есть ссылки на ресурсы где можно проверять айпи "
+    },
+    {
+     "id": 6216100133,
+     "issue": 3223,
+     "issue_title": "[macOS][VLESS] Split tunnel exclusion for connected LAN subnet routes via router and breaks LAN access",
+     "created_at": "2026-10-16T13:03:29Z",
+     "user": "PMensh15",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3223#issuecomment-6216100133",
+     "body": "A note for macOS users experiencing similar LAN access symptoms:\n\nI had an issue with Amnezia Premium 5.0.1.5 (primarily AmneziaWG, also tested VLESS) where Chrome couldn't open my Keenetic router's web interface and Termius couldn't access local SSH while the VPN was enabled.\n\nHowever, my routing table was correct (`en0`), ping worked, curl returned HTTP 200 OK, and Safari could access the router without disconnecting the VPN.\n\n**In my case, the solution was to enable Local Network permissions for Google Chrome and Termius under macOS System Settings → Privacy & Security → Local Network.**\n\nBoth applications immediately regained LAN access.\n\nThis is not a fix for the incorrect subnet route described in this issue. It's a different cause of similar symptoms, worth checking before troubleshooting split tunneling."
+    },
     {
      "id": 6211413568,
      "issue": 3274,
@@ -3007,15 +2794,6 @@
      "user": "Sk7Str1p3",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2539#issuecomment-6175409499",
      "body": "I believe amneziavpn should support V6 out of the box."
-    },
-    {
-     "id": 6167365582,
-     "issue": 3256,
-     "issue_title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
-     "created_at": "2026-10-14T11:32:44Z",
-     "user": "spongegot",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256#issuecomment-6167365582",
-     "body": "У меня похожий симптом на self-hosted Xray, причину нашёл в конфиге сервера, детали здесь: #3285"
     }
    ]
   },

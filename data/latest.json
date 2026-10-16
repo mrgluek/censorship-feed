@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-15T21:22:35Z",
- "since": "2026-10-13T21:22:35Z",
+ "generated_at": "2026-10-16T04:31:50Z",
+ "since": "2026-10-14T04:31:50Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -82,6 +82,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2597,
+     "title": "fix typos",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-15T19:43:42Z",
+     "updated_at": "2026-10-15T21:48:40Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2597",
+     "body": "fix typos\n"
+    },
+    {
      "number": 2580,
      "title": "Silence -Wunreachable-code-break -Wextra-semi -Wextra-semi-stmt warnings",
      "is_pr": true,
@@ -91,17 +102,6 @@
      "user": "UU-0665D27",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2580",
      "body": "Dead breaks after return, stray semicolons after inline bodies and switch blocks, plus a dead variable in ParseBEncoded. No functional changes."
-    },
-    {
-     "number": 2597,
-     "title": "fix typos",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-15T19:43:42Z",
-     "updated_at": "2026-10-15T19:45:51Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2597",
-     "body": "fix typos\n"
     },
     {
      "number": 1965,
@@ -135,17 +135,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2591",
      "body": "debian/control\n`Build-Depends: debhelper (>= 12~), libboost-program-options-dev (>= 1.46), libboost-json-dev (>= 1.81), libboost-url-dev (>= 1.81), libminiupnpc-dev, libssl-dev (>= 3.5), zlib1g-dev`\nVersion of libssl-dev is too high.\nIn Debian Bookworm libssl is 3.0.22\nhttps://packages.debian.org/search?keywords=libssl\nand there is no backport\nhttps://packages.debian.org/search?suite=bookworm-backports&searchon=names&keywords=libssl\n\n"
-    },
-    {
-     "number": 2595,
-     "title": "Fix duplicated attributes in torrents web panel link",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-13T22:49:03Z",
-     "updated_at": "2026-10-13T22:50:03Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2595",
-     "body": "The web panel link was emitting target and rel twice, once in the onmouseover line and once in the onclick line, with no space between `rel=\"noopener noreferrer\"` and `onclick=`, so the attributes ran together.\n\nChecked on a running console with a torrents tunnel: the page now carries one target and one rel, properly separated.\n\nBuilds with no warnings, tests pass."
     }
    ],
    "comments": [
@@ -203,15 +192,444 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7170,
+     "title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T21:56:47Z",
+     "updated_at": "2026-10-16T04:27:30Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170",
+     "body": "every Drive request of xdrive has a 60 s limit for the whole request, body included. on a slow line that is too short for big segments: with segmentBytes at 4 MiB the reader fetches 8 at once, at 0.5 MiB/s that takes 64 s, so every attempt times out the same way and after 8 of them the connection is gone. the growing segments talked about in #6748 would hit it even sooner\n\nnow a request ends only after 60 s without progress: no answer that long after the body went out, or no byte of either body, so a stuck request is still cut at 60 s. there is a unit test for slow and stuck requests, and in a Drive simulator at 0.5 MiB/s down main fails with 4 MiB segments while this passes at 0.48 MiB/s\n"
+    },
+    {
+     "number": 7124,
+     "title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-11T07:04:08Z",
+     "updated_at": "2026-10-16T04:27:19Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124",
+     "body": "builds on the lua engine from https://github.com/XTLS/Xray-core/pull/6823, docs in https://github.com/XTLS/Xray-docs-next/pull/909\n\n-- `noise.script` is a lua script defining `HandleNoise(plan, address)`. it submits each packet with `plan:Send(packet)` or `plan:Send(packet, delay)` for a delay in ms after that packet, and only returns something when it wants to report an error\n-- `xray.finalmask.noise` gives the script `Random(size)` for crypto random bytes and `RandomBetween(from, to)`, inclusive. `xray.log` works too. `RegisterLua` exports just those two, so another module's engine can offer them\n-- `script` takes whatever #7132 accepts, a path or an inline `base64:` / `base64+gzip:` script, the core resolves it. can't be set together with `noise`\n-- this is what `exp` can't do: conditionals, loops, state that survives between calls, and noise that depends on the peer\n\nit follows what the lifecycle page documents for the other pooled hooks: each noise layer gets its own pool so two layers naming the same file don't share state, and a refused return value keeps the instance while only a lua exception or a timeout drops it. the engine is created the first time a layer needs noise, never in infra, which only compiles the script so a typo is caught at startup. the call timeout is 1s rather than 6s because this hook runs while the first packet to a peer waits, the init timeout stays 120s\n\nno LTable on the hook path, one plan per instance that the hook is handed, and the packet buffer is reused per connection\n\nthe script only runs when a peer needs noise, never per packet. noise stays best effort: a script that fails only logs a warning and the real packet still goes out, which is how a failed noise write already behaves. sizes, delays and random bounds are capped at 65535 so a script can't ask for a huge allocation or a sleep that never ends\n\n~~@LjhAUMEM you said a lua pluggable mask would be cool, this is the smallest piece of that~~\n\n\n\n"
+    },
+    {
+     "number": 7155,
+     "title": "Chore: Treat int as int32",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T16:54:48Z",
+     "updated_at": "2026-10-16T02:55:10Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7155",
+     "body": "修复一些把int当int64用的问题（不然会在32位设备上出问题）"
+    },
+    {
+     "number": 7164,
+     "title": "XTLS Vision: never switches to direct copy when inner TLS records arrive back to back (IsCompleteRecord is per batch)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-15T12:47:34Z",
+     "updated_at": "2026-10-16T02:22:59Z",
+     "user": "pylaterreur",
+     "url": "https://github.com/XTLS/Xray-core/issues/7164",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [ ] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\nThe fourth box is unchecked on purpose: #6124 shows the same symptom for one download. It was closed together with #4878 by #6834, which fixed the close_notify leak but not the switch. Details below.\n\n### Description\n\nSince #5179 (first released in v25.12.1), `VisionWriter` switches to direct copy only when a whole read batch is made of complete TLS application-data records:\n\nhttps://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L362-L369\n\n`IsCompleteRecord` ([proxy.go#L408-L460](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L408-L460)) looks at one batch at a time and keeps no state between batches. For TLS 1.3 nothing else ends the padding: the shortcut at [L381](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L381) only applies to traffic that is not TLS 1.2+. Once a batch ends inside a record, the next batch starts inside a record and cannot pass. The switch then only happens if two reads in a row both end exactly on a record boundary.\n\nWith a sender that writes full-size records back to back, that doesn't happen:\n\n- The first read after the handshake is a single 8 KiB buffer. `ReadVReader` starts with one `buf.Size` buffer and only adds more after a full read ([readv_reader.go#L63-L70](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/common/buf/readv_reader.go#L63-L70), [#L124-L145](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/common/buf/readv_reader.go#L124-L145)). So when the handshake fits in 8 KiB, as it does here, the first 16 KiB record (16,406 bytes on the wire) is always cut. In the upload log below, the first batch is the client's ChangeCipherSpec + Finished (64 bytes) plus the first 8,128 bytes of the first record.\n- Later reads take up to 8 × 8 KiB. Whenever data waits in the socket, because the proxy or the link behind it is slower than the sender, every read is a full 64 KiB. Two full reads in a row can never both end on a record boundary, because 65,536 is not a multiple of 16,406. So the check can only pass next to a read that drains the socket, which needs the proxy to catch up with the sender.\n\nThe download batches come straight from freedom's reads of the target socket ([freedom.go#L435](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/freedom/freedom.go#L435), [proxy.go#L790-L797](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L790-L797)). The upload batches are the client inbound's reads ([outbound.go#L367](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/vless/outbound/outbound.go#L367)).\n\nSo the connection stays in padding mode for the whole transfer. Each buffer is reshaped and padded, the inner TLS stream is encrypted a second time by the outer TLS, and neither direct copy nor, for downloads, splice ever starts. `CommandPaddingDirect` is only sent after the payload, when a short trailing record arrives alone (here the receiver's 1-byte reply or a close_notify).\n\n**Evidence** (repro below; plain TCP on 127.0.0.1, official Xray-linux-64.zip):\n\n- 1 GB upload at debug level: the client logs 232,453 `XtlsPadding … 0` lines. Its only `XtlsPadding … 2` is the 24-byte close_notify after the payload. In a 1 GB download, the server "
+    },
+    {
      "number": 7168,
      "title": "Outbound: Close a removed handler and its connections",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-15T21:02:55Z",
-     "updated_at": "2026-10-15T21:02:55Z",
+     "updated_at": "2026-10-16T02:20:38Z",
      "user": "T3ST3ST3R0N",
      "url": "https://github.com/XTLS/Xray-core/pull/7168",
      "body": "RemoveOutbound only drops the handler from the outbound manager and never closes it. A removed WireGuard outbound keeps its device up and keeps sending keepalives to the peer, and connections through any removed outbound keep running. The inbound manager already closes a removed handler.\n\nNow RemoveHandler closes the handler, outside the manager's lock. Close cancels a context that each dispatch is tied to, so freedom, VLESS and the other outbounds end their connections too. Mux client connections are dialed under that context as well; otherwise a session behind an inbound that hands the outbound a pipe (VMess, Trojan, Shadowsocks, HTTP) lives on in the shared mux connection.\n\nWithout tests it is 35 added and 7 removed lines in 3 files. The tests remove an outbound through the API while a connection goes through it, for WireGuard (no packet reaches the peer afterwards), freedom and a mux outbound behind a Shadowsocks inbound. Each fails on main.\n\nIndependent of #7166. Removing an inbound still leaves its connections running; that is not changed here.\n"
+    },
+    {
+     "number": 7172,
+     "title": "Hysteria client: Reset stalled writes when the connection is closed",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T23:58:44Z",
+     "updated_at": "2026-10-16T02:18:55Z",
+     "user": "thatssoheil",
+     "url": "https://github.com/XTLS/Xray-core/pull/7172",
+     "body": "Fixes #7169.\n\nA stream write blocked on the QUIC flow control window (the peer stopped reading) could never be released on teardown: `interConn.Close()` only cancelled the read side and called `Stream.Close()`. The FIN queued by `Close()` cannot be delivered while data is stuck behind the window, so the peer kept the stream's unread data occupying its share of the connection-level window until the whole QUIC connection died - with 3-4 stalled streams every TCP request over the client hung for minutes while UDP kept working.\n\nChange: `interConn.Close()` now cancels the stream's write side (`CancelWrite`, i.e. RESET_STREAM) when a write is still in flight, so the blocked `Write` returns and the peer drops the stream's unread data and releases its share of the connection window (quic-go credits the connection-level window on reset). Cleanly finished sessions keep the plain close. A `closed` flag orders concurrent `Write`/`Close` and makes a repeated `Close()` a no-op.\n\nVerification:\n- Unit test `TestTCPStalledWriteClose` (added): stalled stream + `Close()` => the blocked write returns, a new stream on the same connection can send again (connection window released), and a cleanly finished stream still delivers all data + FIN. RED on main (`stalled write did not return after close`), GREEN with the change.\n- End to end on loopback against a real hysteria v2.11.0 server, the scenario from the report (4 uploads to a target that stops reading after ~2 MB, aborted with `SO_LINGER 0`):\n  - before (10879a4a): 11 fresh requests over ~43 s after the abort never succeed;\n  - after: the first retry that lands after the aborted sessions' own idle timeout succeeds (~6 s after the abort with `connIdle` forced to 5 s in the test client).\n- `go test ./transport/internet/hysteria/` passes; gofmt clean.\n\nScope: the aborted session is released when it ends (its own idle timeout, or any other teardown of the session) - the local abort itself is not observable once the writer is wedged, so the idle timeout is still the upper bound with stock servers; a server that closes stalled targets (HyNetworks/hysteria#1703) recovers faster.\n"
+    },
+    {
+     "number": 7135,
+     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T01:29:50Z",
+     "updated_at": "2026-10-16T02:18:00Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135",
+     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
+    },
+    {
+     "number": 7162,
+     "title": "676a600 后 VLESS+REALITY+Vision 服务端 SIGSEGV",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-15T11:45:45Z",
+     "updated_at": "2026-10-16T02:13:40Z",
+     "user": "VariatezzZ",
+     "url": "https://github.com/XTLS/Xray-core/issues/7162",
+     "body": "服务端入站 vless-tcp-reality，客户端和服务端相同版本，裸核使用\n676a6000以后仅服务端出现SIGSEGV，回退低于676a6000即恢复，配置未动。\n\n核心崩溃堆栈日志：\n[1.log](https://github.com/user-attachments/files/33490416/1.log)\n\n问的AI分析的根因：\n```\n新 reality（Go1.27 同步）把 Conn.rawInput 由 bytes.Buffer 值改成\n*bytes.Buffer 指针池化（另加 smallInput，见 conn.go:113-128,888-973，\n空闲还会 Put+置nil 再换新 Buffer）。\n而 inbound.go:577-586、outbound.go:278-287 仍用\nrawInput = (*bytes.Buffer)(unsafe.Pointer(p+r.Offset))，\n偏移处现在只有 8 字节指针，被当成整个 Buffer 结构体解释，\nw.rawInput 即为野指针，读即崩。"
+    },
+    {
+     "number": 4320,
+     "title": "XHTTP Client: Race Dialer",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-01-23T16:01:59Z",
+     "updated_at": "2026-10-16T01:56:11Z",
+     "user": "rPDmYQ",
+     "url": "https://github.com/XTLS/Xray-core/pull/4320",
+     "body": "Add Race dialer for XHTTP:\r\n- Enable by specifying both `h3` and `h2` in ALPN.\r\n  - QUIC connection uses only `h3` as ALPN.\r\n  - TCP TLS connection uses everything else as ALPN.\r\n- Try connecting to server using both `h3` and `h2` connection. The first connection that succeed dialing is used.\r\n- If there's already established connection, it will be reused.\r\n- Chrome-like try logic:\r\n  - Delay initial h2 attempt to prefer h3.\r\n  - H3 gets broken mark and won't be attempted for a while upon failure."
+    },
+    {
+     "number": 2762,
+     "title": "Optimize wireguard kernel mode V2",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2023-11-27T07:58:20Z",
+     "updated_at": "2026-10-16T01:56:11Z",
+     "user": "kunsonx",
+     "url": "https://github.com/XTLS/Xray-core/pull/2762",
+     "body": "基于 https://github.com/XTLS/Xray-core/pull/2757 基础上 实现 outbound wireguard 非用户空间模式。\r\n\r\nsys wireguard device + sysnetstack\r\n\r\nrequirements:\r\n\r\n1. cap CAP_NET_ADMIN \r\n2. ptables \r\n3. net.ipv4.conf.all.src_valid_mark=1\r\n4. modprobe wireguard\r\n5. net.ipv6.conf.all.disable_ipv6 (启用 IPv6)\r\n\r\n@yuhan6665 请检阅。"
+    },
+    {
+     "number": 2757,
+     "title": "Optimize wireguard kernel mode",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2023-11-26T08:14:52Z",
+     "updated_at": "2026-10-16T01:56:11Z",
+     "user": "kunsonx",
+     "url": "https://github.com/XTLS/Xray-core/pull/2757",
+     "body": "1. 调整 WireGuard kernel mode 只支持 client 模式并支持要求权限.\r\n2. 不再要求 root 权限（不调整 rp_filter），调整为 cap CAP_NET_ADMIN 和 iptables 与 net.ipv4.conf.all.src_valid_mark=1\r\n3. docker 打包镜像附带 iptables 预先安装\r\n\r\ndocker container 运行最低条件\r\n\r\n```yaml\r\n    cap_add:\r\n      - CAP_NET_ADMIN\r\n    sysctls:\r\n      - net.ipv4.conf.all.src_valid_mark=1\r\n    devices:\r\n        - /dev/net/tun\r\n ```"
+    },
+    {
+     "number": 412,
+     "title": "Add the routing management gRPC API",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2021-03-20T13:40:05Z",
+     "updated_at": "2026-10-16T01:56:11Z",
+     "user": "tat5522",
+     "url": "https://github.com/XTLS/Xray-core/pull/412",
+     "body": "参照handlerService写了一份控制路由的grpc api。\r\n支持使用gRPC 增加 删除 改变 `RuleObject`，`BalancerObject`。风格基本与handlerservice一致。\r\n原本的`RuleObject`没有tag属性，此次修改增加了tag属性。用于控制从配置文件加入的`RuleObject`，不填tag属性时会采用uuid作为`RuleObject`的tag。原本`RuleObject`的tag标签改为TargetTag。\r\n\r\nTest Case只完成了`RuleObject`相关的。`BalancerObject`由于不会添加`Outbound`所以未能完成。"
+    },
+    {
+     "number": 7171,
+     "title": "TUN inbound: Add disableFakeICMP config option for pongs",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T22:15:42Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "navidmafi",
+     "url": "https://github.com/XTLS/Xray-core/pull/7171",
+     "body": ""
+    },
+    {
+     "number": 7151,
+     "title": "WireGuard outbound: Keep the device when its setup fails",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-14T14:15:39Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151",
+     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
+    },
+    {
+     "number": 7112,
+     "title": "Outbound: Close the handler when removing it; VLESS Reverse Proxy: Don't start after closing",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-08T23:17:24Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "earmark-halt",
+     "url": "https://github.com/XTLS/Xray-core/pull/7112",
+     "body": "`outbound.Manager.RemoveHandler`, which `xray api rmo` (`HandlerService.RemoveOutbound`) calls, deletes the handler from the map but never closes it, while `inbound.Manager.RemoveHandler` does. So whatever the removed outbound's `Close()` would release keeps running:\n\n- WireGuard creates its TUN in the constructor (a kernel TUN when available, otherwise a gVisor stack), and once used also has the device with its UDP socket and keepalives.\n- VLESS with `reverse` keeps its monitor task: the removed outbound keeps dialing the server every 2 s.\n- Same for MASQUE's tunnel. VLESS with `testpre` gets closed too, but its pre-connects only stop reliably with #7113: on main, `Close()` stops just the goroutines waiting to hand over a connection, not the ones redialing an unreachable server.\n\nThis shows up wherever outbounds are added and removed at runtime through the API, e.g. by panels.\n\n### Changes\n\n- `RemoveHandler` closes the handler it removed. It does so after releasing the manager lock, so a slow `Close()` (WireGuard) doesn't hold up `Select()`/`GetHandler()` for new connections. Removing an unknown tag still returns nil, and a removed handler is closed only once, since `Manager.Close()` no longer sees it.\n- VLESS starts the reverse 2 s after the outbound is created (a goroutine in `New()`), so an outbound removed within those 2 s would still start it after `Close()`. `Reverse.Start()` is now a no-op once `Reverse.Close()` has run.\n\nThe other callers of `RemoveHandler` (commander, metrics, reverse portal, VLESS inbound's reverse) remove their own internal outbounds, whose `Close()` is a no-op or idempotent.\n\nConnections already in flight on a removed outbound behave as before unless its `Close()` tears them down (WireGuard, MASQUE). A reverse bridge that is already connected is left to end on its own; only new ones stop.\n\n### Reproduction (on 836a6fe)\n\nClient: `api` with `HandlerService` behind a dokodemo-door inbound, `freedom` as the only configured outbound. Server: a plain TCP listener that only counts accepted connections.\n\n**VLESS `reverse`**: the outbound is added with `xray api ado` and removed with `xray api rmo`. Afterwards `xray api lso` lists only the `freedom` outbound in all runs.\n\n| `rmo` after `ado` | build | accepts at `rmo` | 3 s later | 13 s later |\n|---|---|---:|---:|---:|\n| 7 s | main | 3 | 4 | 9 |\n| 7 s | this PR | 3 | 3 | 3 |\n| 0.5 s | main | 0 | 1 | 6 |\n| 0.5 s | this PR | 0 | 0 | 0 |\n\n**WireGuard** (`noKernelTun: true`): five outbounds, each added with `ado` and removed right away with `rmo`. Goroutines from the `metrics` listener's `/debug/pprof/goroutine`: main 11 → 72, this PR 11 → 12.\n\n### Tests\n\n- New `TestRemoveHandlerClosesHandler` (on main the handler is closed 0 times) and `TestReverseNotStartedAfterClose` (on main the monitor runs once).\n- `go test ./...` except `testing/scenarios`: the only failures also fail on main, tests that need `resources/geo*.dat` or network access.\n- `go test ./testing/scenarios`: pass.\n- `go run ./infra/vformat/main.go -mode check -pwd ./`: pass.\n"
+    },
+    {
+     "number": 7103,
+     "title": "feat(xdns): add encrypted DNS resolver support",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-07T23:53:32Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "HPPC114514",
+     "url": "https://github.com/XTLS/Xray-core/pull/7103",
+     "body": "## 改动说明\r\n\r\n为 xdns 增加 DoT、DoH（HTTP/2）、DoQ 和 DoH3 解析器，支持通过加密 DNS 服务传输隧道报文。保留 UDP、TCP 解析器，继续使用原始 DNS 报文，保留 TXT、CNAME 等查询类型和响应内容。\r\n\r\n## 主要改动\r\n\r\n- 新增 `tls://`、`https://`、`quic://` 和 `https+h3://` 地址解析，支持默认端口、HTTPS 路径和查询参数。\r\n- 新增 `serverName`、`bootstrap` 和证书信任配置，并校验解析器地址及 TLS 参数。\r\n- 为解析器增加请求超时、并发及队列限制，校验 DNS 响应与原始查询是否匹配。\r\n- 调整 xdns 发送和关闭流程，向调用方返回发送失败，补充连接、流和 HTTP/3 传输实例的资源回收。\r\n- 为共享 DNS 查询和 finalmask 拨号增加 context 支持，传递查询取消和超时信号。"
+    },
+    {
+     "number": 6824,
+     "title": "XHTTP: randomize packet-up size per request",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-26T00:44:45Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "wywywywycloud",
+     "url": "https://github.com/XTLS/Xray-core/pull/6824",
+     "body": "`scMaxEachPostBytes` accepts a range, but packet-up currently samples it once when the logical XHTTP connection is created. Every full POST on that connection therefore uses the same body size.\n\nSample the configured range for each POST instead. The upload pipe uses the range's upper bound for buffering, while fixed-value configurations keep their existing behavior.\n\nThe integration test records real packet-up request bodies. It fails with the previous per-connection sampling and verifies that every body stays within the configured limit while full POST sizes vary.\n\nTests:\n\n- `go test ./transport/internet/splithttp -run 'Test_(maxUpload|packetUpRandomizesPostSizePerRequest)$' -count=20`\n- `go test -race ./transport/internet/splithttp`\n- `go run ./infra/vformat/main.go -mode check -pwd ./`\n- `CGO_ENABLED=0 go build ./main`\n"
+    },
+    {
+     "number": 6769,
+     "title": "XMC: make startup padding lengths configurable",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-14T13:58:44Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "spr334-a",
+     "url": "https://github.com/XTLS/Xray-core/pull/6769",
+     "body": "```markdown\r\nFollow-up to #6487, covering the startup-padding part of #6732.\r\n\r\nAdds an optional `padding` array to XMC settings with configurable direction per turn:\r\n\r\n```json\r\n{\r\n  \"padding\": [\r\n    {\"length\": \"44\", \"direction\": \"c2s\"},\r\n    {\"length\": \"64-128\", \"direction\": \"s2c\"},\r\n    {\"length\": \"25\", \"direction\": \"c2s\"},\r\n    {\"length\": \"32768-49152\", \"direction\": \"s2c\"}\r\n  ]\r\n}\r\n```\r\n\r\nEach entry specifies a fixed length or inclusive range, plus direction (`\"c2s\"` for client-to-server or `\"s2c\"` for server-to-client; full names `\"client-to-server\"` and `\"server-to-client\"` are also accepted). Turns can be in any order and direction, including consecutive same-direction turns. Both endpoints need the same array. The first length includes Login Acknowledged's two bytes; invalid ranges and directions are rejected during config loading and connection setup.\r\n\r\nOmitting the `padding` field entirely preserves the existing 26.1.2 preset. Custom turns have no intentional delays. Data framing, keep-alives, and mask ordering are unchanged. No new dependency or wire-format change.\r\n\r\nThis deliberately leaves profile registries, version negotiation, and ongoing traffic scheduling for separate discussion. In particular, existing length checks are not a configuration-fingerprint handshake and do not detect every endpoint mismatch; the documentation calls this out.\r\n\r\nTests cover range validation, direction validation, prefix and VarInt boundaries, default-preset preservation, and encrypted bidirectional round trips with single, odd, and even turn counts.\r\n\r\nChecked on Windows with Go 1.27.0:\r\n\r\n```text\r\ngo test -count=20 ./transport/internet/finalmask/xmc\r\ngo test -race -count=1 ./transport/internet/finalmask/xmc\r\ngo test -count=1 ./infra/conf\r\ngo test -count=1 ./transport/internet/finalmask/...\r\ngo vet ./transport/internet/finalmask/...\r\ngo build ./main\r\ngo run ./infra/vformat/main.go -mode check -pwd ./\r\n```\r\n\r\n`go vet ./infra/conf` reports existing unreachable code at `infra/conf/xray.go:606`, also reproduced on the base commit."
+    },
+    {
+     "number": 6425,
+     "title": "DNS outbound: Preserve session context for timeout-only connections",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-07-03T16:14:21Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/6425",
+     "body": "陈年老 BUG 了，只是没人那么无聊这么配过所以没发现\r\n\r\n- 服务端上，客户端 XUDP 进来到 DNS 出站的流量没法判 `isOwnLink()` 特定配置会导致多绕一次\r\n- 如果配了 `sendThrough` 那么 direct 的查询还会 panic"
+    },
+    {
+     "number": 6298,
+     "title": "feat(outbound): introduce generic plugin outbound and dynamic handler registry",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-06-08T20:54:36Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "hossinasaadi",
+     "url": "https://github.com/XTLS/Xray-core/pull/6298",
+     "body": "Introduce a generic Plugin Outbound Protocol and a dynamic Handler Registry to Xray-core. This enables embedding parent applications (like mobile app wrappers) to register custom, packet-preserving network tunnels (e.g. ICMP tunnels, DNS/custom VPN transports) dynamically at runtime, avoiding localhost socket overhead and port collisions.\r\n\r\n**Proposal**: https://github.com/XTLS/Xray-core/issues/6297\r\n\r\n```json\r\n{\r\n  \"outbounds\": [\r\n    {\r\n      \"tag\": \"proxy\",\r\n      \"protocol\": \"plugin\",\r\n      \"settings\": {\r\n        \"name\": \"customtunnel\",\r\n        \"params\": {\r\n          \"password\": \"je101kgas\",\r\n          \"target\": \"1.1.1.1\",\r\n          \"raw_mode\": true\r\n        }\r\n      }\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n### Wrapper Registration & Initialization\r\n\r\n```go\r\nimport \"github.com/xtls/xray-core/proxy/plugin\"\r\n\r\n// 1. Listen for plugin instantiations\r\nplugin.SetOnPluginRegistered(func(tag string, name string, params string) {\r\n\tlog.Printf(\"Plugin '%s' registered with tag '%s'. Params JSON: %s\", name, tag, params)\r\n\tif name == \"customtunnel\" {\r\n\t\tgo startCustomTunnel(tag, params)\r\n\t}\r\n})\r\n\r\n// 2. Register the processing handler\r\nplugin.RegisterHandler(\"customtunnel\", func(ctx context.Context, dest v2net.Destination, link *transport.Link) error {\r\n\tconn, err := customtunnel.Dial(ctx, dest)\r\n\tif err != nil { return err }\r\n\tdefer conn.Close()\r\n\r\n\trequestFunc := func() error { return buf.Copy(link.Reader, buf.NewWriter(conn)) }\r\n\tresponseFunc := func() error { return buf.Copy(buf.NewReader(conn), link.Writer) }\r\n\treturn task.Run(ctx, requestFunc, responseFunc)\r\n})\r\n```\r\n\r\n\r\n@RPRX "
+    },
+    {
+     "number": 6254,
+     "title": "brutal",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-06-03T08:48:24Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/6254",
+     "body": "```jsonc\r\n\"finalmask\": {\r\n  \"tcp\": [\r\n    {\r\n      \"type\": \"brutal\",\r\n      \"settings\": {\r\n        \"version\": 2,\r\n        \"rate\": 12500000,\r\n        \"cwnd\": 20,\r\n        \"group\": 1\r\n      }\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n### install v1\r\n```shell\r\ncurl -fsSL -O https://raw.githubusercontent.com/apernet/tcp-brutal/204aeea3437a83599c1c1fa1b97e4425cfdfc49d/scripts/install_dkms.sh\r\ncurl -fsSL -O https://github.com/apernet/tcp-brutal/releases/download/v1.0.3/tcp-brutal.dkms.tar.gz\r\nbash install_dkms.sh --local tcp-brutal.dkms.tar.gz\r\n```\r\n\r\n### install v2"
+    },
+    {
+     "number": 6219,
+     "title": "README.md: Add ovpn to Xray Tools",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-31T12:27:49Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "agentram",
+     "url": "https://github.com/XTLS/Xray-core/pull/6219",
+     "body": "Add ovpn to the Xray Tools list.\n\novpn is a source-available Go CLI for operating self-hosted Xray VLESS + REALITY servers over SSH. It renders Docker Compose runtime files, manages users and client links, supports rolling quotas, monitoring, backups, and optional HAProxy entrypoints.\n\nI placed it under Xray Tools because it is operator tooling rather than a GUI client or web panel. Happy to move it if another category fits better."
+    },
+    {
+     "number": 6164,
+     "title": "Bound shutdown after termination signal",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-19T11:49:53Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "M03ED",
+     "url": "https://github.com/XTLS/Xray-core/pull/6164",
+     "body": "This change prevents Xray from waiting indefinitely during graceful shutdown after receiving SIGTERM or interrupt.\r\n\r\nPreviously, shutdown depended on the deferred server.Close() call returning. If any feature Close() path blocked, the process could stay alive while listeners or active connections continued operating. This made stale Xray processes difficult to detect, especially when another process could bind the same port.\r\n\r\nNow Xray runs server.Close() explicitly after receiving a termination signal and waits up to 10 seconds. If shutdown does not complete in time, the process exits with code 1 so supervisors can treat it as a failed shutdown and avoid leaving a functional stale process behind.\r\n\r\nThis issue was most visible on mobile clients. Some apps, such as Telegram proxy-style traffic, may continue using an already-established path even when the VPN/client UI appears disabled. If the old Xray process remains alive during a stuck shutdown, those connections can continue transferring traffic and updating usage counters, making the node look stopped from the client side while traffic is still flowing server-side.\r\n\r\n"
+    },
+    {
+     "number": 6110,
+     "title": "Remove `xray.cone.disabled` env var",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-10T11:18:09Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/6110",
+     "body": "https://github.com/XTLS/Xray-core/pull/6057#issuecomment-4364744151\r\nhttps://github.com/XTLS/Xray-core/pull/6075#issuecomment-4395258425"
+    },
+    {
+     "number": 6103,
+     "title": "TLS : tls spoofing",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-09T16:20:08Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "codewithtamim",
+     "url": "https://github.com/XTLS/Xray-core/pull/6103",
+     "body": "fix #5964\r\n\r\n### RawPacket aka TLS Spoofing\r\n\r\nSo first lets talk about the idea,\r\n\r\nwhen you connect to a xray server, the censors can see your TLS ClientHello, read the SNI, and figure out what you are doing and block :)\r\n\r\nThe RawPacket aka TLS spoofing fixes that by injecting a fake TLS ClientHello before the real one Hits.\r\n\r\n\r\nThe fake one carries like a decoy domain (ex. baidu.com) and then the real one carries your actual destination (ex. www.example.com).\r\n\r\nA sensor that captures the first packet sees baidu.com and think that you are just browsing, and everything is okay with that, but in reality your connection goes through :)\r\n\r\n\r\nIt can be configured in the `finalmask.tcp` okay? and its only for client side.\r\n\r\n\r\n### How everything works\r\n\r\n\r\nWhen Xray dials a TCP connection and the first `Write()` happens (which also triggers the real TLS handshake) , our Raw Packet setup does the following.\r\n\r\n1.builds a fake Tls ClientHello with whatever SNI you want or you have option to provide the raw bytes (b64).\r\n\r\n2.Then we. wrap it in a raw TCP/ip packet.\r\n\r\n3.Then deliberately we corrupt the TCP header using whatever method is selected okay?\r\n\r\n4. Then we shoot it out via a raw socket\r\n\r\n5. Then immediately let the real `Write()` go through normally\r\n\r\n\r\nIn short : two packets arrive at the server back to back and the fake one gets dropped by the servers TCP stack because of the corruption and then the real handshake proceeds like nothing happened.\r\n\r\n\r\n### Config Example\r\n\r\n```json\r\n{\r\n  \"streamSettings\": {\r\n    \"finalmask\": {\r\n      \"tcp\": [\r\n        {\r\n          \"type\": \"rawpacket\",\r\n          \"settings\": {\r\n            \"sni\": \"baidu.com\",\r\n            \"payload\": \"\",\r\n            \"method\": \"wrong-sequence\",\r\n            \"ttl\": 3,\r\n            \"count\": 1\r\n          }\r\n        }\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n\r\n### Available Fields\r\n\r\n`sni` : The domain to put in the fake ClientHello. If you set this, it will auto generate a valid TLS ClientHello for you automatically. If you set `payload` and `sni` same time , sni wins here.\r\n\r\n```\r\n\"sni\": \"baidu.com\"\r\n```\r\n\r\n`payload` : If you don't want an auto gnrated ClientHello, then just encode your raw bytes that you want into base64 and put them here. I have added an option to do it from command line also. Do like this \r\n\r\n```\r\n xray tls fake-hello google.com\r\n ```\r\n\r\nIt will out the thing and then just copy paste.\r\n\r\n\r\nNote : If `sni` and payload are empty or not set , the raw packet does nothing and the connection goes through normally.\r\n\r\n\r\n`method` : It defines how we corrupt the fake packet so the server drops it.\r\n\r\n`wrong-sequence` : It duplicates the sequence number (looks like a retransmission so server drops it)\r\n\r\nSo we grab the kernels `snd_nxt` ( the next sequence number the kernel expects to send), then subtract the length of the fake payload and then use that as the sequence number of the injected packet. The results then is a duplicate of the. last segment, so the receivers TCP stack sees it as a retransmit at best, or like out of window at worst and then drops it.\r\n\r\n\r\n`wrong-checksum`: It flips all the bits in the TCP checksum (so server sees a bad checksum and drops it)\r\n\r\nWe build the packet with a correct checksum and then flip every bit(^0xFFFF). The receiver then validates the checksum and its wrong, so the packet goes in trash.\r\n\r\n`wrong-ack`: It sets ACK number way outside the receive window (so server sends dup ACK then drops it)\r\n\r\nIt sets the ACK number to `rcv_nxt - window/2` and that's way outside of the receivers window, and the kernel responds with a dup ACK containing the correct sequence number, then drops it.\r\n\r\n`wrong-md5` : This adds a fake TCP MD5 signature option and server without MD5 drops it\r\n\r\nHere we append a TCP option with kind=19 and length=18 to the TCP header. The kind 19 is the MD5 signature option (RFC 2385), if the receiver doesn't use TCP MD5 (which is basically everything except some BGP routers), it sees an unknown option"
+    },
+    {
+     "number": 6050,
+     "title": "add speed limiter for download and upload speed in megabytes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-01T07:43:44Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "SaeedFazlollahzadeh",
+     "url": "https://github.com/XTLS/Xray-core/pull/6050",
+     "body": ""
+    },
+    {
+     "number": 6016,
+     "title": "Move Browser Dialer to `sockopt.dialerProxy` `browser://` URL usage, with UUID path validation, startup-time conflict checks, instance-lifecycle listen/serve control, XHTTP mode constraints, and static initialization simplification",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-04-26T07:27:33Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "Copilot",
+     "url": "https://github.com/XTLS/Xray-core/pull/6016",
+     "body": "This PR moves Browser Dialer usage to `sockopt.dialerProxy` with `browser://host:port/uuid` URLs and removes the earlier parse-time listener startup side effects.\n\n### What changed\n\n- `dialerProxy` now uses `browser://host:port/uuid`\n- Browser Dialer URLs are collected and validated during config build\n- URL validation includes host:port parsing, UUID path validation, and same-port/different-IP conflict checks\n- Browser Dialer remains restricted to WebSocket and XHTTP, with XHTTP limited to `auto` / `packet-up`, and REALITY rejected\n- Listener startup is now controlled by the Xray instance lifecycle:\n  - start in `core.Instance.Start()`\n  - stop in `core.Instance.Close()`\n- Startup failure cleanup now also tears down Browser Dialer listeners\n\n### Scope\n\nThe change keeps the simplified non-dynamic model, but ties listener lifetime to the actual Xray instance instead of starting listeners while only parsing/building config."
+    },
+    {
+     "number": 5844,
+     "title": "Add UserConnTracker to manage user connection cancellations across proxies",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-03-25T15:55:41Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "ImMohammad20000",
+     "url": "https://github.com/XTLS/Xray-core/pull/5844",
+     "body": "there is an old bug that lead to a big issue in panels that leve connections open when users remove from inbounds via gRPC api the connection to that user dose not close in some cases so i implement a connection tracker that track all connections and close theme when users remove from the inbounds\r\n\r\nan example of the issue is user limited to 1GB but becouse connections not closed it used 18GB\r\n\r\n<img width=\"231\" height=\"64\" alt=\"image\" src=\"https://github.com/user-attachments/assets/36b906ec-fff1-402c-b6b3-87e63c0dd72e\" />\r\n"
+    },
+    {
+     "number": 5824,
+     "title": "Build: Build list adjustment and compatibility code cleaning",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-03-18T14:56:59Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/5824",
+     "body": "该 PR 旨在改进构建流程并对长期不使用的系统及架构相关兼容性代码进行清理\r\n\r\n- 新增后备构建流程：该流程中的系统/架构组合仍会在代码发生变更时进行构建，但不会参与发版流程。\r\n  - 该区域用于存放暂停正式构建状态及处于不受支持但有长尾问题的系统/架构组合；\r\n  - 该流程用于在代码更改发生时提示相关的系统/架构组合是否能正常构建，但不一定会成为阻塞因素；\r\n  - 该流程中构建的 assets 不包含 geodata ，以及特定系统或架构需要的附属内容；\r\n  - 该流程构建出的 assets 可在 GitHub Actions 中下载，保存期限为 90 日。\r\n- 整理现有构建列表（部分内容参考 https://learn.microsoft.com/en-us/dotnet/core/compatibility/jit/11/minimum-hardware-requirements ）：\r\n  - x86-64 及 AArch64 (ARM64/ARMv8) 将为主要支持架构；x86 将属于附带支持架构；\r\n  - 重新整理附加系统/架构表；\r\n  - 针对 macOS AArch64 指定最低指令集版本为 v8.4 (Apple M1)；\r\n  - 针对 Windows AArch64 指定最低指令集版本为 v8.2 (Snapdragon 850)；\r\n  - 针对 macOS x86-64 指定最低指令集版本为 v3 (Intel Haswell)；\r\n  - 针对 Windows x86-64 指定最低指令集版本为 v2 (Intel: Nehalem (Core, Xeon), Sandy Bridge, Silvermont; AMD: Bulldozer, Jaguar; Zhaoxin: ZX-C)；\r\n  - 流程细节整理。\r\n- 清理针对 WASM、Illumos、JS、Solaris 等无法再正常构建内容的兼容标记。\r\n- 清理已经废弃的 build tag 模式。\r\n- 由于目前对 OpenBSD 的支持人力不足， OpenBSD 转入“众包维护”模式：\r\n  - 仍然接受对 OpenBSD 的支持代码的更新及改进。\r\n\r\n--------\r\n## 针对过时或老旧架构的重要提示\r\n\r\n考虑到 32 位系统及 MIPS 相关系统式微，后续将在新的大版本 Go 发布时对构建表进行调整。\r\n调整过程将受 Go 支持的影响或现实设备支持而发生变化。\r\n| 时间 | 系统/架构组合 | 预期操作 |\r\n|---|---|---|\r\n| 待定 | Windows 7, x86, x86-64 | 最后一版将为 2028 年八月新的 Go 1.x 版本发布前，或受其它因素影响而提前结束（如使用率过低或不可逆的破坏性更改）。该节点取最早到来时间。 |\r\n| 2027 年二月 | Windows, x86 | 在新的 Go 大版本发布时移入后备构建，此后由 Go 上游决定 |\r\n| 2027 年二月 | Linux, ARMv5 | 在新的 Go 大版本发布时移除构建 |\r\n| 2027 年二月 | Linux, ARMv6 | 在新的 Go 大版本发布时移入后备构建 |\r\n| 2027 年二月（待定） | Linux, MIPS64 BE/LE | 在新的 Go 大版本发布时移除构建 |\r\n| 2027 年二月（待定） | Linux, MIPS32 BE | 在新的 Go 大版本发布时移入后备构建 |\r\n| 2027 年二月（待定） | Linux, MIPS32 LE | 在新的 Go 大版本发布时移入后备构建 |\r\n| 待定 | Linux, x86 | 由 Go 上游决定 |\r\n| 待定 | Linux, ARMv7 | 由 Go 上游决定 |\r\n"
+    },
+    {
+     "number": 5625,
+     "title": "Add listable",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-01-30T14:57:23Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/5625",
+     "body": "这个泛型实现非常通用 目前只加了那个verifyPeerCertInNames和pinnedPeerCertSha256 如果用在出入站上甚至可以这样\r\n```\r\n{\r\n    \"inbounds\": {\r\n        \"port\": 10808,\r\n        \"protocol\": \"socks\"\r\n    },\r\n    \"outbounds\": {\r\n        \"protocol\": \"freedom\"\r\n    }\r\n}\r\n```"
+    },
+    {
+     "number": 5419,
+     "title": "Browser dialer: High-performance pass-through rewrite",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-12-14T12:01:01Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "PoneyClairDeLune",
+     "url": "https://github.com/XTLS/Xray-core/pull/5419",
+     "body": "This PR is currently a draft, just #5334 re-opened because I fucked the Git commit history of the original PR up, as well as having the oversight of choosing the wrong source branch to use in pull requests.\r\n\r\nThis is a complete rewrite of the browser dialer to utilize pass-through without any processing on the browser side, reaching its theoretical maximum performance. A control socket will be used to instruct the browser dialer to initiate relaying on a dedicated separate channel.\r\n\r\nThe JS side, [Appat](https://github.com/team-cloudchaser/appat), is currently being built as an implementation-agnostic solution. I'll post a built version of it and unmark this as draft once it's done."
+    },
+    {
+     "number": 5143,
+     "title": "Refactor code to use DispatchLink() in vmess inbound",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-09-14T03:50:49Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "yuhan6665",
+     "url": "https://github.com/XTLS/Xray-core/pull/5143",
+     "body": "- Always apply NoTerminationSignal"
+    },
+    {
+     "number": 5102,
+     "title": "Add VLESS seed configurations",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-09-07T14:54:57Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "yuhan6665",
+     "url": "https://github.com/XTLS/Xray-core/pull/5102",
+     "body": "https://github.com/XTLS/Xray-core/pull/3260"
+    },
+    {
+     "number": 4283,
+     "title": "Add Datagram transport",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-01-13T04:04:04Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "yuhan6665",
+     "url": "https://github.com/XTLS/Xray-core/pull/4283",
+     "body": ""
+    },
+    {
+     "number": 4231,
+     "title": "mux cool: Add maxReuseTimes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2024-12-31T11:23:13Z",
+     "updated_at": "2026-10-16T01:56:10Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/4231",
+     "body": "字面意思\r\n现 mux cool 逻辑:\r\nMaxConcurrency 为一个连接里的最大活动子连接数\r\n还有一个神秘的 MaxConnections 参数 硬编码为128 实际上就是最大复用次数 我不知道为什么叫这个 这个PR将其重命名了\r\n我修改了一下 允许手动指定 maxReuseTimes 并把默认值变成了65535(mux.cool两位流ID允许的最大上限)\r\n\r\n这些限制仅存在于客户端 服务端没有限制 旧的可以正常工作"
+    },
+    {
+     "number": 7136,
+     "title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T02:03:08Z",
+     "updated_at": "2026-10-16T01:52:23Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136",
+     "body": "From https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6133901345\r\n\r\n脚本默认运行在沙盒模式\r\nBase64 内联的脚本无法提权\r\n本地文件可以使用命令签名，并配合 xray 启动参数提权\r\n\r\n```sh\r\n$ ./xray ed25519\r\nPrivateKey: 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8\r\nPublicKey: kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n\r\n$ ./xray lua sign -key 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8 test.lua\r\n```\r\n\r\n```lua\r\n-- @xray:privileged-signature=cc5JRC0CX09xK-xxDUWmXmSoXKRCYhNuHOZCluVRUrMPPCC576AnZjM9ah1wpuaATIyy2JstVPNxoHGcqBGyBA\r\nlocal log = require(\"xray.log\")\r\n\r\nlocal success, err = pcall(function()\r\n    os.execute(\"echo 'Warning: OS command executed!'\")\r\nend)\r\nif not success then\r\n    log.Error(\"Failed to exec: \", err)\r\nend\r\n\r\nfunction HandleRoute()\r\n    log.Info(\"Choosing the direct outbound\")\r\n    return \"direct\"\r\nend\r\n```\r\n\r\n```sh\r\n$ ./xray run --lua-privileged-pubkey=kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n```"
+    },
+    {
+     "number": 7130,
+     "title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-11T16:43:48Z",
+     "updated_at": "2026-10-16T00:43:10Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7130",
+     "body": "as asked in #6795: the TUN inbound gets a small TCP/IP stack of its own instead of gVisor's (gVisor stays in go.mod for WireGuard and the ICMP helper). one goroutine reads the device and hands each segment to its connection, which is the buf.Reader and buf.Writer the dispatcher works with, so buffers from the outbound go to the tun as they are. TCP has window scaling, SACK, a congestion window and a retransmit timer that follows the round trip; UDP and ICMP echo behave as before\n\nthe second commit lets Linux do the segmentation (IFF_VNET_HDR, TUNSETOFFLOAD): Xray reads and writes segments of up to 64 KB instead of one packet per syscall\n\none stream at MTU 1500 downloads at 380 MB/s instead of 162 and takes 3.9 CPU-seconds per GB instead of 11.1; with the offload it is 2100 MB/s and 0.69. an idle TCP connection holds 14 KB of heap instead of 28. behind an emulated 100 Mbit link both keep up with the kernel's own TCP\n\nweaker than gVisor: the window is fixed (256 KB, 1 MB with the offload), so without the offload one connection over a 100 ms round trip gets 1.6 MB/s where main gets 4.4, and IP fragments are dropped, not reassembled. only Linux was run: the Windows, macOS, iOS, FreeBSD and Android devices are moved to the new interface and compile, nothing more\n\n<details>\n<summary>throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, Xray on 4 cores with GOMAXPROCS=4, load and target on cores of their own, freedom outbound to a local target. main (836a6fed), the stack and the stack with the offload take turns sample by sample; median of 5, MB/s of payload and CPU-seconds of Xray (user + system) per GB. 1 stream moves 2 GB, 8 streams 256 MB each\n\n```\n                       MB/s                      CPU s/GB\nMTU    case            main   stack  offload     main   stack  offload\n1500   download 1       162     380     2100     11.1     3.9     0.69\n1500   upload   1       233     354     3460      9.9     4.4     0.53\n1500   download 8       378    1244     4763      7.5     3.1     0.82\n1500   upload   8       398     357     2860      8.7     5.5     0.77\n9000   download 1       330    1035     1658      5.7     1.5     0.92\n9000   upload   1       456     939     3052      4.6     1.9     0.67\n9000   download 8      1465    3402     5082      2.3     1.2     0.82\n9000   upload   8      1359    1812     2938      3.0     1.3     0.82\n```\n\nthe MTU 9000 rows are from an earlier run, when the PC was doing other work as well, so their levels may read low\n\nwithout the offload, upload on 8 streams is a tenth behind main: one goroutine reads the tun and its queue of 500 packets overflows (78386 packets dropped there, 116531 for main)\n</details>\n\n<details>\n<summary>behind a link (the router case)</summary>\n\nthe load runs in a second namespace behind a link played in user space (rate, delay, drop-tail queue), the namespace of Xray forwards into the tun. \"kernel\" is the same link without Xray. median of 3, MB/s, in brackets the percent of data packets the link dropped\n\n```\n100 Mbit, 10 ms round trip   kernel       main         stack        offload\ndownload 1                   9.6 (0.4)    8.8 (0.5)    9.4 (0.1)    8.9 (0.9)\nupload   1                   9.7 (0.3)    8.7 (0.1)    9.4 (0.1)    9.5 (0.0)\ndownload 8                   9.1 (1.8)    8.7 (1.4)    8.9 (1.6)    8.9 (1.6)\nupload   8                   9.4 (1.8)    8.4 (1.5)    9.3 (1.5)    9.1 (1.6)\n\n50 Mbit, 20 ms round trip, 1 % random loss\ndownload 1                   0.7 (1.0)    0.6 (1.0)    0.8 (1.0)    0.8 (1.4)\nupload   1                   0.7 (0.9)    0.7 (1.0)    0.7 (1.1)    0.7 (1.1)\ndownload 8                   4.4 (1.7)    3.6 (1.6)    4.1 (1.8)    4.3 (1.9)\nupload   8                   3.6 (2.8)    3.7 (2.4)    3.8 (2.6)    4.0 (2.6)\n\n100 Mbit, 100 ms round trip\ndownload 1                   8.1 (0.5)    4.4 (3.5)    1.6 (0.0)    3.8 (0.6)\nupload   1                   7.4 (1.4)    6.1 (1.1)    2.4 (0.0)    6.5 (1.2)\ndownload 8                   5.1 (1.5)    4.7 (2"
+    },
+    {
+     "number": 7156,
+     "title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-14T17:20:29Z",
+     "updated_at": "2026-10-16T00:34:43Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156",
+     "body": "as asked in #7130: WireGuard and MASQUE, client and server of both, move from gVisor to the stack of the TUN inbound, and it answers ICMP echo itself. no Go file imports gVisor any more (go.mod keeps it as indirect, a test of wireguard-go wants it), the linux amd64 release binary goes from 37.4 to 33.2 MB\n\nthe first commit is what the stack had to learn for that: opening TCP connections, UDP ports of its own, IP fragments both ways, ICMP \"too big\" and \"unreachable\", checksum verification, TCP timestamps, and dropping packets from or to loopback as gVisor did (without that a WireGuard peer reaches the server's localhost). the second commit is the switch, the third makes the sender recover sooner from losses and from a link that was gone for a while\n\nWireGuard between two Xrays on a veth pair: one stream 240 MB/s instead of 143, eight streams 234 instead of 138, CPU of both ends 22 s/GB instead of 37. on slow, far and lossy links it is equal or faster, and after the link is gone for 5 to 60 s the first data comes back within 1.5 s where gVisor needs 1.7 to 46 s\n\nthe timestamps are there for an older Xray on the other end. after a timeout gVisor's sender repeats two segments and waits for the next timeout, and that one doubles unless the ACKs carry timestamps. without them 7 of 40 transfers of 8 streams from an old end to a new one stalled, with them none of 40\n\ndifferent from gVisor: the window is a fixed 1 MiB where gVisor's grows from 512 KiB to 2 MiB, the MASQUE inbound now answers IPv4 ping to any address (gVisor answered only IPv6 and its own address), and deadlines on these connections do nothing, as in the TUN inbound. TestWireguard passes traffic now, it was commented out\n\n<details>\n<summary>WireGuard, throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, each Xray on 4 cores with GOMAXPROCS=4, noKernelTun, MTU 1420. main was c77a4d0e then. median of 8 to 10 on the veth pair and of 3 to 6 on a link (played in user space: rate, one-way delay, drop-tail queue of 100), MB/s of payload, CPU-seconds of both Xrays per GB. \"kernel\" is the kernel's own TCP over the same link without Xray\n\n```\nveth pair, MB/s           main    PR      PR server,    PR client,     CPU s/GB\n                                          main client   main server    main    PR\ndown 1                     143    240     213           142            36.5    21.7\nup   1                     141    231     143           210            37.3    22.6\ndown 8                     138    234     223           171            35.7    24.1\nup   8                     151    225     162           212            36.1    24.3\n\nlinks, MB/s                          main    PR      kernel\n100 Mbit 5 ms             down 1     7.6     8.1     9.7\n100 Mbit 5 ms             down 8     7.7     8.2     9.2\n50 Mbit 5 ms 1% loss      down 1     1.6     1.5     1.3\n50 Mbit 5 ms 1% loss      down 8     4.1     4.5     4.4\n100 Mbit 50 ms 0.5% loss  down 8     1.4     1.6     1.7\n100 Mbit 50 ms            down 1     3.5     3.6     6.2\n100 Mbit 50 ms            down 8     4.8     5.7     6.2\n```\n\nthe rows with loss and the 50 ms ones are from a later session with main 0888beb3 and all three commits, 6 samples, the kernel from the session before. one stream on the 50 ms link runs at about 3 or about 4 MB/s with both, half of the samples each\n\nthe timestamps cost nothing: the same build without them gives 238, 230, 239 and 228 in the PR column of the veth pair\n</details>\n\n<details>\n<summary>the link gone for a while</summary>\n\n100 Mbit 50 ms link, one stream, the link drops every packet for a while in the middle of the transfer. seconds from the link coming back to the first data, median of 3 (200 s: one sample), main and the PR taking turns in one run\n\n```\nlink gone                main    PR\n5 s, download            1.7     1.5\n20 s, download           5.8     0.6\n60 s, download           46      0.6\n200 s, download          5.0     1.3\n20 s, upload             5.9     1.5\n```\n\ni"
+    },
+    {
+     "number": 7169,
+     "title": "hysteria outbound: stream blocked on flow control is never released after the local connection ends",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-15T21:45:59Z",
+     "updated_at": "2026-10-15T23:59:27Z",
+     "user": "colituvpn",
+     "url": "https://github.com/XTLS/Xray-core/issues/7169",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nVersion: Xray-core 26.10.10 (701af60, go1.27.2), hysteria outbound. Server: Hysteria v2.11.0. Also seen with Xray as a library on Android.\n\nWhen the target of a proxied upload stops reading while keeping its connection open (an upload speed-test server does this once it has measured enough), the Hysteria server stops reading that QUIC stream. The stream's unread data fills the QUIC connection-level flow-control window (20 MB by default; a single stream can hold up to 8 MB), and the outbound's writer for that stream blocks in `stream.Write`.\n\nWhen the local connection then ends (the app aborts the upload with a reset), the blocked writer never notices, so `interConn.Close()` (`CancelRead` + `Close`) is only reached when the session is torn down by the `connIdle` timeout. Until then the stream keeps its share of the connection window. With 3–4 such streams the whole connection stalls: every new TCP request over the hysteria outbound hangs, while UDP over datagrams keeps working. On Android we saw it as Hysteria going dead about a minute into an upload speed test.\n\nWith an instrumented server, no STOP_SENDING / reset arrived from the client for the stalled streams until the Xray process was killed.\n\nSuggestion: when a session ends while the outbound's write is blocked, cancel the stream's write side (`CancelWrite`, i.e. RESET_STREAM) so the blocked `Write` returns and the server can release the stream's flow-control credit. A server-side mitigation is proposed in HyNetworks/hysteria#1702 / HyNetworks/hysteria#1703; a client-side fix would help with servers that do not have it.\n\n### Reproduction Method\n\nEverything on loopback, configs below.\n\n1. Run the Hysteria server (`hysteria server -c server.yaml`) and Xray (`xray run -c client.json`).\n2. Start a TCP sink on 127.0.0.1:19000 that reads about 2 MB from each connection and then stops reading without closing it, and a health target on 127.0.0.1:19001 that answers `OK` and closes.\n3. Through the SOCKS inbound, open 4 connections to 127.0.0.1:19000 and write as fast as possible for 4 s, then close them with a reset (SO_LINGER 0).\n4. Through the SOCKS inbound, connect to 127.0.0.1:19001: the SOCKS handshake completes but no data ever comes back. In our run 0 of 5 attempts succeeded within 30 s, and none after another 10 s idle.\n\nWith a Hysteria server that closes stalled targets (the PR above) the same steps recover in about 8 s.\n\n### Client config\n\n<details><pre><code>\n{\n  \"log\": {\n    \"loglevel\": \"debug\",\n    \"dnsLog\": true\n  },\n  \"inbounds\": [\n    {\n      \"listen\": \"127.0.0.1\",\n      \"port\": 11080,\n      \"protocol\": \"socks\",\n      \"settings\": {\n        \"udp\": true\n      }\n    }\n  ],\n  \"outbounds\": [\n    {\n      \"tag\": \"proxy\",\n      \"protocol\": \"hysteria\",\n      \"settings\": {\n        \"version\": 2,\n        \"address\": \"127.0.0.1\",\n        \"port\": 18443\n      },\n      \"streamSettings\": {\n        \"network\": \"hysteria\",\n        \"security\": \"tls\",\n        \"tlsSettings\": {\n          \"serverName\": \"hy.test\",\n          \"alpn\": [\n            \"h3\"\n          ],\n          \"pinnedPeerCertSha256\": \"a06a27ca359c127770ebd5dcb27880b02bad39665879a2d6d9ba0b3c27bbd809\"\n        },\n        \"hysteriaSettings\": {\n          \"version\": 2,\n          \"auth\": \"labpass\"\n        }\n      }\n    }\n  ]\n}\n</code></pre></details>\n\n### Server config\n\nHysteria v2.11.0 server (self-signed certificate for hy.test; values generated for this test on"
+    },
+    {
+     "number": 7140,
+     "title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T11:53:44Z",
+     "updated_at": "2026-10-15T22:41:19Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7140",
+     "body": ""
     },
     {
      "number": 7160,
@@ -223,17 +641,6 @@
      "user": "SashaAch",
      "url": "https://github.com/XTLS/Xray-core/issues/7160",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nIf an outbound has `streamSettings.sockopt.interface` set and that interface does not exist at dial time, Xray does not fail the dial. It logs `failed to apply socket options > failed to get interface ...` at **Info** level and opens the connection without any binding, so it follows the system routing table.\n\n`transport/internet/system_dialer.go` (v26.10.10, lines 134-139; same in v26.9.9) only logs the error returned by `applyOutboundSocketOptions` and goes on to `dialer.DialContext`. The UDP path does the same (lines 77-81). The error itself comes from `net.InterfaceByName` in `transport/internet/sockopt_darwin.go:136-140`. From reading the source, Linux takes the same path (the error is logged, not returned); I tested macOS only.\n\nWhy this matters. A typical full-tunnel setup on a desktop routes everything into a TUN interface handled by Xray (default route split as 0.0.0.0/1 + 128.0.0.0/1 into the TUN), and binds outbounds with `sockopt.interface` so that their own sockets do not enter the TUN again. If the bound interface goes away, the fallback sends the outbound's sockets into the TUN, Xray routes them to the same outbound, and the connection loops.\n\nWe hit this loop in practice on macOS. A separate OpenVPN client provided a corporate network through its own utun interface, and the corporate subnet was routed to a freedom outbound so that it would follow that VPN's route. At night the OpenVPN client lost its connection and its utun interface was removed. From then on, every connection to the corporate subnet (including DNS queries to the corporate DNS server) entered the TUN, came back to the same outbound and entered the TUN again. When we looked, there were about 8,000 looped connections, all 16,384 ephemeral ports were in use, and other processes on the host got `EADDRNOTAVAIL` (`Can't assign requested address`) on connect until the loop was broken by restarting Xray.\n\nIn that incident the outbound had no `sockopt.interface` at all, so the loop itself is a config problem. The obvious fix is to bind the outbound to the other VPN's interface (`\"interface\": \"utunN\"`), so that it can never fall into the TUN. That does not work because of this issue: once the interface disappears, the binding is skipped and the loop is back. The only visible sign is an Info-level log line, which is hidden at the usual `warning` level.\n\nExpected: if the interface named in `sockopt.interface` cannot be found, the dial fails (fail closed), as a bound socket does when its interface has no route. At the very least the error should be logged as a warning. A silent fallback to the routing table defeats the purpose of binding: it can send traffic into a tunnel (loop) or past it (leak).\n\n### Reproduction Method\n\nNo server and no TUN are needed. Run Xray with the config below (interface `utun99` does not exist) and send a request through the SOCKS inbound:\n\n```\ncurl --socks5-hostname 127.0.0.1:1080 http://example.com/\n```\n\nResult: HTTP 200. The log shows that the interface was not found and the connection was opened anyway; its local endpoint is the address of whatever interface the routing table chose (on our machine, the address of a TUN interface that held the default route).\n\nFor comparison, with `\"interface\": \"en0\"` the same request goes out through en0 (local endpoint is en0's address) and no error is logged.\n\nExpected result: the connection through the outbound bound "
-    },
-    {
-     "number": 7140,
-     "title": "XDNS: add DOH",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T11:53:44Z",
-     "updated_at": "2026-10-15T19:41:53Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140",
-     "body": ""
     },
     {
      "number": 7165,
@@ -269,61 +676,6 @@
      "body": "Adds NetworkManager-vless to the Linux GUI clients list.\n\nI'm the author of this project. It is a NetworkManager VPN plugin powered by Xray-core, with a GTK 4 editor integrated into GNOME Settings.\n\nUsers can import VLESS links and subscriptions, manage connections from GNOME Quick Settings, and control them with nmcli.\n\nProject: https://github.com/s11va9/network-manager-vless\nReleases: https://github.com/s11va9/network-manager-vless/releases\n\nThe project is licensed under GPL-2.0-or-later."
     },
     {
-     "number": 7156,
-     "title": "WireGuard, MASQUE: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-14T17:20:29Z",
-     "updated_at": "2026-10-15T17:51:06Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7156",
-     "body": "as asked in #7130: WireGuard and MASQUE, client and server of both, move from gVisor to the stack of the TUN inbound, and it answers ICMP echo itself. no Go file imports gVisor any more (go.mod keeps it as indirect, a test of wireguard-go wants it), the linux amd64 release binary goes from 37.4 to 33.2 MB\n\nthe first commit is what the stack had to learn for that: opening TCP connections, UDP ports of its own, IP fragments both ways, ICMP \"too big\" and \"unreachable\", checksum verification, TCP timestamps, and dropping packets from or to loopback as gVisor did (without that a WireGuard peer reaches the server's localhost). the second commit is the switch\n\nWireGuard between two Xrays on a veth pair: one stream 240 MB/s instead of 143, eight streams 234 instead of 138, CPU of both ends 22 s/GB instead of 37. behind a 100 Mbit link it is equal or a little faster\n\nthe timestamps are there for an older Xray on the other end. after a timeout gVisor's sender repeats two segments and waits for the next timeout, and that one doubles unless the ACKs carry timestamps. without them 7 of 40 transfers of 8 streams from an old end to a new one stalled, with them none of 40\n\ndifferent from gVisor: the window is a fixed 1 MiB where gVisor's grows from 512 KiB to 2 MiB, the MASQUE inbound now answers IPv4 ping to any address (gVisor answered only IPv6 and its own address), and deadlines on these connections do nothing, as in the TUN inbound. TestWireguard passes traffic now, it was commented out\n\n<details>\n<summary>WireGuard, throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, each Xray on 4 cores with GOMAXPROCS=4, noKernelTun, MTU 1420. main was c77a4d0e then. median of 8 to 10 on the veth pair and of 3 to 6 on a link (played in user space: rate, one-way delay, drop-tail queue of 100), MB/s of payload, CPU-seconds of both Xrays per GB. \"kernel\" is the kernel's own TCP over the same link without Xray\n\n```\nveth pair, MB/s           main    PR      PR server,    PR client,     CPU s/GB\n                                          main client   main server    main    PR\ndown 1                     143    240     213           142            36.5    21.7\nup   1                     141    231     143           210            37.3    22.6\ndown 8                     138    234     223           171            35.7    24.1\nup   8                     151    225     162           212            36.1    24.3\n\nlinks, MB/s                 main    PR      kernel\n100 Mbit 5 ms    down 1     7.6     8.1     9.7\n100 Mbit 5 ms    down 8     7.7     8.2     9.2\n50 Mbit 1% loss  down 1     1.6     1.4     1.3\n50 Mbit 1% loss  down 8     4.0     4.4     4.5\n100 Mbit 50 ms   down 1     2.8     2.8     6.3\n100 Mbit 50 ms   down 8     5.1     5.3     6.3\n```\n\nthe timestamps cost nothing: the same build without them gives 238, 230, 239 and 228 in the PR column of the veth pair\n\non the 50 ms link one stream of the PR runs at either 4 or 2 MB/s, half of the samples each: the stack does not pace what it sends, and what one loss costs it there takes long to grow back\n</details>\n\n<details>\n<summary>an old end with a new one</summary>\n\nveth pair, 8 streams of 80 MB, 10 samples, the direction where the old end (main, gVisor) sends. seconds a sample took, F is one where a stream stood still for a minute\n\n```\nnew end                     old sends down                  old sends up\nno timestamps               F F F 3.5 4.1 13.6 5.7 F 6.6 28.3   4.8 4.3 51.6 4.4 5.4 7.4 5.9 6.8 16.4 9.2\ntimestamps                  3.9 4.2 5.1 4.3 5.6 5.0 4.4 4.5 3.9 4.9   6.4 18.1 5.6 6.2 8.2 3.8 4.1 4.6 4.4 7.8\nmain on both ends           9.0 5.9 4.1 9.9 6.0 3.6 5.9 6.5 5.7 4.3   12.6 4.2 9.2 5.9 5.4 6.9 5.9 5.9 12.2 6.4\nold end without RACK        4.0 3.8 4.0 3.3 3.7 3.7 3.5 3.9 3.7 3.8   3.9 4.0 3.8 4.8 4.6 3.4 3.6 3.6 3.8 3.6\n```\n\nthe last row is main with tcpip.TCPRecovery(0) for WireGuard, as the TUN inbound had it, against a new end without timestamps: the two segments per timeout c"
-    },
-    {
-     "number": 7151,
-     "title": "WireGuard outbound: Keep the device when its setup fails",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-14T14:15:39Z",
-     "updated_at": "2026-10-15T15:11:52Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151",
-     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
-    },
-    {
-     "number": 7162,
-     "title": "676a600 后 VLESS+REALITY+Vision 服务端 SIGSEGV",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-15T11:45:45Z",
-     "updated_at": "2026-10-15T14:57:14Z",
-     "user": "VariatezzZ",
-     "url": "https://github.com/XTLS/Xray-core/issues/7162",
-     "body": "服务端入站 vless-tcp-reality，客户端和服务端相同版本，裸核使用\n676a6000以后仅服务端出现SIGSEGV，回退低于676a6000即恢复，配置未动。\n\n核心崩溃堆栈日志：\n[1.log](https://github.com/user-attachments/files/33490416/1.log)\n\n问的AI分析的根因：\n```\n新 reality（Go1.27 同步）把 Conn.rawInput 由 bytes.Buffer 值改成\n*bytes.Buffer 指针池化（另加 smallInput，见 conn.go:113-128,888-973，\n空闲还会 Put+置nil 再换新 Buffer）。\n而 inbound.go:577-586、outbound.go:278-287 仍用\nrawInput = (*bytes.Buffer)(unsafe.Pointer(p+r.Offset))，\n偏移处现在只有 8 字节指针，被当成整个 Buffer 结构体解释，\nw.rawInput 即为野指针，读即崩。"
-    },
-    {
-     "number": 7136,
-     "title": "Lua: Add sandbox mechanism",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T02:03:08Z",
-     "updated_at": "2026-10-15T14:07:29Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136",
-     "body": "From https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6133901345\r\n\r\n脚本默认运行在沙盒模式\r\nBase64 内联的脚本无法提权\r\n本地文件可以使用命令签名，并配合 xray 启动参数提权\r\n\r\n```sh\r\n$ ./xray ed25519\r\nPrivateKey: 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8\r\nPublicKey: kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n\r\n$ ./xray lua sign -key 2LVGBhEdP0ZmITR03GEldu3tNuGstLfAsjlgeGYkTW8 test.lua\r\n```\r\n\r\n```lua\r\n-- @xray:privileged-signature=cc5JRC0CX09xK-xxDUWmXmSoXKRCYhNuHOZCluVRUrMPPCC576AnZjM9ah1wpuaATIyy2JstVPNxoHGcqBGyBA\r\nlocal log = require(\"xray.log\")\r\n\r\nlocal success, err = pcall(function()\r\n    os.execute(\"echo 'Warning: OS command executed!'\")\r\nend)\r\nif not success then\r\n    log.Error(\"Failed to exec: \", err)\r\nend\r\n\r\nfunction HandleRoute()\r\n    log.Info(\"Choosing the direct outbound\")\r\n    return \"direct\"\r\nend\r\n```\r\n\r\n```sh\r\n$ ./xray run --lua-privileged-pubkey=kO_NH1DtSc6oAdyaQA45cnOSE2iPXCaMqWluaAy9adk\r\n```"
-    },
-    {
-     "number": 7164,
-     "title": "XTLS Vision: never switches to direct copy when inner TLS records arrive back to back (IsCompleteRecord is per batch)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-15T12:47:34Z",
-     "updated_at": "2026-10-15T12:47:34Z",
-     "user": "pylaterreur",
-     "url": "https://github.com/XTLS/Xray-core/issues/7164",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [ ] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\nThe fourth box is unchecked on purpose: #6124 shows the same symptom for one download. It was closed together with #4878 by #6834, which fixed the close_notify leak but not the switch. Details below.\n\n### Description\n\nSince #5179 (first released in v25.12.1), `VisionWriter` switches to direct copy only when a whole read batch is made of complete TLS application-data records:\n\nhttps://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L362-L369\n\n`IsCompleteRecord` ([proxy.go#L408-L460](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L408-L460)) looks at one batch at a time and keeps no state between batches. For TLS 1.3 nothing else ends the padding: the shortcut at [L381](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L381) only applies to traffic that is not TLS 1.2+. Once a batch ends inside a record, the next batch starts inside a record and cannot pass. The switch then only happens if two reads in a row both end exactly on a record boundary.\n\nWith a sender that writes full-size records back to back, that doesn't happen:\n\n- The first read after the handshake is a single 8 KiB buffer. `ReadVReader` starts with one `buf.Size` buffer and only adds more after a full read ([readv_reader.go#L63-L70](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/common/buf/readv_reader.go#L63-L70), [#L124-L145](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/common/buf/readv_reader.go#L124-L145)). So when the handshake fits in 8 KiB, as it does here, the first 16 KiB record (16,406 bytes on the wire) is always cut. In the upload log below, the first batch is the client's ChangeCipherSpec + Finished (64 bytes) plus the first 8,128 bytes of the first record.\n- Later reads take up to 8 × 8 KiB. Whenever data waits in the socket, because the proxy or the link behind it is slower than the sender, every read is a full 64 KiB. Two full reads in a row can never both end on a record boundary, because 65,536 is not a multiple of 16,406. So the check can only pass next to a read that drains the socket, which needs the proxy to catch up with the sender.\n\nThe download batches come straight from freedom's reads of the target socket ([freedom.go#L435](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/freedom/freedom.go#L435), [proxy.go#L790-L797](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/proxy.go#L790-L797)). The upload batches are the client inbound's reads ([outbound.go#L367](https://github.com/XTLS/Xray-core/blob/701af60772cda123492f86e383e1fdba066614a9/proxy/vless/outbound/outbound.go#L367)).\n\nSo the connection stays in padding mode for the whole transfer. Each buffer is reshaped and padded, the inner TLS stream is encrypted a second time by the outer TLS, and neither direct copy nor, for downloads, splice ever starts. `CommandPaddingDirect` is only sent after the payload, when a short trailing record arrives alone (here the receiver's 1-byte reply or a close_notify).\n\n**Evidence** (repro below; plain TCP on 127.0.0.1, official Xray-linux-64.zip):\n\n- 1 GB upload at debug level: the client logs 232,453 `XtlsPadding … 0` lines. Its only `XtlsPadding … 2` is the 24-byte close_notify after the payload. In a 1 GB download, the server "
-    },
-    {
      "number": 7163,
      "title": "README: Add Lumen to Windows GUI clients",
      "is_pr": true,
@@ -333,17 +685,6 @@
      "user": "krambovic",
      "url": "https://github.com/XTLS/Xray-core/pull/7163",
      "body": "Lumen is an open-source VPN/proxy client for Windows focused on bypassing DPI-based censorship.\n\n- Repository: https://github.com/krambovic/Lumen\n- Windows (10/11 x64): uses Xray-core alongside sing-box; supports VLESS / VMess / Trojan, routing presets, TUN and system-proxy modes\n\nThis PR adds Lumen to the Windows list in the GUI Clients section."
-    },
-    {
-     "number": 7103,
-     "title": "feat(xdns): add encrypted DNS resolver support",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-07T23:53:32Z",
-     "updated_at": "2026-10-15T06:45:16Z",
-     "user": "HPPC114514",
-     "url": "https://github.com/XTLS/Xray-core/pull/7103",
-     "body": "## 改动说明\r\n\r\n为 xdns 增加 DoT、DoH（HTTP/2）、DoQ 和 DoH3 解析器，支持通过加密 DNS 服务传输隧道报文。保留 UDP、TCP 解析器，继续使用原始 DNS 报文，保留 TXT、CNAME 等查询类型和响应内容。\r\n\r\n## 主要改动\r\n\r\n- 新增 `tls://`、`https://`、`quic://` 和 `https+h3://` 地址解析，支持默认端口、HTTPS 路径和查询参数。\r\n- 新增 `serverName`、`bootstrap` 和证书信任配置，并校验解析器地址及 TLS 参数。\r\n- 为解析器增加请求超时、并发及队列限制，校验 DNS 响应与原始查询是否匹配。\r\n- 调整 xdns 发送和关闭流程，向调用方返回发送失败，补充连接、流和 HTTP/3 传输实例的资源回收。\r\n- 为共享 DNS 查询和 finalmask 拨号增加 context 支持，传递查询取消和超时信号。"
     },
     {
      "number": 7161,
@@ -410,28 +751,6 @@
      "user": "Risaro",
      "url": "https://github.com/XTLS/Xray-core/pull/6748",
      "body": "This stacks on #6745. Until that one is merged the diff here also contains its commit.\n\n### What it adds\n\nA `Storage` implementation for Google Drive, selected with `\"service\": \"Google Drive\"`, where `remoteFolder` is a Drive folder id and `secrets` holds ClientID, ClientSecret and RefreshToken.\n\n### No SDK\n\nPlain `net/http`, zero new entries in `go.mod`. It sits behind the same five method `Storage` interface as the local backend, so another provider is one more file and still no dependency.\n\n### How it works\n\nPaths are flattened into single names, so `streams/abc/c2s/000000000.seg` becomes `streams~abc~c2s~000000000.seg`, because Drive has no cheap path lookup and creating nested folders would cost a request per level.\n\nA name to id cache is filled from every listing, so a download costs one request instead of two. The access token is cached and refreshed on expiry or on a 401.\n\nRequests are retried on 429 and 5xx with a jittered backoff capped at 2 seconds. Jitter matters here: at concurrency 32 every request hits the rate limit at the same moment, and synchronised retries only make it worse. A request whose context is already cancelled is not retried at all.\n\n### Measurements\n\nBoth ends on a server in the Netherlands, against a real Google Drive account.\n\nRaw storage:\n\n* 4 sequential puts of 256 KiB: 199 KiB/s\n* 8 parallel puts of 256 KiB: 1637 KiB/s\n* 8 parallel gets of 256 KiB: 2453 KiB/s\n* listing a folder of 13 objects: 250 ms\n* an uploaded object becomes listable after about 200 ms, so the listing is fresh enough to drive the log\n\nTransport, 10 MB pushed through the WAL:\n\n* segment 128 KiB, concurrency 16: 1187 KiB/s\n* segment 256 KiB, concurrency 16: 1513 KiB/s\n* segment 256 KiB, concurrency 32: 1849 KiB/s\n* segment 512 KiB, concurrency 32: 2111 KiB/s\n\nReal proxy, curl through SOCKS into VLESS over XDRIVE over Google Drive:\n\n* 50 MB in 21.6 s, 2258 KiB/s, about 18.5 Mbit/s, byte identical\n* the first byte takes about 2 s, so bulk transfer is comfortable and interactive use is not\n\nMux, 30 parallel requests, which is roughly one web page:\n\n* without mux: 23675 ms and 30 sessions\n* with mux.cool at concurrency 8: 8605 ms and 4 sessions\n\nStability: 12 of 12 live runs against Drive.\n\n### Tests\n\nA fake Drive server on `httptest` covers upload, listing, download, delete, token caching and retries, and the whole transport is run over it. Live tests against a real account live in the same file and skip unless `XRAY_XDRIVE_DRIVE_SECRETS` points at a credentials file, so nothing here needs secrets in CI.\n\n### Known limits\n\nCredentials sit on the client, so this is for self hosted use. One outbound should enable mux.cool, otherwise every TCP connection becomes its own session with its own files. The HTTP client does not go through Xray's own dialer yet, so `sockopt` and a dialer proxy are not applied to Drive requests.\n"
-    },
-    {
-     "number": 5824,
-     "title": "Build: Build list adjustment and compatibility code cleaning",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-03-18T14:56:59Z",
-     "updated_at": "2026-10-14T17:04:33Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/5824",
-     "body": "该 PR 旨在改进构建流程并对长期不使用的系统及架构相关兼容性代码进行清理\r\n\r\n- 新增后备构建流程：该流程中的系统/架构组合仍会在代码发生变更时进行构建，但不会参与发版流程。\r\n  - 该区域用于存放暂停正式构建状态及处于不受支持但有长尾问题的系统/架构组合；\r\n  - 该流程用于在代码更改发生时提示相关的系统/架构组合是否能正常构建，但不一定会成为阻塞因素；\r\n  - 该流程中构建的 assets 不包含 geodata ，以及特定系统或架构需要的附属内容；\r\n  - 该流程构建出的 assets 可在 GitHub Actions 中下载，保存期限为 90 日。\r\n- 整理现有构建列表（部分内容参考 https://learn.microsoft.com/en-us/dotnet/core/compatibility/jit/11/minimum-hardware-requirements ）：\r\n  - x86-64 及 AArch64 (ARM64/ARMv8) 将为主要支持架构；x86 将属于附带支持架构；\r\n  - 重新整理附加系统/架构表；\r\n  - 针对 macOS AArch64 指定最低指令集版本为 v8.4 (Apple M1)；\r\n  - 针对 Windows AArch64 指定最低指令集版本为 v8.2 (Snapdragon 850)；\r\n  - 针对 macOS x86-64 指定最低指令集版本为 v3 (Intel Haswell)；\r\n  - 针对 Windows x86-64 指定最低指令集版本为 v2 (Intel: Nehalem (Core, Xeon), Sandy Bridge, Silvermont; AMD: Bulldozer, Jaguar; Zhaoxin: ZX-C)；\r\n  - 流程细节整理。\r\n- 清理针对 WASM、Illumos、JS、Solaris 等无法再正常构建内容的兼容标记。\r\n- 清理已经废弃的 build tag 模式。\r\n- 由于目前对 OpenBSD 的支持人力不足， OpenBSD 转入“众包维护”模式：\r\n  - 仍然接受对 OpenBSD 的支持代码的更新及改进。\r\n\r\n--------\r\n## 针对过时或老旧架构的重要提示\r\n\r\n考虑到 32 位系统及 MIPS 相关系统式微，后续将在新的大版本 Go 发布时对构建表进行调整。\r\n调整过程将受 Go 支持的影响或现实设备支持而发生变化。\r\n| 时间 | 系统/架构组合 | 预期操作 |\r\n|---|---|---|\r\n| 待定 | Windows 7, x86, x86-64 | 最后一版将为 2028 年八月新的 Go 1.x 版本发布前，或受其它因素影响而提前结束（如使用率过低或不可逆的破坏性更改）。该节点取最早到来时间。 |\r\n| 2027 年二月 | Windows, x86 | 在新的 Go 大版本发布时移入后备构建，此后由 Go 上游决定 |\r\n| 2027 年二月 | Linux, ARMv5 | 在新的 Go 大版本发布时移除构建 |\r\n| 2027 年二月 | Linux, ARMv6 | 在新的 Go 大版本发布时移入后备构建 |\r\n| 2027 年二月（待定） | Linux, MIPS64 BE/LE | 在新的 Go 大版本发布时移除构建 |\r\n| 2027 年二月（待定） | Linux, MIPS32 BE | 在新的 Go 大版本发布时移入后备构建 |\r\n| 2027 年二月（待定） | Linux, MIPS32 LE | 在新的 Go 大版本发布时移入后备构建 |\r\n| 待定 | Linux, x86 | 由 Go 上游决定 |\r\n| 待定 | Linux, ARMv7 | 由 Go 上游决定 |\r\n"
-    },
-    {
-     "number": 7155,
-     "title": "Treat int as int32",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-14T16:54:48Z",
-     "updated_at": "2026-10-14T16:54:58Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7155",
-     "body": "修复一些把int当int64用的问题（不然会在32位设备上出问题）"
     },
     {
      "number": 7148,
@@ -579,6 +898,348 @@
    ],
    "comments": [
     {
+     "id": 6208077399,
+     "issue": 7170,
+     "issue_title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "created_at": "2026-10-16T04:27:30Z",
+     "user": "Ahmad-2213",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6208077399",
+     "body": "@4RH1T3CT0R7 \r\n~~I'm not familiar with Github, you can check out my repo , if you find it useful, go ahead & submit the PRs; I'd be happy if there's a use for it.~~"
+    },
+    {
+     "id": 6208051867,
+     "issue": 7170,
+     "issue_title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "created_at": "2026-10-16T04:25:15Z",
+     "user": "Ahmad-2213",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6208051867",
+     "body": "@4RH1T3CT0R7 Greetings!\r\nI've addressed All of these issues in my Repo.\r\n@RPRX ; I've Also introduced a Mechanism which prevents per segment file creation/Listing; this will save roughly 1s and is the biggest change.\r\nhttps://github.com/Ahmad-2213/Xray-core/commit/116b9d462999b37d3440bd298d6295f53bc204fd\r\n\r\n~~since this was AI, I fixed most of the Bugs that Came after it via Claude.~~\r\nRight now, I'm Finalizing the patches for a final test.\r\nI was aiming to load hls files that most of the sites put a 3s limit for live streams , with the later 1s save , I could achive ~2.2s RTT which is close to the floor & hls requests are now fine. ~~ofcourse for bulk transfer , this would initially go over 3-4 s ~~"
+    },
+    {
+     "id": 6207997311,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T04:20:25Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207997311",
+     "body": "~xray ddos 攻击器~\r\n~xray 压缩工具~\r\n😁"
+    },
+    {
+     "id": 6207984442,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T04:19:16Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207984442",
+     "body": "> 要不要我把往任意 dest 发包的 push 上来\r\n\r\n~~暂时不了吧，听起来有点那啥~~"
+    },
+    {
+     "id": 6207945093,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T04:15:46Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207945093",
+     "body": "所以 noise 看五元组还是三元组？\r\n要不要我把往任意 dest 发包的 push 上来"
+    },
+    {
+     "id": 6207934753,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T04:14:52Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207934753",
+     "body": "不过目前由于 https://github.com/XTLS/Xray-core/pull/7136 把 https://github.com/XTLS/Xray-core/pull/7132 刚加的 inline scripts 给禁用了所以 fm 用到的 lua 难以分享，先看看沙盒模式有没有可攻击面吧"
+    },
+    {
+     "id": 6207468607,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T03:32:47Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207468607",
+     "body": "我看了一下 header custom 应该可以完全由 lua 接管"
+    },
+    {
+     "id": 6207263889,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T03:16:16Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207263889",
+     "body": "对 fm 没有足够的了解\r\n所以之前光 review 的 lua 部分\r\n\r\n他现在还是接收 core 的调度，只能发给指定地址\r\n一个小改动可以对任意目标发包\r\n自己安排计划的话不行，需要我另外提供一个 event 框架"
+    },
+    {
+     "id": 6207003363,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:56:48Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6207003363",
+     "body": "能不能验证一下这个逻辑下的全能性 能自行完成多少已有的noise?\r\n顺便那个header custom理论上是不是能删了"
+    },
+    {
+     "id": 6206984006,
+     "issue": 7155,
+     "issue_title": "Chore: Treat int as int32",
+     "created_at": "2026-10-16T02:55:01Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7155#issuecomment-6206984006",
+     "body": "https://github.com/XTLS/Xray-core/pull/7148\r\n\r\n总之就是32位平台上 int 会是 int32 上限是 21 亿 一般情况下遇不到 但是要小心手残把 time.Duration 和时间戳转化并处理的场景 前者在二点几秒溢出后者是经典的2038"
+    },
+    {
+     "id": 6206942412,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:51:18Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206942412",
+     "body": "好了"
+    },
+    {
+     "id": 6206858968,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:43:52Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206858968",
+     "body": "~~过于没必要的 tests 可以删了~~"
+    },
+    {
+     "id": 6206829921,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:41:19Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206829921",
+     "body": "漏了 infra 马上\r\n~ai 总喜欢做多余的测试，ai 写的果然得是 ai 改才行~"
+    },
+    {
+     "id": 6206814083,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:39:57Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206814083",
+     "body": "@Meo597 tests"
+    },
+    {
+     "id": 6206614952,
+     "issue": 7164,
+     "issue_title": "XTLS Vision: never switches to direct copy when inner TLS records arrive back to back (IsCompleteRecord is per batch)",
+     "created_at": "2026-10-16T02:22:59Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7164#issuecomment-6206614952",
+     "body": "@yuhan6665 "
+    },
+    {
+     "id": 6206585092,
+     "issue": 7168,
+     "issue_title": "Outbound: Close a removed handler and its connections",
+     "created_at": "2026-10-16T02:20:26Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7168#issuecomment-6206585092",
+     "body": "Link https://github.com/XTLS/Xray-core/pull/5844"
+    },
+    {
+     "id": 6206556635,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-10-16T02:18:00Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6206556635",
+     "body": "@izislesar 先 rebase，然后把 uTLS commit id 改成 https://github.com/refraction-networking/utls/commit/ff1b50fbbe9a6dff1dcb1cfc0493bd5b0f073f67 吧"
+    },
+    {
+     "id": 6206504511,
+     "issue": 7162,
+     "issue_title": "676a600 后 VLESS+REALITY+Vision 服务端 SIGSEGV",
+     "created_at": "2026-10-16T02:13:40Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7162#issuecomment-6206504511",
+     "body": "@yuhan6665 @Fangliding "
+    },
+    {
+     "id": 6206487351,
+     "issue": 7155,
+     "issue_title": "Chore: Treat int as int32",
+     "created_at": "2026-10-16T02:12:13Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7155#issuecomment-6206487351",
+     "body": "~~等一下，这个标题有点迷惑了，另外有 related link 吗~~"
+    },
+    {
+     "id": 6206439499,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:08:19Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206439499",
+     "body": "好吧，我去 clone 他"
+    },
+    {
+     "id": 6206431476,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:07:44Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206431476",
+     "body": "~~那么这个 PR 的 test 通不过~~"
+    },
+    {
+     "id": 6206410065,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T02:06:14Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206410065",
+     "body": "似乎不需要 rebase 只需要改工厂那边传入一个 init stack size 就行"
+    },
+    {
+     "id": 6206326618,
+     "issue": 7124,
+     "issue_title": "Noise finalmask: Support lua `script` as well (inline scripts were disabled)",
+     "created_at": "2026-10-16T01:59:56Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6206326618",
+     "body": "@Meo597 你有想修改的直接改吧，~~顺便替他 rebase 一下~~"
+    },
+    {
+     "id": 6205689663,
+     "issue": 7136,
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
+     "created_at": "2026-10-16T01:07:41Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6205689663",
+     "body": "准备合并，你记得修改一下 PR 描述 @Meo597 "
+    },
+    {
+     "id": 6205668061,
+     "issue": 7151,
+     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
+     "created_at": "2026-10-16T01:05:53Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6205668061",
+     "body": "@LjhAUMEM 能合的时候说一声"
+    },
+    {
+     "id": 6205278920,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-16T00:34:43Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6205278920",
+     "body": "@Fangliding 就比如这点，用外部库的话需要他们实现允许外部 alloc memory，最后按序号送走 slice，~~当然我还是没看隔壁库~~\r\n\r\n即使这样，放 Xray-core 的代码内也会更简单，lightweight TCP/IP stack 的代码可以直接调用 Xray 的 buf 以及附属的那些函数"
+    },
+    {
+     "id": 6205035216,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-16T00:15:36Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6205035216",
+     "body": "这样的话能减少一次 copy，~~再优化就是 TUN 入站与 WG/MASQUE 出站的数据直穿了不过不通用~~\r\n\r\nTLS/QUIC 库也能这么改以减少一次 copy（如 [VLESS Encryption](https://github.com/XTLS/Xray-core/pull/5067) 的“avoids another copy()”）~~不过再说吧~~，今天写的一个答复：\r\n\r\n> 对于代理协议而言性能主要取决于后续数据的转发，优化点都是“减少 copy 次数”，~~这句话被马掉了~~，其实深度定制 TLS 库的话可以减少一次 copy\r\n> \r\n> 安全性可以分为加密安全性和隐私，X25519MLKEM768 密钥交换加 AES 对称加密是目前最流行的方案，还有一些点可以看 VLESS Encryption 那个 PR，隐私的话主要取决于威胁模型，不能一概而论\r\n> \r\n> REALITY 的后续方向在频道中有说，主要是“IP 加密”但比较难推动，XTLS 的后续方向是 Seed 和“预连接”、Switch 等方案，在 GitHub 上和频道中有过大量讨论，这些应该要明年才能落地了"
+    },
+    {
+     "id": 6204823689,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-16T00:00:26Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6204823689",
+     "body": "@4RH1T3CT0R7 关于 https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6119897360 https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6125269698 我又看了下，你的意思是让 Linux 来 ensure order？~~差点被你给绕进去了~~，我的意思是比如直接用一个 2k 的 Xray buf 来接收一个 IP 帧，如果它有有效数据就 trim TCP/IP header，最后按序号送走"
+    },
+    {
+     "id": 6204811580,
+     "issue": 7169,
+     "issue_title": "hysteria outbound: stream blocked on flow control is never released after the local connection ends",
+     "created_at": "2026-10-15T23:59:27Z",
+     "user": "thatssoheil",
+     "url": "https://github.com/XTLS/Xray-core/issues/7169#issuecomment-6204811580",
+     "body": "Implemented and verified; opened a pull request: https://github.com/XTLS/Xray-core/pull/7172\n\nBranch `fix/hysteria-reset-stalled-writes` @ c85f66fa (one file + a transport test). `interConn.Close()` now resets the stream's write side (`CancelWrite`) when the request direction still has a write in flight, so the blocked `Write` returns and the peer drops the unread data and releases its share of the connection-level window. Cleanly finished sessions keep the plain close.\n\nVerified end to end on loopback against a real hysteria v2.11.0 server, using your reproduction (4 uploads to a target that stops reading after ~2 MB, aborted with `SO_LINGER 0`):\n\n- before (10879a4a): 11 fresh requests over ~43 s after the abort never succeed;\n- after: the first retry that lands after the aborted sessions idle out succeeds (~6 s after the abort with `connIdle` forced to 5 s in the test client).\n\nThe transport test `TestTCPStalledWriteClose` fails on main (\"stalled write did not return after close\") and passes with the change; it also checks that a new stream can send again and that a cleanly finished stream still delivers FIN + all data.\n\nOne scope note: the release happens when the aborted session ends (its own idle timeout, or any other teardown of the session) - the local abort itself is not observable once the writer is wedged, so the idle timeout remains the upper bound with stock servers. This composes with the server-side fix in HyNetworks/hysteria#1703 rather than replacing it.\n"
+    },
+    {
+     "id": 6204450876,
+     "issue": 7169,
+     "issue_title": "hysteria outbound: stream blocked on flow control is never released after the local connection ends",
+     "created_at": "2026-10-15T23:30:50Z",
+     "user": "thatssoheil",
+     "url": "https://github.com/XTLS/Xray-core/issues/7169#issuecomment-6204450876",
+     "body": "Traced on main (10879a4a) and reproduced the scenario on loopback: 4 uploads to a target that stops reading after ~2 MB, each writing ~18 MB over 4 s, aborted with `SO_LINGER 0`; a 5th request over the same client connection gets no data within 30 s - same result as your run.\n\nThe code confirms it: `interConn.Close()` is `CancelRead(0)` + `stream.Close()`, and nothing ever touches the stream's write side. A `Write` blocked on the flow-control window is only released by `CancelWrite` (\"Write will unblock immediately\") or the connection closing - `Close()` alone does not wake it, and the FIN it queues cannot be delivered while data is stuck behind the window, so the peer is never told to drop the stream's buffered data. That is why nothing recovers until the session and connection are gone.\n\nPlan: in `interConn.Close()`, when the request side still has a write in flight, cancel the stream's write side (`CancelWrite`, i.e. RESET_STREAM) instead of only queueing the FIN, so the blocked `Write` returns and the RESET reaches the peer, releasing the stream's unread data and crediting the connection-level window. Cleanly finished sessions keep the plain close. Note the teardown itself is still driven by the client's idle timeout when the local abort arrives while the writer is wedged (at that point the abort is not observable), but the release then actually happens instead of never, and it should compose with the server-side fix in HyNetworks/hysteria#1703.\n\nI will add a transport test for the blocked-write case and rerun this rig with the fix, then post the branch here.\n"
+    },
+    {
+     "id": 6204360432,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-15T23:23:49Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6204360432",
+     "body": "> > no Go file imports gVisor any more (go.mod keeps it as indirect, a test of wireguard-go wants it)\r\n> \r\n> 这个也换掉吧\r\n\r\n~~我仔细看了下，你说的应该是 golang.zx2c4.com/wireguard 这个外部库的 test？那没事了~~"
+    },
+    {
+     "id": 6204133548,
+     "issue": 7170,
+     "issue_title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "created_at": "2026-10-15T23:06:28Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6204133548",
+     "body": "From https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6116258188 ，我觉得 XDRIVE 先把 https://github.com/XTLS/Xray-core/pull/6748#issuecomment-5752780799 提到的那些点弄好吧，~~感觉现在的代码半残且没深度 deVibe~~\r\n\r\n是否 h1 参考 XDNS DoH 的新方案 https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170232935 ，XHTTP 也会换成新方案"
+    },
+    {
+     "id": 6203998239,
+     "issue": 7103,
+     "issue_title": "feat(xdns): add encrypted DNS resolver support",
+     "created_at": "2026-10-15T22:56:43Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7103#issuecomment-6203998239",
+     "body": "https://github.com/XTLS/Xray-core/pull/7140 已合并，先 rebase https://github.com/XTLS/Xray-core/commit/10879a4a8b202fb739ea9db6cb504f6a29f2b082 ，你想加 DoT `tls://` 和 DoQ `quic://` 的话可以参考着加一下，~~虽然感觉这俩用处不大~~"
+    },
+    {
+     "id": 6203526955,
+     "issue": 7171,
+     "issue_title": "TUN inbound: Add disableFakeICMP config option for pongs",
+     "created_at": "2026-10-15T22:24:37Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7171#issuecomment-6203526955",
+     "body": "要加的话给 WG、MASQUE 入站也加上，先等合并 https://github.com/XTLS/Xray-core/pull/7156 后 rebase 吧，不过 Xray 后续会支持 ICMP，选项得设计成 `\"icmp\":`"
+    },
+    {
+     "id": 6203396791,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-15T22:15:38Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6203396791",
+     "body": "WireGuard 出站那个 Linux kernelTUN 可能就类似于隔壁 TUN 的“system”选项吧，感觉后续的版本可以删掉了 @Fangliding "
+    },
+    {
+     "id": 6203239736,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-15T22:05:05Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6203239736",
+     "body": "@LjhAUMEM 之前 XDNS/XICMP 说一个精简版的 TCP/IP stack 这下有了，不过可能还是定制版的 mKCP 表现更好，没那些小包\r\n\r\n就像 XDRIVE 虽然也能承载 TCP/IP、mKCP 但不如自己搞套机制，比如 XDRIVE 本身几乎是顺序包、不丢包，主要考虑提速就行"
+    },
+    {
+     "id": 6203006617,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-15T21:50:01Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6203006617",
+     "body": "> no Go file imports gVisor any more (go.mod keeps it as indirect, a test of wireguard-go wants it)\r\n\r\n这个也换掉吧"
+    },
+    {
+     "id": 6202933664,
+     "issue": 7156,
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
+     "created_at": "2026-10-15T21:45:22Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6202933664",
+     "body": "@Fangliding loss recovery and reconnects are in the third commit now. on a 100 Mbit link with 50 ms delay and 0.5 % loss eight streams get 1.6 MB/s where gVisor gets 1.4, at 50 Mbit and 1 % loss 4.5 against 4.1, one stream about the same as gVisor. when the link is gone for 5, 20 or 60 s the first data comes back within 1.5 s, gVisor takes 1.7, 5.8 and 46 s, and in one run after a 20 s outage of the upload it did not come back in one of three tries. the numbers are in the description, marking it ready again\n"
+    },
+    {
      "id": 6201797743,
      "issue": 7166,
      "issue_title": "Proxy: Close a removed user's connections",
@@ -599,7 +1260,7 @@
     {
      "id": 6200775375,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-15T19:41:53Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6200775375",
@@ -653,7 +1314,7 @@
     {
      "id": 6198618506,
      "issue": 7156,
-     "issue_title": "WireGuard, MASQUE: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
      "created_at": "2026-10-15T17:51:06Z",
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6198618506",
@@ -662,7 +1323,7 @@
     {
      "id": 6198531450,
      "issue": 7156,
-     "issue_title": "WireGuard, MASQUE: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
      "created_at": "2026-10-15T17:46:23Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6198531450",
@@ -671,7 +1332,7 @@
     {
      "id": 6198466036,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-15T17:42:50Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6198466036",
@@ -698,7 +1359,7 @@
     {
      "id": 6193737841,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T13:52:34Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6193737841",
@@ -707,7 +1368,7 @@
     {
      "id": 6192301221,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T12:41:46Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6192301221",
@@ -716,7 +1377,7 @@
     {
      "id": 6192125921,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T12:32:45Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6192125921",
@@ -806,7 +1467,7 @@
     {
      "id": 6189747793,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T10:16:28Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6189747793",
@@ -815,7 +1476,7 @@
     {
      "id": 6189684246,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T10:13:01Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6189684246",
@@ -824,7 +1485,7 @@
     {
      "id": 6186168308,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-15T06:42:26Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6186168308",
@@ -842,7 +1503,7 @@
     {
      "id": 6185965142,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-15T06:28:16Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6185965142",
@@ -860,7 +1521,7 @@
     {
      "id": 6184894359,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T05:08:24Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6184894359",
@@ -878,7 +1539,7 @@
     {
      "id": 6184362904,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-15T04:23:27Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6184362904",
@@ -896,7 +1557,7 @@
     {
      "id": 6181512310,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-15T00:27:01Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6181512310",
@@ -914,7 +1575,7 @@
     {
      "id": 6177501262,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T20:17:49Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6177501262",
@@ -923,7 +1584,7 @@
     {
      "id": 6176918307,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T19:46:51Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6176918307",
@@ -941,7 +1602,7 @@
     {
      "id": 6175430879,
      "issue": 7156,
-     "issue_title": "WireGuard, MASQUE: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
      "created_at": "2026-10-14T18:28:45Z",
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6175430879",
@@ -950,7 +1611,7 @@
     {
      "id": 6175392843,
      "issue": 7156,
-     "issue_title": "WireGuard, MASQUE: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
+     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
      "created_at": "2026-10-14T18:26:43Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6175392843",
@@ -959,7 +1620,7 @@
     {
      "id": 6175314586,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T18:22:34Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6175314586",
@@ -968,7 +1629,7 @@
     {
      "id": 6175266318,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T18:19:57Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6175266318",
@@ -986,7 +1647,7 @@
     {
      "id": 6174687307,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T17:49:03Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6174687307",
@@ -1049,7 +1710,7 @@
     {
      "id": 6173003728,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T16:21:33Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6173003728",
@@ -1085,7 +1746,7 @@
     {
      "id": 6171264159,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T14:55:17Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6171264159",
@@ -1121,7 +1782,7 @@
     {
      "id": 6170831601,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T14:34:08Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170831601",
@@ -1130,7 +1791,7 @@
     {
      "id": 6170824396,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T14:33:47Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170824396",
@@ -1139,7 +1800,7 @@
     {
      "id": 6170730371,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T14:29:07Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170730371",
@@ -1148,7 +1809,7 @@
     {
      "id": 6170710795,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T14:28:09Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170710795",
@@ -1157,7 +1818,7 @@
     {
      "id": 6170481423,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T14:17:11Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170481423",
@@ -1175,7 +1836,7 @@
     {
      "id": 6170316990,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T14:09:08Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170316990",
@@ -1184,7 +1845,7 @@
     {
      "id": 6170232935,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T14:05:00Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170232935",
@@ -1193,7 +1854,7 @@
     {
      "id": 6170164642,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T14:01:39Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6170164642",
@@ -1202,7 +1863,7 @@
     {
      "id": 6169770844,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T13:42:31Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169770844",
@@ -1211,7 +1872,7 @@
     {
      "id": 6169360819,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T13:22:11Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169360819",
@@ -1220,7 +1881,7 @@
     {
      "id": 6169259284,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T13:16:54Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6169259284",
@@ -1229,7 +1890,7 @@
     {
      "id": 6169205308,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T13:14:08Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6169205308",
@@ -1238,7 +1899,7 @@
     {
      "id": 6168976443,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T13:02:38Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168976443",
@@ -1256,7 +1917,7 @@
     {
      "id": 6168216368,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T12:21:53Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168216368",
@@ -1265,7 +1926,7 @@
     {
      "id": 6168181241,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T12:19:53Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168181241",
@@ -1274,7 +1935,7 @@
     {
      "id": 6168152700,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T12:18:14Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6168152700",
@@ -1283,7 +1944,7 @@
     {
      "id": 6168106709,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T12:15:36Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168106709",
@@ -1292,7 +1953,7 @@
     {
      "id": 6168100968,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T12:15:16Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168100968",
@@ -1310,7 +1971,7 @@
     {
      "id": 6168062702,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T12:13:00Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6168062702",
@@ -1328,7 +1989,7 @@
     {
      "id": 6167736394,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T11:54:05Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167736394",
@@ -1337,7 +1998,7 @@
     {
      "id": 6167718871,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T11:53:00Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6167718871",
@@ -1373,7 +2034,7 @@
     {
      "id": 6167307686,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T11:29:14Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167307686",
@@ -1382,7 +2043,7 @@
     {
      "id": 6167254749,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T11:25:55Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167254749",
@@ -1391,7 +2052,7 @@
     {
      "id": 6167179058,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T11:21:13Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167179058",
@@ -1400,7 +2061,7 @@
     {
      "id": 6167091531,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T11:15:59Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6167091531",
@@ -1409,7 +2070,7 @@
     {
      "id": 6165177585,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T09:25:23Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6165177585",
@@ -1445,7 +2106,7 @@
     {
      "id": 6163309847,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T07:34:08Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6163309847",
@@ -1454,7 +2115,7 @@
     {
      "id": 6163021035,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T07:15:26Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6163021035",
@@ -1463,7 +2124,7 @@
     {
      "id": 6163002483,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T07:14:10Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6163002483",
@@ -1472,7 +2133,7 @@
     {
      "id": 6162966033,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T07:11:42Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6162966033",
@@ -1508,7 +2169,7 @@
     {
      "id": 6161877361,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T05:51:21Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6161877361",
@@ -1517,7 +2178,7 @@
     {
      "id": 6161808702,
      "issue": 7140,
-     "issue_title": "XDNS: add DOH",
+     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
      "created_at": "2026-10-14T05:45:43Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6161808702",
@@ -1526,7 +2187,7 @@
     {
      "id": 6161674668,
      "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
+     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
      "created_at": "2026-10-14T05:34:34Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6161674668",
@@ -1542,229 +2203,13 @@
      "body": "The problem right now is not the Download Speed , it's the continousity of download speed; as you've seen the Speeds/s which comes directly from xray-core api is that the flow is bursty ( partialy it's due to mux, but some bugs i found via claude and addressed them), last night i made some progress towards this and the flow was more fluent, So what i can say is that the Speed issue is addressed , the Mux Over Mux is addressed and a little bit of latency is optimized, i need to dig more to see whether more improvements are possible; I've also added segmentGrowthFactor which you've had mentioned earlier & it will be really helpful, especially for server that acts as a download gate for client.\r\n\r\n> <img width=\"1569\" height=\"248\" alt=\"image\" src=\"https://github.com/user-attachments/assets/f60f3823-cae4-4a20-b1c8-4aa6f9bc992b\" />\r\n\r\nthese are our hard limits.\r\n~~I'm Thinking of reducing overhead & I/O operations on Drive Side to reduce the Drive Side waiting Cost...~~"
     },
     {
-     "id": 6160779056,
-     "issue": 7145,
-     "issue_title": "wireguard, udp: batch TUN/UDP I/O, eliminate hot-path allocations, and fix UDP burst drops & Linux IPv4 routing",
-     "created_at": "2026-10-14T04:17:41Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7145#issuecomment-6160779056",
-     "body": "~我就知道毛坯房肯定有人想装修一下子~\r\n\r\n实际上分 ipv4 ipv6 packet conn 进行 oob control readwrite batch 原仓库就有，但考虑到 dialerproxy 和 finalmask 所以当时没分 ipv4 ipv6 conn，现在是否要引入我也不确定 ~@Fangliding 你觉得呢~"
-    },
-    {
-     "id": 6160723887,
-     "issue": 7140,
-     "issue_title": "XDNS: add DOH",
-     "created_at": "2026-10-14T04:13:00Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6160723887",
-     "body": "> 所以这个如果写 `doh://a.com` 然而 TLS serverName 是 b.com，a.com 会被当作 HTTP host 对吧\r\n\r\n如果 tlsConfig 的 ServerName 为空就是 a.com，设置了会遵循就是 b.com"
-    },
-    {
-     "id": 6160404899,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T03:44:46Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6160404899",
-     "body": "默认沙盒的话，就没有 env 这回事儿了\r\n\r\n本来是特权模式公钥只能通过启动参数注入，所以非常安全\r\n~这套设计简直是艺术品~\r\n\r\n目前我锁的沙盒是白名单，不像别的项目是黑名单需要费尽心思封堵\r\n代价是 lua 能力很弱鸡，因为只有 math 和 string 可用\r\n甚至不如那些游戏插件们给的权限多\r\n连获取系统时间都不行，因为取时间属于 os 包\r\n\r\n所以才想着留特权模式\r\n不然 lua 真的很鸡肋了\r\n\r\n而且下个 PR 准备弄全局脚本，注册 event 去控制 xray 这大概率也需要签名特权保护\r\n我担心今天有人想要 os.time 明天有人想要 os.getenv 后天要网络能力\r\n每加一个玩意都得想办法锁在沙盒里怕逃逸，没完没了了\r\n**我们根本没能力去维护一个后期要求不断扩权的沙盒**\r\n\r\n~签名特权的模型简直是艺术品~\r\n要不再考虑下？\r\n~实在不行那就只能删特权模式了~"
-    },
-    {
-     "id": 6160306346,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T03:35:55Z",
+     "id": 6137264458,
+     "issue": 7130,
+     "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
+     "created_at": "2026-10-13T03:03:22Z",
      "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6160306346",
-     "body": "~~反正目前不能有特权模式，不改的话小心我把整个 lua 从 Xray 中删掉~~\r\n\r\n另外沙盒模式你也得多参考些其它项目、确保不会出什么逃逸问题，比如别通过 env 限制，env 随便改的"
-    },
-    {
-     "id": 6160241470,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T03:30:14Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6160241470",
-     "body": "> 我记得你这个不是 reload 失败就不会替换文件吗？\r\n\r\n下载完之后旧的改名为 .bak 然后 reload\r\n如果失败那么整体回滚\r\n\r\n---\r\n\r\n> 如果比如配置中就没用到 geosite.dat 是不是就不会失败？\r\n\r\n没用到的不会导致失败，因为 geodata 为了节省内存把任意来源的都编译到一起\r\n关键是得益于 *ray ~优秀的架构~我不能在 app/geodata 去偷看 router dns 的设置因此无法得知到底哪个 dat 真的被用到\r\n\r\n---\r\n\r\n> script 指向正常 geo 文件的话 Xray 应该跑不起来吧\r\n\r\n压根过不了脚本编译\r\n\r\n---\r\n\r\n> 特权模式、签不签名先删了吧太复杂了，以后真用到了再开放\r\n\r\n那段代码写得十分~艺术品~，只有几十行\r\n从代码角度，沙盒模式才是要多写代码\r\n\r\n一人血书强烈建议留下特权模式\r\n这样有需要的就可以 curl iptables 了\r\n\r\n根本钻不到漏洞\r\n有 ed25519 签名"
-    },
-    {
-     "id": 6160069969,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T03:15:24Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6160069969",
-     "body": "> geodata 本来就有软的格式校验，下载完之后立刻 reload 如果把 cron 拉成高频 script 理论上可能有机会加载到？太难了\r\n\r\n我记得你这个不是 reload 失败就不会替换文件吗？如果比如配置中就没用到 geosite.dat 是不是就不会失败？\r\n\r\n> 那就做两条，geodata 那边加个头校验 script 绝不允许从资产目录加载\r\n\r\n可以，另外你确认下 script 指向正常 geo 文件的话 Xray 应该跑不起来吧（解析脚本失败）\r\n\r\n> 另外，即便要求所有本地 Lua 都签名 我认为也应该区分沙盒签名和特权签名，不能签名就等于特权\r\n> \r\n> 所以现在本地普通 lua 还要求签名吗？还是维持默认沙盒、只有特权模式需要签名？\r\n\r\n我想了一下不对啊，特权模式、签不签名先删了吧太复杂了，以后真用到了再开放\r\n\r\n本地 lua 默认沙盒模式（即使能访问内网那也相当于 rvs），就像以后做 JSON 订阅不会开放 rvs 一样，也不应开放 script"
-    },
-    {
-     "id": 6159779887,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T02:49:44Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159779887",
-     "body": "geodata 本来就有软的格式校验，下载完之后立刻 reload\r\n如果把 cron 拉成高频\r\nscript 理论上可能有机会加载到？太难了\r\n\r\n那就做两条，geodata 那边加个头校验\r\nscript 绝不允许从资产目录加载\r\n\r\n另外，即便要求所有本地 Lua 都签名\r\n我认为也应该区分沙盒签名和特权签名，不能签名就等于特权\r\n\r\n所以现在本地普通 lua 还要求签名吗？还是维持默认沙盒、只有特权模式需要签名？"
-    },
-    {
-     "id": 6159614877,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T02:35:16Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159614877",
-     "body": "虽然我又想了一下上述攻击应该不成立，因为这要求 JSON 配置里的 script 一开始指向正常的 geodata.dat 然后 Xray 跑不起来\r\n\r\n你检查一下代码应该是这样，顺便给下载下来的 geo 加个校验吧，再上一层保险，即使配置里没用到\r\n\r\n~~不过更缺心眼的是比如 GUI 自己有更新 geo 的机制且没校验，攻击者让小白填进去 lua 链接并且给他 JSON~~\r\n\r\n~~不过小白都这么听话了那么让干其它的也干，攻击者让他安装个恶意客户端要啥有啥，这就是我们管不了的事情了~~"
-    },
-    {
-     "id": 6159405671,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T02:17:14Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159405671",
-     "body": "> 本地也要签名的话，想不到威胁模型在哪\r\n> \r\n> 因为恶意程序都能随便修改本地文件了，干嘛盯着 xray lua 不放 本来就为所欲为了\r\n\r\n并不需要，订阅的恶意 JSON 中 Xray 自动换掉 geo 然后 https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6155061456 然后如果沙盒模式又出问题\r\n\r\n所以本地文件必须要签名"
-    },
-    {
-     "id": 6159173587,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:57:28Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159173587",
-     "body": "本地也要签名的话，想不到威胁模型在哪\r\n\r\n因为恶意程序都能随便修改本地文件了，干嘛盯着 xray lua 不放\r\n本来就为所欲为了"
-    },
-    {
-     "id": 6159170657,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:57:12Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159170657",
-     "body": "~~还有 allowInsecure，小白导入完节点能用就行，那节点参数就没打开看过，看了也不懂，就算有的 GUI 提示不安全也照样用~~\r\n\r\n已经说得很清楚了必须是 https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158843166"
-    },
-    {
-     "id": 6159142672,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:54:52Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159142672",
-     "body": "那就签名加个特权参数，默认签沙盒的？\r\n\r\n我还是觉得本地文件真没必要"
-    },
-    {
-     "id": 6159123926,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:53:15Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159123926",
-     "body": "> 冷不丁来一个非要签名，会下意识警惕的\r\n\r\n~~不要指望小白有什么安全意识，小白只会跟着教程走，让干什么就干什么，不然当年明文 HTTP 面板怎么大行其道的~~"
-    },
-    {
-     "id": 6159036928,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:45:49Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6159036928",
-     "body": "> 如果所有都是特权，一定会有小白用网络大神脚本\r\n\r\n首先脚本想使坏的话不需要通过 Xray 进行，其次它完全可以签名恶意脚本然后给 Xray 加启动参数来解锁特权模式\r\n\r\n> 建议非内联沙盒不去签名，看有没有什么漏洞，观察一阵子再开给内联\r\n\r\n~~这东西能这么干吗，等以后弄了 JSON 订阅，真有漏洞的话估计就成任意代码执行了，况且我都说了订阅不应可能暴露内网~~"
-    },
-    {
-     "id": 6158984186,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:41:27Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158984186",
-     "body": "同时也不希望小白掌握签名这个动作\r\n他们大概率不管三七二一直接签成特权\r\n\r\n而大多 lua 都能直接用\r\n冷不丁来一个非要签名，会下意识警惕的"
-    },
-    {
-     "id": 6158922050,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:36:06Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158922050",
-     "body": "那就暂时把内联禁掉\r\n\r\n非内联的还是得区分特权和非特权\r\n如果所有都是特权，一定会有小白用网络大神脚本\r\n\r\n建议非内联沙盒不去签名，看有没有什么漏洞，观察一阵子再开给内联"
-    },
-    {
-     "id": 6158843166,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:29:23Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158843166",
-     "body": "> 目前暴露的 api 没有办法访问网络\r\n\r\n~~可以通过 core 的出站来访问网络，或者像 @Fangliding 说的把 DNS 请求变成 Tunnel~~\r\n\r\n我觉得应该这样：\r\n\r\n1. 内联脚本必须是沙盒模式，且硬编码禁止内联脚本，留作以后参考\r\n2. 非内联脚本不是沙盒模式，但必须签名\r\n3. https://github.com/XTLS/Xray-core/pull/7124 会被合并但由于禁了内联所以用不了，等更多评估后再看"
-    },
-    {
-     "id": 6158760759,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:22:22Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158760759",
-     "body": "目前暴露的 api 没有办法访问网络\r\n\r\n- 彻底禁内联脚本\r\n- 内联脚本也要签名才可加载\r\n- 以后暴露敏感 xray api 的时候要求签名\r\n\r\n选哪个"
-    },
-    {
-     "id": 6158702462,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:17:23Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158702462",
-     "body": "它在 Xray 内就相当于有不受限制的网络权限啊，~~总不能以后订阅个 JSON 就有可能把自己的内网环境全暴露了吧~~"
-    },
-    {
-     "id": 6158674753,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:15:05Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158674753",
-     "body": "然后 go 那边的反射函数也有白名单"
-    },
-    {
-     "id": 6158632073,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:11:32Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158632073",
-     "body": "能用的库和函数都是白名单了\r\n\r\n沙盒模式也签名的话有点过度防御了\r\n毕竟 config.json 也没保护"
-    },
-    {
-     "id": 6158598144,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:08:42Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158598144",
-     "body": "即使这样，我觉得内联 lua 还是有点危险，要不先暂时禁止了吧，且加载本地 lua 也必须需要签名"
-    },
-    {
-     "id": 6158535629,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T01:03:30Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158535629",
-     "body": "沙盒模式限制：\r\n系统库、调试库、并发库\r\n动态代码加载\r\n模块加载\r\nlua 元表和函数环境\r\n运行时控制\r\n打印内部消息、探测内存布局\r\n探测随机数种子"
-    },
-    {
-     "id": 6158172506,
-     "issue": 7136,
-     "issue_title": "Lua: Add sandbox mechanism",
-     "created_at": "2026-10-14T00:33:12Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6158172506",
-     "body": "沙盒模式现在限制了哪些东西？"
-    },
-    {
-     "id": 6158101583,
-     "issue": 7131,
-     "issue_title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "created_at": "2026-10-14T00:27:23Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131#issuecomment-6158101583",
-     "body": "https://github.com/XTLS/Xray-core/discussions/7144#discussioncomment-18912091"
+     "url": "https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6137264458",
+     "body": "~~那 WS 就算了，除去 main 的新增代码，可能增加了 0.1MB~~\r\n\r\n先赶快把 gVisor 弄掉吧（少了接近 4.3MB），~~然后如果遇到了问题那么就只能 PR tcp_lightweight.go 了，目标达成~~"
     },
     {
      "id": 6049274105,
@@ -2009,28 +2454,6 @@
      "user": "mitro4",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1303",
      "body": "The drop-down list in the \"Split Tunneling Applications\" menu is not clickable \r\n[Выпадающий список в меню \"Раздельное туннелирование приложений\" не кликабелен]\r\n\r\nThe drop-down list in the \"Split Tunneling Applications\" menu is not clickable. The only option available is \"Apps in the list should not work through VPN\" , the second option cannot be selected\r\n\r\nВыпадающий список в меню \"Раздельное туннелирование приложений\" не кликабелен. Доступен вариант только \"Приложения из списка не должны работать через VPN\" , второй вариант выбрать невозможно \r\n\r\nSystem info : \r\nAMD Radeon RX 7900 XTX\r\nProcessor\tAMD Ryzen 7 7800X3D 8-Core Processor              4.20 GHz\r\nInstalled RAM\t32,0 GB (27,7 GB usable)\r\n\r\nEdition\tWindows 10 Pro\r\nVersion\t22H2\r\nOS build\t19045.5247\r\nExperience\tWindows Feature Experience Pack 1000.19060.1000.0\r\n\r\n\r\nScreenshot: \r\n![image](https://github.com/user-attachments/assets/8b887784-095b-4348-bdb6-f118761e5ad4)\r\n"
-    },
-    {
-     "number": 3281,
-     "title": "fix: fix missing includes",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T03:28:16Z",
-     "updated_at": "2026-10-14T03:28:27Z",
-     "user": "vkamn",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3281",
-     "body": ""
-    },
-    {
-     "number": 3280,
-     "title": "feat: new design system",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T02:54:30Z",
-     "updated_at": "2026-10-14T03:13:39Z",
-     "user": "vkamn",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3280",
-     "body": ""
     }
    ],
    "comments": [
@@ -2147,6 +2570,39 @@
   "apernet/hysteria": {
    "issues": [
     {
+     "number": 1704,
+     "title": "fix(acl): allow hyphens in outbound names",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T03:35:40Z",
+     "updated_at": "2026-10-16T03:36:00Z",
+     "user": "somaz94",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1704",
+     "body": "ACL rules are parsed with `linePattern` in `extras/outbounds/acl/parse.go`, which only accepts `\\w+` as the outbound name, so a rule like `New-turkey(geosite:cn)` fails with \"invalid syntax\" even though the server config happily accepts an outbound with that name. After parsing, the name is only used for a lowercased map lookup, so allowing `-` in the pattern is all it takes.\n\nI kept this to hyphens as the issue describes. Names with other characters such as dots still don't parse, same as before.\n\nThe new `TestParseTextRules` case fails on master with `invalid syntax at line 2: New-turkey(geosite:cn)` and passes with this change. `gofumpt -l -extra .` is clean, and `go test ./...` passes in `extras/outbounds` and `app/cmd`.\n\nFixes #1323\n"
+    },
+    {
+     "number": 1702,
+     "title": "A TCP target that stops reading stalls every TCP stream of the client (connection flow-control window)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-15T21:43:33Z",
+     "updated_at": "2026-10-15T21:46:10Z",
+     "user": "colituvpn",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1702",
+     "body": "**Describe the bug**\n\nWhen a TCP target stops reading but keeps its connection open, the server's copy from the stream into the target blocks. The stream's unread upload data keeps occupying the QUIC connection-level receive window. A single stream can hold up to the stream window (8 MB by default), so three or four such streams use up the connection window (20 MB by default). From then on the client cannot send on any stream of that connection: every new TCP request hangs, while UDP datagrams (DNS, QUIC relayed over UDP) keep flowing and the connection looks alive.\n\nThe client cannot release the stalled streams itself. Its writers are blocked on the same window, so it does not get to close them; with an Xray client, an instrumented server only saw the client give the streams up when the client process was killed. Nothing recovers until the client's own idle timeout, which is minutes in practice.\n\nUpload speed tests trigger this reliably: the test server stops reading once it has measured enough while the browser's upload is still open. On an Android client the result was always the same — TCP over Hysteria stopped about 50–60 s into an upload test.\n\n**To Reproduce**\n\n1. Server v2.11.0 (also reproduced on current master), default QUIC settings.\n2. Through one client connection, start 3–6 uploads to a TCP target that accepts the connection, reads a few MB and then stops reading without closing.\n3. Open a new TCP request through the same client connection. It never completes.\n\nWe also added an integration test for this: four streams to a target that never reads (one end of `net.Pipe()`), then a request to an echo server on the same connection. On master it times out.\n\n**Expected behavior**\n\nA stalled target should affect only its own stream, not every other stream of the client.\n\n**Logs**\n\nNothing unusual is logged on the server. On the client side, new TCP requests are dispatched to Hysteria and simply never get a response; packet captures show only ACKs, small control packets and datagrams after the stall, and no new stream data from the client.\n\n**Device and Operating System**\n\n- Server: Hysteria v2.11.0 (official build and built from source), Linux amd64.\n- Clients: Xray-core 26.10.10 (hysteria outbound) on Android, and the official Hysteria client in a local reproduction on Windows (loopback).\n\n**Additional context**\n\nWhat we ruled out before getting there: UDP shaping by the network (packets kept flowing both ways), congestion control (same result with Reno instead of BBR), Xray's Chrome-parrot QUIC mode (same result with it disabled), the stream limit (about 90 streams against 1024), and larger windows (64 MB per connection with 4 MB per stream only delays the stall).\n\nA fix that closes a target when a single write to it makes no progress for a while (and closes it as soon as the client gives the stream up) resolves it in our tests: the connection recovers in under 10 s instead of never, with no change for fast, slow or normally closing targets. We run it in production and will open a pull request with the fix and the test.\n"
+    },
+    {
+     "number": 1703,
+     "title": "fix(core/server): close TCP targets that stop accepting data",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T21:43:41Z",
+     "updated_at": "2026-10-15T21:43:41Z",
+     "user": "colituvpn",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1703",
+     "body": "Fixes #1702\n\n**Problem**\n\nA TCP target that stops reading but keeps its connection open blocks the copy from the stream into it. The stream's unread data keeps occupying the connection-level flow-control window; a few such streams use it up, and then the client cannot send on any stream of the connection — every new TCP request hangs while UDP datagrams keep flowing. The client cannot give the stalled streams up because its writers are blocked on the same window. Upload speed tests trigger this in practice (the test server stops reading once it has measured enough).\n\n**Change**\n\n- `server.Config.TCPStallTimeout` (default 10s, negative disables): the target connection is wrapped so that a single `Write` that makes no progress for this long closes it. Every write gets a fresh timeout, so a slow target that keeps accepting data is never closed. The wrapper only implements `net.Conn`, and `Close` is idempotent.\n- The target is also closed as soon as the client gives the stream up (`context.AfterFunc` on the stream's context), so both copy directions end even when the target is silent.\n- After the close, the existing cleanup closes the stream, which releases its share of the connection window.\n\n**Test**\n\n`TestServerTCPStalledTarget` (core/internal/integration_tests/stall_test.go): four streams upload into targets that never read (one end of `net.Pipe()`), then a new request to an echo server on the same connection must complete. Without the change it times out after 10 s; with it, it passes in about 3.5 s (stall timeout set to 2 s in the test). `go test ./core/server/ ./core/internal/integration_tests/` passes. (`TestClientServerUDPStress` fails on our Windows machine on master as well, unrelated.)\n\n**Field results**\n\nWe have run this on our servers since 2026-10-15. In a local reproduction (official server, an Xray client, uploads into a target that stops reading) the connection never recovered without the fix and recovered in 7.8 s with it, with no difference for fast, slow (1 MB/s) or early-closing targets. On an Android device, four upload speed tests in a row over 160 s no longer stalled Hysteria; before the fix it stalled at about 60 s every time.\n\nNot exposed in the app config yet; happy to add a `quic`/`tcp` option there if you prefer it configurable.\n"
+    },
+    {
      "number": 1601,
      "title": "windows版本客户端能否编译为支持 windows7的呢",
      "is_pr": false,
@@ -2159,6 +2615,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6202946718,
+     "issue": 1702,
+     "issue_title": "A TCP target that stops reading stalls every TCP stream of the client (connection flow-control window)",
+     "created_at": "2026-10-15T21:46:10Z",
+     "user": "colituvpn",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1702#issuecomment-6202946718",
+     "body": "Fix and integration test proposed in #1703. The client-side part (the Xray hysteria outbound not releasing a stream whose write is blocked) is reported as XTLS/Xray-core#7169."
+    },
     {
      "id": 6186797123,
      "issue": 1601,

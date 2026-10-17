@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-16T23:35:13Z",
- "since": "2026-10-14T23:35:13Z",
+ "generated_at": "2026-10-17T04:25:05Z",
+ "since": "2026-10-15T04:25:05Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -191,6 +191,72 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7151,
+     "title": "WireGuard outbound: Keep the device when its setup fails",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-14T14:15:39Z",
+     "updated_at": "2026-10-17T04:25:01Z",
+     "user": "T3ST3ST3R0N",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151",
+     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
+    },
+    {
+     "number": 7135,
+     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T01:29:50Z",
+     "updated_at": "2026-10-17T04:06:41Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135",
+     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
+    },
+    {
+     "number": 7170,
+     "title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-15T21:56:47Z",
+     "updated_at": "2026-10-17T04:05:22Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170",
+     "body": "every Drive request of xdrive has a 60 s limit for the whole request, body included. on a slow line that is too short for big segments: with segmentBytes at 4 MiB the reader fetches 8 at once, at 0.5 MiB/s that takes 64 s, so every attempt times out the same way and after 8 of them the connection is gone. the growing segments talked about in #6748 would hit it even sooner\n\nnow a request ends only after 60 s without progress: no answer that long after the body went out, or no byte of either body, so a stuck request is still cut at 60 s. there is a unit test for slow and stuck requests, and in a Drive simulator at 0.5 MiB/s down main fails with 4 MiB segments while this passes at 0.48 MiB/s\n"
+    },
+    {
+     "number": 7181,
+     "title": "XDRIVE transport: Use h2 + uTLS by default",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T18:54:40Z",
+     "updated_at": "2026-10-17T04:01:51Z",
+     "user": "4RH1T3CT0R7",
+     "url": "https://github.com/XTLS/Xray-core/pull/7181",
+     "body": "builds on #7170. as RPRX asked, h2 + utls by default and h1 the DoH way from #7140: xdrive dials utls chrome even without tlsSettings and one http.Transport speaks what the server picked, so security tls against google works again (main offers h2 in the hello, then speaks h1 and gets http2_handshake_failed). a host gets one connection, a host that answers over h1 moves to a transport with up to 32. the handshake runs inside the dial with the stall limit, so a hung one can't hold the host. alpn http/1.1 without echConfigList gets a warning, the dead REALITY branch and x/net http2 are gone\n\nfrom a VPS to googleapis, 32 parallel 4 MiB puts and gets, 2-3 runs each, main vs this: at ~1 ms put 17.2 to 18.8 MiB/s, get 17.0 to 20.7. with 150 ms added the get still gains (16.8 to 19.6) but the put falls from 10.8 to 3.4, google gives a connection 1 MiB of window, and 4 h2 connections bring it back to 9-11. @RPRX keep one connection or allow a few?\n"
+    },
+    {
+     "number": 7162,
+     "title": "676a600 后 VLESS+REALITY+Vision 服务端 SIGSEGV",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-15T11:45:45Z",
+     "updated_at": "2026-10-17T03:37:16Z",
+     "user": "VariatezzZ",
+     "url": "https://github.com/XTLS/Xray-core/issues/7162",
+     "body": "服务端入站 vless-tcp-reality，客户端和服务端相同版本，裸核使用\n676a6000以后仅服务端出现SIGSEGV，回退低于676a6000即恢复，配置未动。\n\n核心崩溃堆栈日志：\n[1.log](https://github.com/user-attachments/files/33490416/1.log)\n\n问的AI分析的根因：\n```\n新 reality（Go1.27 同步）把 Conn.rawInput 由 bytes.Buffer 值改成\n*bytes.Buffer 指针池化（另加 smallInput，见 conn.go:113-128,888-973，\n空闲还会 Put+置nil 再换新 Buffer）。\n而 inbound.go:577-586、outbound.go:278-287 仍用\nrawInput = (*bytes.Buffer)(unsafe.Pointer(p+r.Offset))，\n偏移处现在只有 8 字节指针，被当成整个 Buffer 结构体解释，\nw.rawInput 即为野指针，读即崩。"
+    },
+    {
+     "number": 7176,
+     "title": "XTLS Vision: Compatible with Go 1.27.3+",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-16T08:03:03Z",
+     "updated_at": "2026-10-17T03:37:15Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7176",
+     "body": "close #7162"
+    },
+    {
      "number": 7165,
      "title": "Finalmask realm: Fix portMapping on Android 11+",
      "is_pr": true,
@@ -257,17 +323,6 @@
      "body": "as RPRX asked in #6748, xdrive now takes only VLESS with VLESS Encryption and no flow, and on the client mux has to carry everything: enabled, no negative concurrency or xudpConcurrency, no xudpProxyUDP443 skip, no testpre. there are no minimums, so it shouldn't get in the way of the mux changes, and reverse is left out since it opens its own mux. an xdrive inbound now listens on one port only, a port range started a listener per port on the same folder and each of them took the same session\n\nthe service is now google-drive. \"Google Drive\" still works with a deprecation warning, and the transport takes both names for protobuf configs. configs without mux or encryption stop loading, so this needs a line in the release notes, and panels like 3x-ui will need the new name\n"
     },
     {
-     "number": 7181,
-     "title": "XDRIVE transport: Use h2 + uTLS by default",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-16T18:54:40Z",
-     "updated_at": "2026-10-16T18:54:40Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7181",
-     "body": "builds on #7170. as RPRX asked, h2 + utls by default and h1 the DoH way from #7140: xdrive dials utls chrome even without tlsSettings and one http.Transport speaks what the server picked, so security tls against google works again (main offers h2 in the hello, then speaks h1 and gets http2_handshake_failed). a host gets one connection, a host that answers over h1 moves to a transport with up to 32. the handshake runs inside the dial with the stall limit, so a hung one can't hold the host. alpn http/1.1 without echConfigList gets a warning, the dead REALITY branch and x/net http2 are gone\n\nfrom a VPS to googleapis, 32 parallel 4 MiB puts and gets, 2-3 runs each, main vs this: at ~1 ms put 17.2 to 18.8 MiB/s, get 17.0 to 20.7. with 150 ms added the get still gains (16.8 to 19.6) but the put falls from 10.8 to 3.4, google gives a connection 1 MiB of window, and 4 h2 connections bring it back to 9-11. @RPRX keep one connection or allow a few?\n"
-    },
-    {
      "number": 7180,
      "title": "XHTTP stream-up behind an HTTP/1.1 Nginx upstream truncates uploads",
      "is_pr": false,
@@ -277,17 +332,6 @@
      "user": "bazuchan",
      "url": "https://github.com/XTLS/Xray-core/issues/7180",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nLarge uploads through XHTTP `stream-up` fail for me when Nginx forwards the XHTTP requests to Xray over HTTP/1.1. Curl reports that it sent the whole body, but the destination receives only part of it, or the connection fails before the destination can parse the request.\n\nI reduced this to a local Docker setup with a synthetic JSON body. There is no CDN, external API, authentication header, or TLS in the minimal reproduction.\n\nTested versions:\n- Xray main, commit `0f3d884786f9ec73d3be8899cb6b9e1e6dd3c41e`.\n- Binary: `Xray 26.10.10 Custom (go1.27.1 linux/amd64)`.\n- Nginx image: `nginx:1.28-alpine`.\n- Curl image: `curlimages/curl:8.12.1`.\n- I also reproduced the HTTP/1.1 problem on Xray v26.3.27 / Go 1.26.1.\n\nThe test body is 1,385,909 bytes. In the minimal run shown in the logs, the destination received **7,999 bytes followed by EOF**, while curl reported the full upload and got HTTP 503 after about 5 ms. The received length varies between runs. I expected the destination to receive the complete body and return HTTP 200.\n\nTwo changes make the same test pass:\n- Set `scStreamUpServerSecs: -1` on the XHTTP **server inbound**. This disables the POST response keepalive, so it has an idle-timeout trade-off.\n- Leave response keepalive enabled, but change Nginx's backend hop to HTTP/2 using `grpc_pass`. Xray still uses XHTTP `stream-up`, not the gRPC transport.\n\nOn the main build, the original HTTP/1.1 setup delivered 0/10 bodies intact. Disabling response keepalive passed 4/4. HTTP/2 upstream passed 6/6 fast uploads and another 2/2 uploads limited to 32 KiB/s, lasting about 42 seconds each. For those slow tests I set the server response padding interval to one second. The HTTP/2 tests covered HTTP forwarding and HTTPS CONNECT with synthetic bodies. The release v26.3.27 also passed 4/4 fast HTTP/2-upstream tests. Direct XHTTP without Nginx passed both control probes.\n\nI suspect the early POST response interacts with Go's HTTP/1 request-body handling. The server log contains `http: invalid Read on closed Body`. The stream-up handler reads the POST body while writing response padding, without enabling HTTP/1 full duplex. Nginx removes the client's `Connection: close` header in this setup, so the backend is taking a different HTTP/1 response path from the direct connection.\n\nThis is not a confirmed complete explanation: I also tested an experimental `EnableFullDuplex` change, and it only passed 4/10 probes; the others stalled after receiving a body prefix. On the v26.3.27 baseline, a full capture showed that Nginx received and forwarded identical decoded POST bodies, yet bytes were missing at the destination. So I do not think the evidence points to Nginx simply dropping bytes from the upload.\n\nRelevant handler: https://github.com/XTLS/Xray-core/blob/0f3d884786f9ec73d3be8899cb6b9e1e6dd3c41e/transport/internet/splithttp/hub.go#L198-L242\n\nCould the concurrent POST body reads and response keepalive writes be handled differently for HTTP/1 upstreams?\n\n### Reproduction Method\n\nAttach `public-repro.tar.gz` from this report. It contains the Dockerfile, Compose file, exact combined Xray config, Nginx config, and a small Python receiver. It generates its own synthetic body; no private request or credentials are needed.\n\nThe topology is:\n\n```text\ncurl -> Xray HTTP inbound :8080\n     -> VLESS / XHTTP stream-up outbound\n     -> Nginx :80\n     -> Xray VLESS / XHTTP inbound :144"
-    },
-    {
-     "number": 7135,
-     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T01:29:50Z",
-     "updated_at": "2026-10-16T18:06:24Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135",
-     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
     },
     {
      "number": 7174,
@@ -323,28 +367,6 @@
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meets the requirements.\n- [x] I confirm that I have read the documentation and understand the relevant configuration items.\n- [x] I provide a minimal, sanitized reproduction and logs; secrets such as UUID, private key, public key, and shortId are redacted.\n- [x] I searched existing issues and did not find an exact duplicate for this server-side REALITY target Certificate record size failure.\n- [x] The problem can be reproduced on the latest release.\n\n### Description\n\n`VLESS + TCP + REALITY + Vision` fails when using `www.microsoft.com:443` as REALITY `dest` / `serverNames` on Xray-core `v26.3.27`.\n\nThis is not a direct TLS rejection by Microsoft: direct `openssl s_client` and `curl` from the same server to `www.microsoft.com:443` succeed. The failure appears to be caused by the REALITY server-side target handshake parser rejecting a Microsoft TLS Certificate record whose length is slightly larger than the hardcoded `8192` byte limit in `github.com/xtls/reality`.\n\nIn this environment, Microsoft returns a TLS Certificate record length that leads REALITY to log `Certificate: 8273`, which is larger than `size = 8192`, and then the REALITY connection is rejected with `handshake did not complete successfully`.\n\n### Environment\n\n- Xray-core: `Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)`\n- OS: Linux x86_64\n- Protocol: VLESS + TCP + REALITY + `xtls-rprx-vision`\n- REALITY dest/serverName: `www.microsoft.com:443` / `www.microsoft.com`\n- Client REALITY fingerprint: `chrome`\n\n### Sanitized server config shape\n\n```jsonc\n{\n  \"log\": { \"loglevel\": \"debug\" },\n  \"inbounds\": [\n    {\n      \"listen\": \"0.0.0.0\",\n      \"port\": 443,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [\n          {\n            \"id\": \"<redacted-uuid>\",\n            \"flow\": \"xtls-rprx-vision\"\n          }\n        ],\n        \"decryption\": \"none\"\n      },\n      \"streamSettings\": {\n        \"network\": \"tcp\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"show\": true,\n          \"dest\": \"www.microsoft.com:443\",\n          \"xver\": 0,\n          \"serverNames\": [\"www.microsoft.com\"],\n          \"privateKey\": \"<redacted>\",\n          \"shortIds\": [\"<redacted>\"]\n        }\n      }\n    }\n  ],\n  \"outbounds\": [{ \"protocol\": \"freedom\", \"tag\": \"direct\" }]\n}\n```\n\nClient uses matching VLESS REALITY settings with:\n\n```text\nsecurity=reality\nsni=www.microsoft.com\nfp=chrome\nflow=xtls-rprx-vision\ntype=tcp\n```\n\n### Reproduction\n\n1. Start Xray server with REALITY `dest: \"www.microsoft.com:443\"`, `serverNames: [\"www.microsoft.com\"]`, `show: true`.\n2. Use a matching Xray client on the same host or from another host.\n3. Send a request through the client, for example:\n\n```bash\ncurl --socks5-hostname 127.0.0.1:<local-socks-port> https://www.google.com/generate_204\n```\n\nObserved client-side result:\n\n```text\ncurl: (35) Recv failure: Connection reset by peer\nHTTP=000 ERR=Recv failure: Connection reset by peer\n```\n\n### REALITY debug log\n\nRelevant sanitized server-side REALITY logs:\n\n```text\nREALITY remoteAddr: 127.0.0.1:<port>\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.ClientVer: [26 3 27]\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.ClientTime: 2026-06-21 ... UTC\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.ClientShortId: [<redacted>]\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.conn == conn: true\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5524 Server Hello: 127\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5397 Change Cipher Spec: 6\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5391 Encrypted Extensions: 51\nREALITY remoteAddr: 127.0.0.1:<port> len(s2cSaved): 5340 Certificate: 8273\nREALITY remoteAddr: 127.0.0.1:<port> hs.c.isHandshakeComplete.Load(): false\ntransport/internet/tcp: REALITY: processed invalid connection from 127.0.0.1:<port>: handshake did not complete successfully\n```\n\n### Direct TLS to Microsoft succeeds\n\n"
     },
     {
-     "number": 7151,
-     "title": "WireGuard outbound: Keep the device when its setup fails",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:15:39Z",
-     "updated_at": "2026-10-16T14:41:53Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151",
-     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
-    },
-    {
-     "number": 7170,
-     "title": "XDRIVE transport: End a request that stalls, not one that runs long",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-15T21:56:47Z",
-     "updated_at": "2026-10-16T11:49:19Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7170",
-     "body": "every Drive request of xdrive has a 60 s limit for the whole request, body included. on a slow line that is too short for big segments: with segmentBytes at 4 MiB the reader fetches 8 at once, at 0.5 MiB/s that takes 64 s, so every attempt times out the same way and after 8 of them the connection is gone. the growing segments talked about in #6748 would hit it even sooner\n\nnow a request ends only after 60 s without progress: no answer that long after the body went out, or no byte of either body, so a stuck request is still cut at 60 s. there is a unit test for slow and stuck requests, and in a Drive simulator at 0.5 MiB/s down main fails with 4 MiB segments while this passes at 0.48 MiB/s\n"
-    },
-    {
      "number": 6732,
      "title": "Proposal: user-configurable traffic shaping profiles for XMC / FinalMask (follow-up to #6487)",
      "is_pr": false,
@@ -354,17 +376,6 @@
      "user": "BolTun-prog",
      "url": "https://github.com/XTLS/Xray-core/issues/6732",
      "body": "The #6487 summary ends with:\n\n> This intentionally does not emit version-specific Play or Chunk Data packets. **User-configurable traffic shaping is deferred to a follow-up PR.**\n\nIn the merge discussion @RPRX also noted that custom traffic-shape configuration would be added later as an incremental feature (流量形状自定义配置下次再补吧，毕竟是增量功能).\n\nThis issue proposes a concrete design for that follow-up and asks for design agreement before any implementation (a draft PR would follow if the direction is acceptable). If the original XMC author already has shaping work in flight, happy to stand down and review/help instead.\n\n## Problem\n\nThe current XMC shaping is a built-in model of one fixed target (uncompressed Minecraft 26.1.2 login/join). Two practical limits:\n\n- Built-in models decay when the camouflage target's traffic shape evolves; updating them requires core releases.\n- Different deployments may need different camouflage targets, but today the XMC shape is a compiled-in preset and is not configurable (other masks, e.g. fragment #6334 or header-custom #5920, already take declarative config).\n\nThe knobs that exist today are scattered across features and do not compose with XMC's directional shaping: freedom fragment `maxSplit` (#4998), XHTTP upload pacing (`minUploadInterval`, #3592) and its padding mechanism (#3643), fragment `lengths`/`delays` (#6334), and the programmable `header-custom` templates (#5920).\n\n## Proposal\n\nMake the XMC shaping data-driven: a declarative profile loaded from config, interpreted by a small engine in `finalmask` — no policy logic in core.\n\nSketch:\n\n```jsonc\n{\n  \"schema\": \"xray.shape@1\",\n  \"name\": \"xmc-default\",\n  \"version\": 1,\n  \"phases\": {\n    \"login\": {\n      \"c2s\": { \"lenDist\": [ /* sampled length histogram */ ] },\n      \"s2c\": { \"lenDist\": [ /* ... */ ] },\n      \"keepAlive\": { \"iatMs\": 1000, \"jitterMs\": 100 }\n    }\n    // phase transitions follow the existing protocol state machine\n  }\n}\n```\n\nRuntime invariants (deliberately conservative):\n\n- Padding only ever increases record length; shortening is fragmentation, which stays a separate mask.\n- Zero added latency for real data: the profile only rate-limits sends (`iatMs` as \"not faster than\") and fills pauses with dummies. Delay-based scheduling is explicitly out of scope here.\n- The turn schedule stays alternating-direction (client first), exactly like the merged XMC padding schedule; a profile only controls lengths and cadence, never the message flow.\n- `shape` composes with the other configured masks rather than replacing them; the chain order stays whatever the `finalmask.tcp` array says (noise in particular remains a standalone pre-data layer).\n- Fail-closed: schema/`version` mismatch between endpoints aborts the connection.\n- Length values the server must reproduce are carried in-band, inside the encrypted channel.\n\n## What this is not\n\n- Not a new protocol and not a wire-format change.\n- Not ML in core: profiles are produced offline elsewhere; core only interprets a table. A separate profile repository and geodata-style distribution can come later — out of scope here.\n- Not delay/jitter scheduling (possible follow-up after measurements).\n\n## Questions\n\n1. Config placement: a profile embedded in `streamSettings` (per inbound/outbound), or a named registry referenced by id?\n2. Are the invariants above (especially zero-delay + padding-only) the intended direction for the follow-up, or was something broader planned?\n3. If the direction is agreed, would a draft PR with a single built-in preset (reproducing today's XMC 26.1.2 shape as a profile), tests, and the still missing XMC config docs be the right first step?\n\nPrior art for profile-driven shaping engines: Maybenot (Karlstad University, arXiv:2304.09510) — a padding engine driven by parameterized state machines; the offline-profile / online-interpreter split here follows the same reasoning at the proxy layer.\n\nRefs: #6487 #6210 #4998 #3592 #3643 #6334 #5920"
-    },
-    {
-     "number": 7162,
-     "title": "676a600 后 VLESS+REALITY+Vision 服务端 SIGSEGV",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-15T11:45:45Z",
-     "updated_at": "2026-10-16T11:10:21Z",
-     "user": "VariatezzZ",
-     "url": "https://github.com/XTLS/Xray-core/issues/7162",
-     "body": "服务端入站 vless-tcp-reality，客户端和服务端相同版本，裸核使用\n676a6000以后仅服务端出现SIGSEGV，回退低于676a6000即恢复，配置未动。\n\n核心崩溃堆栈日志：\n[1.log](https://github.com/user-attachments/files/33490416/1.log)\n\n问的AI分析的根因：\n```\n新 reality（Go1.27 同步）把 Conn.rawInput 由 bytes.Buffer 值改成\n*bytes.Buffer 指针池化（另加 smallInput，见 conn.go:113-128,888-973，\n空闲还会 Put+置nil 再换新 Buffer）。\n而 inbound.go:577-586、outbound.go:278-287 仍用\nrawInput = (*bytes.Buffer)(unsafe.Pointer(p+r.Offset))，\n偏移处现在只有 8 字节指针，被当成整个 Buffer 结构体解释，\nw.rawInput 即为野指针，读即崩。"
     },
     {
      "number": 6748,
@@ -387,17 +398,6 @@
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7156",
      "body": "as asked in #7130: WireGuard and MASQUE, client and server of both, move from gVisor to the stack of the TUN inbound, and it answers ICMP echo itself. no Go file imports gVisor any more (go.mod keeps it as indirect, a test of wireguard-go wants it), the linux amd64 release binary goes from 37.4 to 33.2 MB\n\nthe first commit is what the stack had to learn for that: opening TCP connections, UDP ports of its own, IP fragments both ways, ICMP \"too big\" and \"unreachable\", checksum verification, TCP timestamps, and dropping packets from or to loopback as gVisor did (without that a WireGuard peer reaches the server's localhost). the second commit is the switch, the third makes the sender recover sooner from losses and from a link that was gone for a while\n\nWireGuard between two Xrays on a veth pair: one stream 240 MB/s instead of 143, eight streams 234 instead of 138, CPU of both ends 22 s/GB instead of 37. on slow, far and lossy links it is equal or faster, and after the link is gone for 5 to 60 s the first data comes back within 1.5 s where gVisor needs 1.7 to 46 s\n\nthe timestamps are there for an older Xray on the other end. after a timeout gVisor's sender repeats two segments and waits for the next timeout, and that one doubles unless the ACKs carry timestamps. without them 7 of 40 transfers of 8 streams from an old end to a new one stalled, with them none of 40\n\ndifferent from gVisor: the window is a fixed 1 MiB where gVisor's grows from 512 KiB to 2 MiB, the MASQUE inbound now answers IPv4 ping to any address (gVisor answered only IPv6 and its own address), and deadlines on these connections do nothing, as in the TUN inbound. TestWireguard passes traffic now, it was commented out\n\n<details>\n<summary>WireGuard, throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, each Xray on 4 cores with GOMAXPROCS=4, noKernelTun, MTU 1420. main was c77a4d0e then. median of 8 to 10 on the veth pair and of 3 to 6 on a link (played in user space: rate, one-way delay, drop-tail queue of 100), MB/s of payload, CPU-seconds of both Xrays per GB. \"kernel\" is the kernel's own TCP over the same link without Xray\n\n```\nveth pair, MB/s           main    PR      PR server,    PR client,     CPU s/GB\n                                          main client   main server    main    PR\ndown 1                     143    240     213           142            36.5    21.7\nup   1                     141    231     143           210            37.3    22.6\ndown 8                     138    234     223           171            35.7    24.1\nup   8                     151    225     162           212            36.1    24.3\n\nlinks, MB/s                          main    PR      kernel\n100 Mbit 5 ms             down 1     7.6     8.1     9.7\n100 Mbit 5 ms             down 8     7.7     8.2     9.2\n50 Mbit 5 ms 1% loss      down 1     1.6     1.5     1.3\n50 Mbit 5 ms 1% loss      down 8     4.1     4.5     4.4\n100 Mbit 50 ms 0.5% loss  down 8     1.4     1.6     1.7\n100 Mbit 50 ms            down 1     3.5     3.6     6.2\n100 Mbit 50 ms            down 8     4.8     5.7     6.2\n```\n\nthe rows with loss and the 50 ms ones are from a later session with main 0888beb3 and all three commits, 6 samples, the kernel from the session before. one stream on the 50 ms link runs at about 3 or about 4 MB/s with both, half of the samples each\n\nthe timestamps cost nothing: the same build without them gives 238, 230, 239 and 228 in the PR column of the veth pair\n</details>\n\n<details>\n<summary>the link gone for a while</summary>\n\n100 Mbit 50 ms link, one stream, the link drops every packet for a while in the middle of the transfer. seconds from the link coming back to the first data, median of 3 (200 s: one sample), main and the PR taking turns in one run\n\n```\nlink gone                main    PR\n5 s, download            1.7     1.5\n20 s, download           5.8     0.6\n60 s, download           46      0.6\n200 s, download          5.0     1.3\n20 s, upload             5.9     1.5\n```\n\ni"
-    },
-    {
-     "number": 7176,
-     "title": "fix new tls lib issue",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-16T08:03:03Z",
-     "updated_at": "2026-10-16T09:18:25Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7176",
-     "body": "close #7162"
     },
     {
      "number": 7172,
@@ -860,20 +860,54 @@
      "user": "izislesar",
      "url": "https://github.com/XTLS/Xray-core/pull/7159",
      "body": "# XHTTP: packet-down in stream-down with downlink keep-alive\n\nFollows RPRX's packet-down design in https://github.com/XTLS/Xray-core/pull/6755#issuecomment-5720463978, which was written while closing the earlier downlink-resume attempt (#6755). That attempt was rejected because \"restore connection\" is too complex, with latency, ACK and so on. This one does not attempt connection restoration at all. No reconnection, no state machine, nothing to tune: each stream-down GET stays a single request; if the GET dies, the connection dies the ordinary way.\n\n## Problem (from #4846)\n\nCDNs kill a stream-down GET on body inactivity. This matters during uploads: with packet-up the uplink posts keep flowing, but the downlink proxy payload only arrives while the origin sends, so during a pure upload the GET idles and gets cut. Same story for any target that goes quiet for a while after responding.\n\n## What this PR adds\n\nWhen enabled on both ends, the stream-down response body is cut into packet-down frames with the five elements from the design comment:\n\n- omittable session id excerpt: first 8 bytes of the session id, present on data and keep-alive frames (absent in stream-one where the session id is empty)\n- omittable packet seq: uint64, counting data/keep-alive frames per stream-down GET\n- mandatory type: data or padding\n- mandatory length: uint16\n- payload\n\nUse today is the first one from the design comment: downlink keep-alive. While the downlink has been idle for a whole period, the server writes a padding frame (base62, in the spirit of tokenish x-padding) instead of staying silent. Everything the dispatcher sends rides in data frames, which is what lets the client tell padding apart from payload safely; the seq keeps the format ready for the future uses listed in the design comment (retransmission, multi-path-down) without another wire change.\n\nh1, h2 and h3 are covered, since the framers sit on the body, not on a specific transport. stream-one gets the same treatment on its single response body. Browser dialer is out of scope for now: it has no place to read the response header that confirms the framing.\n\n## Negotiation\n\nStrictly opt-in and per request, so old servers are unaffected and nothing breaks behind middleboxes:\n\n1. client config has packetDown: XHTTP stream requests not used as pure uplink (stream-down GET, stream-one request) carry X-Packet-Down: 1\n2. server has packetDown configured and sees the marker: it answers with X-Packet-Down: 1 on the response, and frames; without the confirmed header the client never parses frames\n3. any other combination: byte-identical wire format as today\n\n## Config\n\n```jsonc\n\"xhttpSettings\": {\n  \"path\": \"/sh\",\n  \"packetDown\": {              // absent = disabled, as today\n    \"keepAlive\": true,\n    \"keepAlivePeriod\": \"10-30\",  // seconds; padded when inactive this long. defaults to 10-30\n    \"keepAliveLength\": \"24-64\"   // padding size. defaults to 24-64\n  }\n}\n```\n\nServer side is the same block in the inbound; the server only honors the feature when the client asks.\n\n## Not in this PR (deliberately)\n\n- obfs of the frames (later, per the design comment)\n- retransmission, multi-path-down, same-packet racing, ACK: the format carries seq and the session excerpt, but none of the machinery, exactly like packet-up carries seq today without using it\n- nothing about #4846's larger downlink freeze problem (the 15-20 KB per TCP connection cut): this only discards the CDN idle timer, it does not split data across connections\n\n## Tests\n\n- packet_down_test.go: frame round trip (with/without excerpt, with/without seq), byte-stream shaped like a socket, splitting payloads larger than one frame, padding skipped, malformed frame rejected, keep-alive written when idle, keep-alive suppressed while active, config normalization\n- splithttp_test.go: full listen/dial round trip with packet-down on both end (100 KiB), and the fallback case with the client setting present but the server without one\n- infra/conf: JSON un"
-    },
-    {
-     "number": 4846,
-     "title": "[feature request] XHTTP Support packet down & retransmission",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-06-27T18:20:56Z",
-     "updated_at": "2026-10-15T04:15:12Z",
-     "user": "hyperion-cs",
-     "url": "https://github.com/XTLS/Xray-core/issues/4846",
-     "body": "### Problem\nA few weeks ago, a new method of blocking (especially on mobile networks) was introduced in Russia by the censor.\nIt works as follows. So, if:\n1. The client connects to the server via TCP using HTTPS and TLS 1.3 (Reality actually mimics HTTPS with TLS 1.3);\n2. The IP address of the server is “suspicious” (it is located **outside** (i.e. not in Russia), is part of the subnet AS which is owned by foreign data centers like Hetzner, Digital Ocean, etc.);\n3. Within one TCP connection (not within one HTTP request/response - this is important) the data size received from the server to the client is more than ≈15-20KB (the value varies depending on the provider) — the MAIN thing.\n\nThis connection is \"frozen\" (i.e. TCP packets from the server within this connection stop arriving after the specified limit on the size of transmitted data has been reached). It is curious to note that, as a rule, the censor (under the pretence of a response from the server) does not send, for example, an RST packet - instead, it simply “freezes” the TCP connection (from the client's point of view), and thus the client simply waits for an error on the timeout of waiting for a response from the server and everything stops working.\n\n**IMPORTANT**: It doesn't matter whether it's \"legitimate\" HTTPS traffic or whether someone is mimicking it. They don't pay attention to that now.\n\n### Do I have these limitations?\nYou can check your \"home\" ISP with the _RU :: TCP 16-20_ checker from [this](https://github.com/hyperion-cs/dpi-checkers) repository. Works right from your browser, VPN should be disabled during the check.\n\n### Proposed Solution\nThe good news is that if you fragment the responses from the server into several ≈15-20KB data bundles (if it is large enough) in different TCP connections, everything will work fine. This is the option I propose to add to Reality (where the size of the data bundle will be set by a parameter), which would be compatible with VLESS.\n\nIt is important not to confuse this with fragmentation of TCP packets within one connection or splitting of transmitted data into several HTTP requests/responses (in **one** connection) - this is different and it won't help.\n\nBy the way, the same rules will probably apply to client-to-server traffic (if not already done by the censor) - so the fragmentation option described is worth adding on both server and client. And support for fragmented data, of course.\n\n### Notes\nYes, it will work noticeably slower than a single connection (especially if we're going to upload/download a large file). For example, it would take ~2560 TCP connections to download a 50MB file - that's a lot and quite suspicious. But it's clearly better than not working at all. Anyway, this issue will help to publicize the problem and maybe someone will think of better solutions.\n\n---\nSome links to related issues:\n\n- https://blog.cloudflare.com/russian-internet-users-are-unable-to-access-the-open-internet/\n- https://github.com/XTLS/Xray-core/pull/4835#issuecomment-2988824955\n- https://github.com/net4people/bbs/issues/490\n- https://ntc.party/t/09062025-%D0%B8%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE-%D0%B1%D0%BB%D0%BE%D0%BA%D0%B8%D1%80%D0%BE%D0%B2%D0%BA%D0%B5-cloudflare-ovh-hetzner-digitalocean/17013"
     }
    ],
    "comments": [
+    {
+     "id": 6229605624,
+     "issue": 7151,
+     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
+     "created_at": "2026-10-17T04:25:01Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6229605624",
+     "body": "正常来讲要突破 4K 就是 UDP 返回个 TC 位对方 fallback TCP 继续请求，但 dnstt 也没有监听 tcp，~就先这样吧~\r\n\r\n只要有一个环节是用的 UDP 就绕不过 edns0，而且每台中转的 edns0 都是允许不同的，传递到最后都是取最小那个，理论上只要到达最后的是 4K 是可以适用 txt wg quic 的不用 kcp"
+    },
+    {
+     "id": 6229439386,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-10-17T04:06:41Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6229439386",
+     "body": "~~看来今天的新版本无缘新指纹了~~"
+    },
+    {
+     "id": 6229426922,
+     "issue": 7170,
+     "issue_title": "XDRIVE transport: End a request that stalls, not one that runs long",
+     "created_at": "2026-10-17T04:05:21Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6229426922",
+     "body": "Replaced by https://github.com/XTLS/Xray-core/pull/7181"
+    },
+    {
+     "id": 6229389636,
+     "issue": 7181,
+     "issue_title": "XDRIVE transport: Use h2 + uTLS by default",
+     "created_at": "2026-10-17T04:01:51Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7181#issuecomment-6229389636",
+     "body": "@4RH1T3CT0R7 XMUX 加进来后在 Google Drive 上的默认 maxConnections 可以调大些"
+    },
+    {
+     "id": 6229087350,
+     "issue": 7176,
+     "issue_title": "XTLS Vision: Compatible with Go 1.27.3+",
+     "created_at": "2026-10-17T03:32:58Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7176#issuecomment-6229087350",
+     "body": "没看 Go 1.27.3 那个 pool 是什么机制，不过先改了一行 https://github.com/XTLS/Xray-core/pull/7176/commits/ab507b7a0dc5134235bfde737b836d9ef4907cf8 防止那个 pool 出问题，~~本来也占不了多少内存~~"
+    },
     {
      "id": 6226639757,
      "issue": 7165,
@@ -1165,7 +1199,7 @@
     {
      "id": 6212270908,
      "issue": 7176,
-     "issue_title": "fix new tls lib issue",
+     "issue_title": "XTLS Vision: Compatible with Go 1.27.3+",
      "created_at": "2026-10-16T09:18:25Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7176#issuecomment-6212270908",
@@ -1192,7 +1226,7 @@
     {
      "id": 6211695670,
      "issue": 7176,
-     "issue_title": "fix new tls lib issue",
+     "issue_title": "XTLS Vision: Compatible with Go 1.27.3+",
      "created_at": "2026-10-16T08:46:00Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7176#issuecomment-6211695670",
@@ -1219,7 +1253,7 @@
     {
      "id": 6211447326,
      "issue": 7176,
-     "issue_title": "fix new tls lib issue",
+     "issue_title": "XTLS Vision: Compatible with Go 1.27.3+",
      "created_at": "2026-10-16T08:31:46Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7176#issuecomment-6211447326",
@@ -1246,7 +1280,7 @@
     {
      "id": 6211052802,
      "issue": 7176,
-     "issue_title": "fix new tls lib issue",
+     "issue_title": "XTLS Vision: Compatible with Go 1.27.3+",
      "created_at": "2026-10-16T08:09:06Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7176#issuecomment-6211052802",
@@ -2315,33 +2349,6 @@
      "body": "暂时不计划为了这种打断引入帧机制"
     },
     {
-     "id": 6184362904,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-15T04:23:27Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6184362904",
-     "body": "@RPRX 目前这个 PR 已经是你想要的状态了\r\n\r\nNEXT 架构和可编程协议若要继续推进，必须在合理的威胁模型下设计安全架构\r\n~（先把规矩立住，路才能越走越宽）~\r\n\r\n签名、特权模式、内联脚本这些，后续功能演进的时候再说吧\r\n\r\n目前我已经燃尽了\r\n~（这代码写的烧心）~"
-    },
-    {
-     "id": 6184267718,
-     "issue": 4846,
-     "issue_title": "[feature request] XHTTP Support packet down & retransmission",
-     "created_at": "2026-10-15T04:15:11Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/issues/4846#issuecomment-6184267718",
-     "body": "I implemented the packet-down frame format from RPRX's design comment in https://github.com/XTLS/Xray-core/pull/6755#issuecomment-5720463978 and opened https://github.com/XTLS/Xray-core/pull/7159.\n\nIn short:\n- the stream-down response body is cut into packet-down frames with the five elements from the design comment: an omittable session id excerpt, an omittable seq, a mandatory type (data/padding), a mandatory length, and the payload;\n- the current use is the one the comment named first: downlink keep-alive. While the downlink has been idle for a full period, the server writes a padding frame instead of staying silent, so the CDN idle timer does not kill the GET while the uplink carries traffic;\n- it is opt-in and negotiated per request (the client sends X-Packet-Down on stream-down / stream-one requests, the server confirms in the response header), so servers and clients without the feature are byte-identical to today;\n- deliverably out of scope for now, exactly like packet-up today: no ACK, no reordering, no multi-path-down, no retransmission machinery, no obfs. The seq and the excerpt are in the format so these can come later without changing the wire again.\n\nh1 / h2 / h3 are covered, since the framers sit on the response body rather than on one transport. stream-one's single response body is framed the same way.\n\nIt does not address the 15-20 KB per TCP connection cut from this issue yet; that needs the bigger packet-down uses later. Testing and review are welcome, especially from people with CDNs in front of the origin, since the target there is exactly the inactivity timer."
-    },
-    {
-     "id": 6181512310,
-     "issue": 7140,
-     "issue_title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "created_at": "2026-10-15T00:27:01Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6181512310",
-     "body": "简单一点参考 XHTTP 的方案就行了，另外 `doh` 改成 `https` 吧，以后 ECH DoH 那里可能要支持个 `http3`"
-    },
-    {
      "id": 6137264458,
      "issue": 7130,
      "issue_title": "TUN inbound: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor",
@@ -2369,10 +2376,21 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-08-29T11:32:06Z",
-     "updated_at": "2026-10-16T21:04:10Z",
+     "updated_at": "2026-10-17T03:22:47Z",
      "user": "pers1307",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090",
      "body": "**Describe the bug**\n\n  On Linux, client 5.0.1.5 fails to read the routing table and never installs\n  exclusion routes for the VPN endpoint. With `0.0.0.0/1` and `128.0.0.0/1`\n  pointing at the tunnel, WireGuard packets addressed to the server are routed\n  back into the tunnel itself, creating a routing loop. Packets grow with each\n  iteration until the socket rejects them with `sendmmsg: message too long`.\n\n  Client 4.8.21 on the very same machine installs the routes correctly and works.\n  The issue is protocol-independent — reproduced with both AmneziaWG 2.0 and 3.1\n  servers.\n\n  **To Reproduce**\n\n  Steps to reproduce the behavior:\n  1. Install 5.0.1.5 on Ubuntu 24.04 with a normal DHCP default route\n  2. Connect to any AmneziaWG server\n  3. Run `ip route get <server-ip>` — it points at the tunnel (`dev amn0`) instead\n     of the physical gateway\n  4. See `sendmmsg: message too long` in the daemon log; no traffic passes\n\n  **Expected behavior**\n\n  The daemon should add an exclusion route for the server endpoint through the\n  physical default gateway, as 4.8.21 does:\n  ```\n  <server-ip> via 192.168.31.1 dev wlp0s20f3\n  ```\n\n  **Log files**\n\n  Same 15-second window, two client versions on one machine:\n\n  | Log line | 5.0.1.5 | 4.8.21 |\n  |---|---|---|\n  | `Error in received packet: Numerical argument out of domain` | 10 | 0 |\n  | `No default gateway available, skipping exclusion route` | 10 | 0 |\n  | exclusion routes actually installed | none | all |\n\n5.0.1.5:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  Error in received packet: No such file or directory\n  LinuxRouteMonitor : No default gateway available, skipping exclusion route\n  ...\n  WireguardGo : ERROR: (amn0) peer(XXXX…) - Failed to send data packets:\n                write udp 0.0.0.0:54793: sendmmsg: message too long\n  ```\n  \n  4.8.21, same step:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  ```\n  (no warning, route present in `ip route`)\n  \n  Other errors present in both versions, possibly related:\n  ``` \n  Error: argument \"amnvpnrt\" is wrong: table id value is invalid\n  mkdir: cannot create directory '/sys/fs/cgroup/net_cls/amnvpnexclusions/'\n  LinuxRouteMonitor : Adding exclusion route for /999999 → Invalid destination prefix\n  net_cls cgroup v1 not available, traffic splitting disabled\n  ```\n  \n  **Screenshots**\n  \n  N/A — the client reports \"Connected\".\n\n  **Desktop (please complete the following information):**\n   - OS: Ubuntu 24.04.4 LTS (kernel 6.17), KDE Plasma / X11\n   - Version: 5.0.1.5 (regression — 4.8.21 works)\n\n  **Smartphone (please complete the following information):**\n   - Not affected — mobile clients handle routing through the OS VPN API\n\n  **Server (please complete the following information):**\n   - OS: Ubuntu 24.04, Docker\n\n**Additional context**\n  \n  Workaround — add the exclusion route manually before connecting:\n  ```\n  sudo ip route add <server-ip> via <lan-gateway> dev <iface>\n  ```\n  The loop disappears and `sendmmsg: message too long` stops.\n  \n  Possibly related: #1498, #1357, #2048 — all report \"connected but no internet\"\n  on Linux with the same `amnvpnrt` / `Invalid destination prefix` log noise."
+    },
+    {
+     "number": 3277,
+     "title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-12T20:50:15Z",
+     "updated_at": "2026-10-17T03:18:11Z",
+     "user": "retverd",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3277",
+     "body": "**Describe the bug**\n\nThe AmneziaWG connection built into AmneziaVPN 5.0.3.0 fails on Windows 11 26H2.\n\nThe tunnel interface is created successfully, but the client cannot send or receive UDP packets. The service log repeatedly reports errors from `WSASendMsg` and `WSARecvMsg`:\n\n```text\nwsasendmsg: The system detected an invalid pointer address in attempting to use a pointer argument in a call.\n\nwsarecvmsg: The system detected an invalid pointer address in attempting to use a pointer argument in a call.\n```\n\nAs a result, the AmneziaWG handshake never completes.\n\n## Environment\n\n- AmneziaVPN: 5.0.3.0\n- Windows: Windows 11 26H2\n- Windows build: 26300\n- Architecture: x64\n- Wintun: 0.14\n- Protocol: AmneziaWG\n- Standalone AmneziaWG for Windows: 3.1.0\n\n## Troubleshooting performed\n\nI tried the following without success:\n\n- Rebooted the laptop\n- Disabled split tunneling\n- Disabled Kill Switch\n- Confirmed that ByeDPI and Zapret are not installed\n- Confirmed that DNS settings are obtained automatically through DHCP\n- Flushed and renewed the network configuration\n- Checked the Winsock catalog\n- Checked installed network filters\n- Confirmed that AdGuard and other third-party Winsock providers are not installed\n\nThe same AmneziaWG configuration works correctly:\n\n- On a mobile phone connected to the same Wi-Fi network\n- In standalone AmneziaWG for Windows 3.1.0 on the same laptop\n\nThis confirms that the server, configuration, Wi-Fi connection, UDP connectivity, and MTU are working correctly.\n\n## Additional observations\n\nAmneziaVPN automatically sets the tunnel MTU to 1376. The failure occurs before the first UDP handshake packet can be sent, so changing the MTU or DNS settings does not appear relevant.\n\nStandalone AmneziaWG 3.1.0 works correctly with exactly the same configuration on the same Windows installation.\n\nThis strongly suggests a regression or incompatibility in the AmneziaWG tunnel implementation bundled with AmneziaVPN 5.0.3.0 on Windows 11 26H2.\n\n## Workaround\n\nI currently use standalone AmneziaWG for Windows for AWG connections. AmneziaVPN can still be used for VLESS.\n\nLogs attached.\n\n[AmneziaVPN.essentials.log](https://github.com/user-attachments/files/33356106/AmneziaVPN.essentials.log)\n"
     },
     {
      "number": 3166,
@@ -2527,20 +2545,27 @@
      "user": "vkamn",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3289",
      "body": ""
-    },
-    {
-     "number": 3288,
-     "title": "chore: minor ui fixes",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-15T04:13:22Z",
-     "updated_at": "2026-10-15T04:13:33Z",
-     "user": "vkamn",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3288",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 6228992185,
+     "issue": 3090,
+     "issue_title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
+     "created_at": "2026-10-17T03:22:47Z",
+     "user": "pers1307",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090#issuecomment-6228992185",
+     "body": "@albexk @outspace @kolobchanin help us, pls."
+    },
+    {
+     "id": 6228952283,
+     "issue": 3277,
+     "issue_title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
+     "created_at": "2026-10-17T03:18:11Z",
+     "user": "MSPDaniel",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3277#issuecomment-6228952283",
+     "body": "I have observed the same behavior on my windows machine. "
+    },
     {
      "id": 6224661639,
      "issue": 3090,
@@ -2644,6 +2669,17 @@
   },
   "apernet/hysteria": {
    "issues": [
+    {
+     "number": 1706,
+     "title": "feat(tun): add an L3 TUN that carries whole IP packets",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-17T00:56:29Z",
+     "updated_at": "2026-10-17T00:56:29Z",
+     "user": "wizd",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1706",
+     "body": "## Summary\r\n\r\nAdds an optional `l3tun` mode that copies whole IP packets between a local TUN device and QUIC datagrams. It does not terminate TCP or UDP. The intended use is to run VXLAN (or any other IP protocol) between the two TUNs, so the overlay keeps a normal 1500-byte inner MTU instead of squeezing VXLAN through `udpForwarding` and a reduced MTU.\r\n\r\nBoth ends opt in. The client sends `Hysteria-L3: true` on the existing auth request only when `l3tun` is configured, and the server grants it only when it has `l3tun` as well. The header is also sent as `false` otherwise; an older peer ignores the unknown header. L3 datagrams use session id 0 and a zero address-length byte, which `ParseUDPMessage` already rejects, so an older peer drops them.\r\n\r\n## How packets are carried\r\n\r\nOne IP packet is sent as one QUIC datagram. If that datagram is larger than the peer's current payload limit (`quic.DatagramTooLargeError`), it is split into evenly sized fragments.\r\n\r\nThe datagram prefix is 11 bytes:\r\n\r\n```\r\nSessionID u32 = 0 | PacketID low 16 | FragID u8 | FragCount u8 | 0x00 | PacketID high 16 | IP packet\r\n```\r\n\r\nFragments of different packets may interleave and are reassembled by the 32-bit packet id. A missing fragment drops the whole packet. There is no fragment retransmission; an inner TCP retransmits. Reassembly gives up after 200 ms. The largest IP packet is 1600 bytes. A 1600-byte packet under the usual 1200-byte datagram frame is two fragments of about 800 bytes.\r\n\r\nThe server keeps one L3 peer: the latest authenticated client that requested L3 replaces the previous one. Packets read from the local TUN while no peer is connected are discarded. Before a received packet is written into the local TUN, its source address must equal the configured `peer`.\r\n\r\nThe client L3 device stays up across QUIC reconnects. Traffic is counted with the existing `TrafficLogger`, in the same direction as UDP proxying.\r\n\r\n`l3tun` is supported on Linux, Darwin, Windows, and Android (sing-tun). Creating the device needs root or `CAP_NET_ADMIN`. Hysteria creates and addresses `hytun0` only. The operator adds the VXLAN interface after the TUN exists. VXLAN's UDP port stays inside the tunnel, so it does not need a public firewall opening.\r\n\r\n## Configuration\r\n\r\nClient:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.2/30\r\n  peer: 10.200.0.1\r\n```\r\n\r\nServer:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.1/30\r\n  peer: 10.200.0.2\r\n```\r\n\r\n`mtu` defaults to 1600 and cannot be higher. `address` is a prefix; `peer` must be the same IP version. A `/30` gives a connected route, so this tunnel does not need IP forwarding and does not capture the path back to the server's public address.\r\n\r\nOperator notes, including the VXLAN commands, are in `VXLAN.md` (currently written in Chinese). For an inner MTU of 1500 the outer packet is about 1550 bytes (Ethernet 14 + VXLAN 8 + UDP 8 + IPv4 20), which fits in the 1600-byte TUN without kernel fragmentation:\r\n\r\n```bash\r\nping -M do -s 1472 -c 3 10.201.0.1\r\n```\r\n\r\n## Test results\r\n\r\nMeasured on this branch, Linux amd64 at both ends. `hytun0` MTU 1600. VXLAN between the two TUN addresses. Path: a residential PPPoE link (uplink about 40 Mbps) to a Tokyo VPS, then to a second Tokyo host running iperf3 3.16. The iperf3 client is 3.9. Brutal limits on the client were 90 Mbps up and 200 Mbps down, with loss compensation disabled. The QUIC max datagram frame size is 1200 bytes.\r\n\r\nSame-region control, VPS to the iperf3 host, 8 seconds: 4374 Mbps up, 4441 Mbps down. The iperf3 server is not the bottleneck.\r\n\r\nTunnel RTT to that host, 10/10: min / avg / max 60.4 / 66.3 / 97.9 ms.\r\n\r\nEach VXLAN MTU below is one 10-second single TCP stream in each direction. Numbers are receiver goodput. Retransmissions are the sender's 10-second total. \"Outer IP\" is `vx MTU + 50`. A packet becomes two QUIC datagrams once the outer IP plus the 11-byte L3 header no longer fits in the 1200-byte frame; 1140 (outer"
+    },
     {
      "number": 1705,
      "title": "fix(realm): UPnP port mapping on Android 11+",

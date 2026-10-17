@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-17T20:36:07Z",
- "since": "2026-10-15T20:36:07Z",
+ "generated_at": "2026-10-17T23:07:53Z",
+ "since": "2026-10-15T23:07:53Z",
  "repos": {
   "net4people/bbs": {
    "issues": [],
@@ -126,17 +126,6 @@
      "user": "Vort",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2598",
      "body": ""
-    },
-    {
-     "number": 2597,
-     "title": "fix typos",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-15T19:43:42Z",
-     "updated_at": "2026-10-15T21:48:40Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2597",
-     "body": "fix typos\n"
     }
    ],
    "comments": [
@@ -157,6 +146,17 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 6050,
+     "title": "add speed limiter for download and upload speed in megabytes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-01T07:43:44Z",
+     "updated_at": "2026-10-17T23:05:09Z",
+     "user": "SaeedFazlollahzadeh",
+     "url": "https://github.com/XTLS/Xray-core/pull/6050",
+     "body": ""
+    },
     {
      "number": 7190,
      "title": "Dont spam the issue 📥📥 \n",
@@ -708,17 +708,6 @@
      "body": "fix #5964\r\n\r\n### RawPacket aka TLS Spoofing\r\n\r\nSo first lets talk about the idea,\r\n\r\nwhen you connect to a xray server, the censors can see your TLS ClientHello, read the SNI, and figure out what you are doing and block :)\r\n\r\nThe RawPacket aka TLS spoofing fixes that by injecting a fake TLS ClientHello before the real one Hits.\r\n\r\n\r\nThe fake one carries like a decoy domain (ex. baidu.com) and then the real one carries your actual destination (ex. www.example.com).\r\n\r\nA sensor that captures the first packet sees baidu.com and think that you are just browsing, and everything is okay with that, but in reality your connection goes through :)\r\n\r\n\r\nIt can be configured in the `finalmask.tcp` okay? and its only for client side.\r\n\r\n\r\n### How everything works\r\n\r\n\r\nWhen Xray dials a TCP connection and the first `Write()` happens (which also triggers the real TLS handshake) , our Raw Packet setup does the following.\r\n\r\n1.builds a fake Tls ClientHello with whatever SNI you want or you have option to provide the raw bytes (b64).\r\n\r\n2.Then we. wrap it in a raw TCP/ip packet.\r\n\r\n3.Then deliberately we corrupt the TCP header using whatever method is selected okay?\r\n\r\n4. Then we shoot it out via a raw socket\r\n\r\n5. Then immediately let the real `Write()` go through normally\r\n\r\n\r\nIn short : two packets arrive at the server back to back and the fake one gets dropped by the servers TCP stack because of the corruption and then the real handshake proceeds like nothing happened.\r\n\r\n\r\n### Config Example\r\n\r\n```json\r\n{\r\n  \"streamSettings\": {\r\n    \"finalmask\": {\r\n      \"tcp\": [\r\n        {\r\n          \"type\": \"rawpacket\",\r\n          \"settings\": {\r\n            \"sni\": \"baidu.com\",\r\n            \"payload\": \"\",\r\n            \"method\": \"wrong-sequence\",\r\n            \"ttl\": 3,\r\n            \"count\": 1\r\n          }\r\n        }\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n\r\n### Available Fields\r\n\r\n`sni` : The domain to put in the fake ClientHello. If you set this, it will auto generate a valid TLS ClientHello for you automatically. If you set `payload` and `sni` same time , sni wins here.\r\n\r\n```\r\n\"sni\": \"baidu.com\"\r\n```\r\n\r\n`payload` : If you don't want an auto gnrated ClientHello, then just encode your raw bytes that you want into base64 and put them here. I have added an option to do it from command line also. Do like this \r\n\r\n```\r\n xray tls fake-hello google.com\r\n ```\r\n\r\nIt will out the thing and then just copy paste.\r\n\r\n\r\nNote : If `sni` and payload are empty or not set , the raw packet does nothing and the connection goes through normally.\r\n\r\n\r\n`method` : It defines how we corrupt the fake packet so the server drops it.\r\n\r\n`wrong-sequence` : It duplicates the sequence number (looks like a retransmission so server drops it)\r\n\r\nSo we grab the kernels `snd_nxt` ( the next sequence number the kernel expects to send), then subtract the length of the fake payload and then use that as the sequence number of the injected packet. The results then is a duplicate of the. last segment, so the receivers TCP stack sees it as a retransmit at best, or like out of window at worst and then drops it.\r\n\r\n\r\n`wrong-checksum`: It flips all the bits in the TCP checksum (so server sees a bad checksum and drops it)\r\n\r\nWe build the packet with a correct checksum and then flip every bit(^0xFFFF). The receiver then validates the checksum and its wrong, so the packet goes in trash.\r\n\r\n`wrong-ack`: It sets ACK number way outside the receive window (so server sends dup ACK then drops it)\r\n\r\nIt sets the ACK number to `rcv_nxt - window/2` and that's way outside of the receivers window, and the kernel responds with a dup ACK containing the correct sequence number, then drops it.\r\n\r\n`wrong-md5` : This adds a fake TCP MD5 signature option and server without MD5 drops it\r\n\r\nHere we append a TCP option with kind=19 and length=18 to the TCP header. The kind 19 is the MD5 signature option (RFC 2385), if the receiver doesn't use TCP MD5 (which is basically everything except some BGP routers), it sees an unknown option"
     },
     {
-     "number": 6050,
-     "title": "add speed limiter for download and upload speed in megabytes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-05-01T07:43:44Z",
-     "updated_at": "2026-10-16T07:25:36Z",
-     "user": "SaeedFazlollahzadeh",
-     "url": "https://github.com/XTLS/Xray-core/pull/6050",
-     "body": ""
-    },
-    {
      "number": 6016,
      "title": "Move Browser Dialer to `sockopt.dialerProxy` `browser://` URL usage, with UUID path validation, startup-time conflict checks, instance-lifecycle listen/serve control, XHTTP mode constraints, and static initialization simplification",
      "is_pr": true,
@@ -849,20 +838,18 @@
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7130",
      "body": "as asked in #6795: the TUN inbound gets a small TCP/IP stack of its own instead of gVisor's (gVisor stays in go.mod for WireGuard and the ICMP helper). one goroutine reads the device and hands each segment to its connection, which is the buf.Reader and buf.Writer the dispatcher works with, so buffers from the outbound go to the tun as they are. TCP has window scaling, SACK, a congestion window and a retransmit timer that follows the round trip; UDP and ICMP echo behave as before\n\nthe second commit lets Linux do the segmentation (IFF_VNET_HDR, TUNSETOFFLOAD): Xray reads and writes segments of up to 64 KB instead of one packet per syscall\n\none stream at MTU 1500 downloads at 380 MB/s instead of 162 and takes 3.9 CPU-seconds per GB instead of 11.1; with the offload it is 2100 MB/s and 0.69. an idle TCP connection holds 14 KB of heap instead of 28. behind an emulated 100 Mbit link both keep up with the kernel's own TCP\n\nweaker than gVisor: the window is fixed (256 KB, 1 MB with the offload), so without the offload one connection over a 100 ms round trip gets 1.6 MB/s where main gets 4.4, and IP fragments are dropped, not reassembled. only Linux was run: the Windows, macOS, iOS, FreeBSD and Android devices are moved to the new interface and compile, nothing more\n\n<details>\n<summary>throughput and CPU</summary>\n\nWSL2, kernel 5.15, Ryzen 9 5900X, Xray on 4 cores with GOMAXPROCS=4, load and target on cores of their own, freedom outbound to a local target. main (836a6fed), the stack and the stack with the offload take turns sample by sample; median of 5, MB/s of payload and CPU-seconds of Xray (user + system) per GB. 1 stream moves 2 GB, 8 streams 256 MB each\n\n```\n                       MB/s                      CPU s/GB\nMTU    case            main   stack  offload     main   stack  offload\n1500   download 1       162     380     2100     11.1     3.9     0.69\n1500   upload   1       233     354     3460      9.9     4.4     0.53\n1500   download 8       378    1244     4763      7.5     3.1     0.82\n1500   upload   8       398     357     2860      8.7     5.5     0.77\n9000   download 1       330    1035     1658      5.7     1.5     0.92\n9000   upload   1       456     939     3052      4.6     1.9     0.67\n9000   download 8      1465    3402     5082      2.3     1.2     0.82\n9000   upload   8      1359    1812     2938      3.0     1.3     0.82\n```\n\nthe MTU 9000 rows are from an earlier run, when the PC was doing other work as well, so their levels may read low\n\nwithout the offload, upload on 8 streams is a tenth behind main: one goroutine reads the tun and its queue of 500 packets overflows (78386 packets dropped there, 116531 for main)\n</details>\n\n<details>\n<summary>behind a link (the router case)</summary>\n\nthe load runs in a second namespace behind a link played in user space (rate, delay, drop-tail queue), the namespace of Xray forwards into the tun. \"kernel\" is the same link without Xray. median of 3, MB/s, in brackets the percent of data packets the link dropped\n\n```\n100 Mbit, 10 ms round trip   kernel       main         stack        offload\ndownload 1                   9.6 (0.4)    8.8 (0.5)    9.4 (0.1)    8.9 (0.9)\nupload   1                   9.7 (0.3)    8.7 (0.1)    9.4 (0.1)    9.5 (0.0)\ndownload 8                   9.1 (1.8)    8.7 (1.4)    8.9 (1.6)    8.9 (1.6)\nupload   8                   9.4 (1.8)    8.4 (1.5)    9.3 (1.5)    9.1 (1.6)\n\n50 Mbit, 20 ms round trip, 1 % random loss\ndownload 1                   0.7 (1.0)    0.6 (1.0)    0.8 (1.0)    0.8 (1.4)\nupload   1                   0.7 (0.9)    0.7 (1.0)    0.7 (1.1)    0.7 (1.1)\ndownload 8                   4.4 (1.7)    3.6 (1.6)    4.1 (1.8)    4.3 (1.9)\nupload   8                   3.6 (2.8)    3.7 (2.4)    3.8 (2.6)    4.0 (2.6)\n\n100 Mbit, 100 ms round trip\ndownload 1                   8.1 (0.5)    4.4 (3.5)    1.6 (0.0)    3.8 (0.6)\nupload   1                   7.4 (1.4)    6.1 (1.1)    2.4 (0.0)    6.5 (1.2)\ndownload 8                   5.1 (1.5)    4.7 (2"
-    },
-    {
-     "number": 7140,
-     "title": "XDNS finalmask: Support DoH (\"https://\", `tlsConfig`, domain fronting, etc., `quicConfig`, Chrome Client Hello by default) with empty HTTP User-Agent",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-13T11:53:44Z",
-     "updated_at": "2026-10-15T22:41:19Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7140",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 6242818728,
+     "issue": 6050,
+     "issue_title": "add speed limiter for download and upload speed in megabytes",
+     "created_at": "2026-10-17T23:05:09Z",
+     "user": "p0lyfusion",
+     "url": "https://github.com/XTLS/Xray-core/pull/6050#issuecomment-6242818728",
+     "body": "@SaeedFazlollahzadeh this feature has been requested multiple times and I've got tired of it and [made an external tool ](https://github.com/p0lyfusion/xray-speedlimit)to get it done. Works surprisingly well."
+    },
     {
      "id": 6239844033,
      "issue": 7136,
@@ -2223,42 +2210,6 @@
      "body": "From https://github.com/XTLS/Xray-core/pull/7130#issuecomment-6116258188 ，我觉得 XDRIVE 先把 https://github.com/XTLS/Xray-core/pull/6748#issuecomment-5752780799 提到的那些点弄好吧，~~感觉现在的代码半残且没深度 deVibe~~\r\n\r\n是否 h1 参考 XDNS DoH 的新方案 https://github.com/XTLS/Xray-core/pull/7140#issuecomment-6170232935 ，XHTTP 也会换成新方案"
     },
     {
-     "id": 6203998239,
-     "issue": 7103,
-     "issue_title": "feat(xdns): add encrypted DNS resolver support",
-     "created_at": "2026-10-15T22:56:43Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7103#issuecomment-6203998239",
-     "body": "https://github.com/XTLS/Xray-core/pull/7140 已合并，先 rebase https://github.com/XTLS/Xray-core/commit/10879a4a8b202fb739ea9db6cb504f6a29f2b082 ，你想加 DoT `tls://` 和 DoQ `quic://` 的话可以参考着加一下，~~虽然感觉这俩用处不大~~"
-    },
-    {
-     "id": 6203526955,
-     "issue": 7171,
-     "issue_title": "TUN inbound: Add disableFakeICMP config option for pongs",
-     "created_at": "2026-10-15T22:24:37Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7171#issuecomment-6203526955",
-     "body": "要加的话给 WG、MASQUE 入站也加上，先等合并 https://github.com/XTLS/Xray-core/pull/7156 后 rebase 吧，不过 Xray 后续会支持 ICMP，选项得设计成 `\"icmp\":`"
-    },
-    {
-     "id": 6203396791,
-     "issue": 7156,
-     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
-     "created_at": "2026-10-15T22:15:38Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6203396791",
-     "body": "WireGuard 出站那个 Linux kernelTUN 可能就类似于隔壁 TUN 的“system”选项吧，感觉后续的版本可以删掉了 @Fangliding "
-    },
-    {
-     "id": 6203239736,
-     "issue": 7156,
-     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
-     "created_at": "2026-10-15T22:05:05Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6203239736",
-     "body": "@LjhAUMEM 之前 XDNS/XICMP 说一个精简版的 TCP/IP stack 这下有了，不过可能还是定制版的 mKCP 表现更好，没那些小包\r\n\r\n就像 XDRIVE 虽然也能承载 TCP/IP、mKCP 但不如自己搞套机制，比如 XDRIVE 本身几乎是顺序包、不丢包，主要考虑提速就行"
-    },
-    {
      "id": 6203006617,
      "issue": 7156,
      "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
@@ -2266,24 +2217,6 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6203006617",
      "body": "> no Go file imports gVisor any more (go.mod keeps it as indirect, a test of wireguard-go wants it)\r\n\r\n这个也换掉吧"
-    },
-    {
-     "id": 6202933664,
-     "issue": 7156,
-     "issue_title": "WireGuard, MASQUE proxies: Use Xray-core's built-in lightweight TCP/IP stack instead of gVisor as well",
-     "created_at": "2026-10-15T21:45:22Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7156#issuecomment-6202933664",
-     "body": "@Fangliding loss recovery and reconnects are in the third commit now. on a 100 Mbit link with 50 ms delay and 0.5 % loss eight streams get 1.6 MB/s where gVisor gets 1.4, at 50 Mbit and 1 % loss 4.5 against 4.1, one stream about the same as gVisor. when the link is gone for 5, 20 or 60 s the first data comes back within 1.5 s, gVisor takes 1.7, 5.8 and 46 s, and in one run after a 20 s outage of the upload it did not come back in one of three tries. the numbers are in the description, marking it ready again\n"
-    },
-    {
-     "id": 6201797743,
-     "issue": 7166,
-     "issue_title": "Proxy: Close a removed user's connections",
-     "created_at": "2026-10-15T20:38:48Z",
-     "user": "ImMohammad20000",
-     "url": "https://github.com/XTLS/Xray-core/pull/7166#issuecomment-6201797743",
-     "body": "@RPRX I think it better than what i wrote"
     },
     {
      "id": 6137264458,
@@ -2298,6 +2231,17 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3084,
+     "title": "Проблема с сессией AmneziaWG в Telegram после режима ожидания на Android",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-28T17:04:38Z",
+     "updated_at": "2026-10-17T21:55:54Z",
+     "user": "ghost",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3084",
+     "body": "Окружение: \n- Клиент: Amnezia VPN 5.0.1.0 (Android, Arm64, Realme 15T)\n- Протокол: AmneziaWG 3.1 (на собственном VPS)\n- Настройки: Включено раздельное туннелирование (в VPN направлено несколько выбранных приложений, включая Telegram; остальные идут напрямую).\n\nСуть проблемы:\n- После входа телефона в режим ожидания (обычное отключение экрана) \"рукопожатия\" с заданным интервалом преращаются (наблюдаю по входящим на VPS пакетам). Возможно так и должно быть (не уверен), но гораздо интереснее следующее.\n- Если активировать телефон (включить экран) и открыть любое приложение, которое должно теннелироваться, \"рукопожатие\" происходит сразу и без проблем (на VPS видно несколько входящих пакетов и ответ от AmneziaWG сервера)\n- Если открыть Telegram (который тоже настроен на туннелирование) - \"рукорожатие\" долго (до минуты) не происходит, Telegram висит в состоянии \"Connecting...\". При этом на VPS наблюдаю кучу входящих через туннель сообщений и ни одного ответа от AmneziaWG сервера. Выглядит так, будто клиент Amnezia на телефоне \"забыл\", что он спал и нужно обновить рукопожатие, и вместо этого продолжает отправлять трафик в туннель как ни в чем ни бывало. \n- При этом, если в Telegram в то время, когда телефон в режиме ожидания, приходит входящее сообщение - проблем никаких - рукопожатие тут же происходит, Telegram загружает сообщение.\n"
+    },
     {
      "number": 3296,
      "title": "Automatically sort servers in the “Location for connection” list",
@@ -2330,6 +2274,17 @@
      "user": "simsight",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2964",
      "body": "Раньше я мог прописать в списке исключений сайты навроде\n10.0.0.0/8\n172.16.0.0/12\n192.168.0.0/16\n\nИ это работало, локальная сеть не шла через впн. А сейчас мне что, каждый ip прописывать? Эта функция сломана в последней версии 5.0.0.5 на виндоус"
+    },
+    {
+     "number": 263,
+     "title": "F-droid repository",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2023-07-29T12:34:05Z",
+     "updated_at": "2026-10-17T18:12:34Z",
+     "user": "im7mortal",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/263",
+     "body": "Amnezia VPN is an excellent application. However, its current distribution on privacy-oriented platforms like Linux and degoogled Android leaves much to be desired. While I understand that Amnezia VPN aims for easy setup for a wide audience, I believe it's essential to stay closely connected with the privacy community for apps like this, to garner the best feedback and ideas.\r\n\r\nAs I couldn't locate an APK on the repo, I forked it and set up actions to create an unsigned APK. Then, using F-Droid server tools, I signed and deployed it.\r\n\r\n**[There is my AmneziaVPN f-droid repository.](https://d2kntb75wqejvh.cloudfront.net/fdroid/repo/)**\r\n\r\nThe process is quite simple to automate, and I plan to do so.\r\n\r\nThere are two ways to distribute apps with F-Droid:\r\n\r\n1. Own Repo (current setup): This approach allows apps to be signed with F-Droid or built from scratch.\r\n\r\n2. Main F-Droid Repo: This method requires setting up metadata on GitLab, containing the build recipe and source code link. The app must be FOSS, which is not the primary focus of the project. The advantage is that the app will be available on the main repo, but it's not critically important, as those who need it can download it from the repository.\r\n\r\n\r\n"
     },
     {
      "number": 3295,
@@ -2488,6 +2443,15 @@
    ],
    "comments": [
     {
+     "id": 6241825485,
+     "issue": 3084,
+     "issue_title": "Проблема с сессией AmneziaWG в Telegram после режима ожидания на Android",
+     "created_at": "2026-10-17T21:55:53Z",
+     "user": "safrankov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3084#issuecomment-6241825485",
+     "body": "Тоже самое на 5.0.3.1 (awg 3.1), samsung galaxy s25 ultra"
+    },
+    {
      "id": 6238514914,
      "issue": 2830,
      "issue_title": "Split tunneling adds local connected subnets to VPN interface routes and breaks LAN access on Windows",
@@ -2596,15 +2560,6 @@
      "body": "> 8\\. Спасибо. Вроде  получше стало.\n\nПожалуйста - рад, что кому то оказалась эта информация полезной. "
     },
     {
-     "id": 6201795529,
-     "issue": 2511,
-     "issue_title": "Amnezia VPN Error 305",
-     "created_at": "2026-10-15T20:38:40Z",
-     "user": "lololol650-coder",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2511#issuecomment-6201795529",
-     "body": "Просто у меня это произошло в один день. Год с лишним сидел с выделенным ip через ishosting. И еще человек 10 друзей. Всё было норм. Купил новый ip, думал поможет. Через мобильную сеть мтс и вайфай никак. А вот через Yota удалось подключиться к новому свежему ip, только теперь на одном устройстве. \n\nЭт я так, может наведет на какие-то мысли. Поддержка ishosting мне сказала (по-русски), что из РФ они ip не меняют и скорее всего проблема с РКН. Но что-то пока не вяжется. "
-    },
-    {
      "id": 6200604387,
      "issue": 3256,
      "issue_title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
@@ -2649,41 +2604,9 @@
      "user": "somaz94",
      "url": "https://github.com/HyNetworks/hysteria/pull/1704",
      "body": "ACL rules are parsed with `linePattern` in `extras/outbounds/acl/parse.go`, which only accepts `\\w+` as the outbound name, so a rule like `New-turkey(geosite:cn)` fails with \"invalid syntax\" even though the server config happily accepts an outbound with that name. After parsing, the name is only used for a lowercased map lookup, so allowing `-` in the pattern is all it takes.\n\nI kept this to hyphens as the issue describes. Names with other characters such as dots still don't parse, same as before.\n\nThe new `TestParseTextRules` case fails on master with `invalid syntax at line 2: New-turkey(geosite:cn)` and passes with this change. `gofumpt -l -extra .` is clean, and `go test ./...` passes in `extras/outbounds` and `app/cmd`.\n\nFixes #1323\n"
-    },
-    {
-     "number": 1702,
-     "title": "A TCP target that stops reading stalls every TCP stream of the client (connection flow-control window)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-15T21:43:33Z",
-     "updated_at": "2026-10-15T21:46:10Z",
-     "user": "colituvpn",
-     "url": "https://github.com/HyNetworks/hysteria/issues/1702",
-     "body": "**Describe the bug**\n\nWhen a TCP target stops reading but keeps its connection open, the server's copy from the stream into the target blocks. The stream's unread upload data keeps occupying the QUIC connection-level receive window. A single stream can hold up to the stream window (8 MB by default), so three or four such streams use up the connection window (20 MB by default). From then on the client cannot send on any stream of that connection: every new TCP request hangs, while UDP datagrams (DNS, QUIC relayed over UDP) keep flowing and the connection looks alive.\n\nThe client cannot release the stalled streams itself. Its writers are blocked on the same window, so it does not get to close them; with an Xray client, an instrumented server only saw the client give the streams up when the client process was killed. Nothing recovers until the client's own idle timeout, which is minutes in practice.\n\nUpload speed tests trigger this reliably: the test server stops reading once it has measured enough while the browser's upload is still open. On an Android client the result was always the same — TCP over Hysteria stopped about 50–60 s into an upload test.\n\n**To Reproduce**\n\n1. Server v2.11.0 (also reproduced on current master), default QUIC settings.\n2. Through one client connection, start 3–6 uploads to a TCP target that accepts the connection, reads a few MB and then stops reading without closing.\n3. Open a new TCP request through the same client connection. It never completes.\n\nWe also added an integration test for this: four streams to a target that never reads (one end of `net.Pipe()`), then a request to an echo server on the same connection. On master it times out.\n\n**Expected behavior**\n\nA stalled target should affect only its own stream, not every other stream of the client.\n\n**Logs**\n\nNothing unusual is logged on the server. On the client side, new TCP requests are dispatched to Hysteria and simply never get a response; packet captures show only ACKs, small control packets and datagrams after the stall, and no new stream data from the client.\n\n**Device and Operating System**\n\n- Server: Hysteria v2.11.0 (official build and built from source), Linux amd64.\n- Clients: Xray-core 26.10.10 (hysteria outbound) on Android, and the official Hysteria client in a local reproduction on Windows (loopback).\n\n**Additional context**\n\nWhat we ruled out before getting there: UDP shaping by the network (packets kept flowing both ways), congestion control (same result with Reno instead of BBR), Xray's Chrome-parrot QUIC mode (same result with it disabled), the stream limit (about 90 streams against 1024), and larger windows (64 MB per connection with 4 MB per stream only delays the stall).\n\nA fix that closes a target when a single write to it makes no progress for a while (and closes it as soon as the client gives the stream up) resolves it in our tests: the connection recovers in under 10 s instead of never, with no change for fast, slow or normally closing targets. We run it in production and will open a pull request with the fix and the test.\n"
-    },
-    {
-     "number": 1703,
-     "title": "fix(core/server): close TCP targets that stop accepting data",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-15T21:43:41Z",
-     "updated_at": "2026-10-15T21:43:41Z",
-     "user": "colituvpn",
-     "url": "https://github.com/HyNetworks/hysteria/pull/1703",
-     "body": "Fixes #1702\n\n**Problem**\n\nA TCP target that stops reading but keeps its connection open blocks the copy from the stream into it. The stream's unread data keeps occupying the connection-level flow-control window; a few such streams use it up, and then the client cannot send on any stream of the connection — every new TCP request hangs while UDP datagrams keep flowing. The client cannot give the stalled streams up because its writers are blocked on the same window. Upload speed tests trigger this in practice (the test server stops reading once it has measured enough).\n\n**Change**\n\n- `server.Config.TCPStallTimeout` (default 10s, negative disables): the target connection is wrapped so that a single `Write` that makes no progress for this long closes it. Every write gets a fresh timeout, so a slow target that keeps accepting data is never closed. The wrapper only implements `net.Conn`, and `Close` is idempotent.\n- The target is also closed as soon as the client gives the stream up (`context.AfterFunc` on the stream's context), so both copy directions end even when the target is silent.\n- After the close, the existing cleanup closes the stream, which releases its share of the connection window.\n\n**Test**\n\n`TestServerTCPStalledTarget` (core/internal/integration_tests/stall_test.go): four streams upload into targets that never read (one end of `net.Pipe()`), then a new request to an echo server on the same connection must complete. Without the change it times out after 10 s; with it, it passes in about 3.5 s (stall timeout set to 2 s in the test). `go test ./core/server/ ./core/internal/integration_tests/` passes. (`TestClientServerUDPStress` fails on our Windows machine on master as well, unrelated.)\n\n**Field results**\n\nWe have run this on our servers since 2026-10-15. In a local reproduction (official server, an Xray client, uploads into a target that stops reading) the connection never recovered without the fix and recovered in 7.8 s with it, with no difference for fast, slow (1 MB/s) or early-closing targets. On an Android device, four upload speed tests in a row over 160 s no longer stalled Hysteria; before the fix it stalled at about 60 s every time.\n\nNot exposed in the app config yet; happy to add a `quic`/`tcp` option there if you prefer it configurable.\n"
     }
    ],
-   "comments": [
-    {
-     "id": 6202946718,
-     "issue": 1702,
-     "issue_title": "A TCP target that stops reading stalls every TCP stream of the client (connection flow-control window)",
-     "created_at": "2026-10-15T21:46:10Z",
-     "user": "colituvpn",
-     "url": "https://github.com/HyNetworks/hysteria/issues/1702#issuecomment-6202946718",
-     "body": "Fix and integration test proposed in #1703. The client-side part (the Xray hysteria outbound not releasing a stream whose write is blocked) is reported as XTLS/Xray-core#7169."
-    }
-   ]
+   "comments": []
   }
  }
 }

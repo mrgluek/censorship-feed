@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-18T23:12:11Z",
- "since": "2026-10-16T23:12:11Z",
+ "generated_at": "2026-10-19T04:40:04Z",
+ "since": "2026-10-17T04:40:04Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -20,6 +20,17 @@
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
+    {
+     "number": 1387,
+     "title": "Admin API: explicit null arguments can terminate the daemon",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-19T04:26:24Z",
+     "updated_at": "2026-10-19T04:26:24Z",
+     "user": "krivonosoff161",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1387",
+     "body": "An admin request with explicit `\"arguments\": null` can terminate the daemon with a nil-pointer panic. I reproduced this against `develop` at `6ad41376b69c1fa223dfacf577a6f947ca39de6c` and verified a small local fix.\n\n### Reproduction\n\nStart a disposable daemon built from that revision with `-useconf`, supplying this configuration on stdin:\n\n```json\n{\n  \"AdminListen\": \"tcp://127.0.0.1:19001\",\n  \"IfName\": \"none\",\n  \"MulticastInterfaces\": [],\n  \"Peers\": [],\n  \"Listen\": []\n}\n```\n\nOnce the admin endpoint is listening, send:\n\n```python\nimport socket\n\nwith socket.create_connection((\"127.0.0.1\", 19001), timeout=2) as client:\n    client.sendall(b'{\"request\":\"getPeers\",\"arguments\":null}\\n')\n    print(client.recv(4096))\n```\n\n**Actual:** the connection closes and the daemon terminates with a nil-pointer panic (exit code 2 in my Windows reproduction).\n\n**Expected:** an invalid admin request should receive a JSON error response without terminating the daemon. A connection using `keepalive` should remain usable for a subsequent valid request.\n\nI also reproduced the same null-pointer failure for `addPeer` and `removePeer` in local handler tests. This requires access to the admin endpoint; I have not established reachability through ordinary overlay peer traffic.\n\n### Cause and proposed fix\n\nThe handlers allocate a request pointer and then call `json.Unmarshal(in, &req)`. JSON `null` sets that pointer to nil, after which handlers such as `getPeersHandler` dereference it. The default `{}` assigned in `handleRequest` only covers omitted arguments, not an explicit null value.\n\nRelevant source: [admin request decoding and dispatch](https://github.com/yggdrasil-network/yggdrasil-go/blob/6ad41376b69c1fa223dfacf577a6f947ca39de6c/src/admin/admin.go), [getPeers handler](https://github.com/yggdrasil-network/yggdrasil-go/blob/6ad41376b69c1fa223dfacf577a6f947ca39de6c/src/admin/getpeers.go).\n\nMy local fix adds the `bytes` import and rejects explicit null immediately before calling `handler.handler(req.Arguments)` in `handleRequest`:\n\n```go\n// Null would clear the request pointers allocated by handlers.\nif bytes.Equal(bytes.TrimSpace(req.Arguments), []byte(\"null\")) {\n    return errors.New(\"arguments must not be null\")\n}\n```\n\nOmitted arguments retain the existing `{}` default. Ordinary object arguments remain unchanged.\n\n### Local verification\n\n- Regression tests fail for null arguments on the original code and pass with the guard. They cover omitted arguments, empty/nonempty objects, null with whitespace, rejection before dispatch, and `getPeers`/`addPeer`/`removePeer` followed by a valid request on the same keepalive connection.\n- With the fix, a real Windows daemon returned errors for all three null commands, stayed alive, and accepted subsequent valid commands on the same connection. TUN, discovery and peers were disabled for this reproduction.\n- Go 1.26.9, Windows amd64: build, `go vet ./...`, and the selected test suite passed.\n- Go 1.26.9, Linux amd64 (Alpine 3.24.2 under WSL2, GCC 15.2.0, CGO enabled): the full suite and full race suite passed, each with 67 tests/subtests and no test skips or race reports. Commands were `go test -count=1 -timeout=180s -parallel=2 ./...` and `go test -race -count=1 -timeout=300s -parallel=2 ./...`, with `GOFLAGS=-p=1`. These ran in a network namespace with loopback only and no external route.\n\nThese are local results, not GitHub CI results or a claim of validation on every supported platform. I searched existing issues/PRs and checked the relevant changes in #1364 and #1365; I did not find a matching null-argument fix.\n"
+    },
     {
      "number": 1385,
      "title": "Link-password authentication bypass through unvalidated Ed25519 identity keys, also affecting Ironwood routing authentication",
@@ -74,17 +85,6 @@
      "user": "peigongdsd",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1386",
      "body": "Validate the remote public key before verifying the password-dependent handshake signature. Require an on-curve, canonical encoding and reject all small-order points (up to torsion $8$, the cofactor of curve 25519), which can make signature verification independent of the intended message.\n\nValidate the final parsed key so duplicate TLVs cannot bypass the check. Keep the wire format and normal password behavior unchanged.\n\nAdd in-memory rejection coverage and retain ordinary handshake coverage.\n\nRefs #1385\n\nHonestly I have yet to understand the full story. GPT-6-astra composed this commit, and seems like to test the point order aginst $8$, the dependency filippo.io/edwards25519 is unavoidable. This is a proposed fix of the issue, please pull to local and have a try."
-    },
-    {
-     "number": 1384,
-     "title": "deb: keep configuration backups private",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-17T04:34:27Z",
-     "updated_at": "2026-10-17T04:34:27Z",
-     "user": "omrzk",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1384",
-     "body": "## Summary\n\nOn Debian package upgrades, `postinst` backs up the existing configuration under `/var/backups`. Older configurations can be mode 0644, so a plain copy leaves the backup containing the private key readable by other users. Create the backup through a mode 0600 temporary file and replace any existing dated backup atomically. The backup date is now determined when the package is installed.\n\nThis addresses the backup path described in #697. Permissions on the active configuration were fixed separately.\n\n## Verification\n\n- [x] `sh -n contrib/deb/generate.sh` and `sh -n contrib/deb/test-postinst-backup.sh`\n- [x] `sh contrib/deb/test-postinst-backup.sh` (regression fails on the previous backup implementation and passes with this change, including replacement of a mode 0644 backup)\n- [x] `git diff --check`\n\nA full Debian package install was not run locally.\n"
     }
    ],
    "comments": [
@@ -219,6 +219,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2602,
+     "title": "Don't send data if remote address is not set",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-19T01:21:16Z",
+     "updated_at": "2026-10-19T01:22:16Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2602",
+     "body": "SendData takes the header protection key from m_Address->i, but an incoming session has no address until SessionConfirmed. A block from a SessionRequest payload can reach SendData before that: HandlePayload parses RelayRequest regardless of session state, and HandleRelayRequest answers through SendData when the relay tag is not found. The result is a read at a null address and the router dies.\n\nReachable by anyone: the token that ProcessSessionRequest requires is handed out by the receiver itself in Retry, and the static key for the handshake is published in its RouterInfo.\n\nReproduced on 3.0.0 (ec19bfb5) with a crafted SessionRequest whose payload is a datetime block, a RelayRequest block with an unknown relay tag and padding: the router dies both under AddressSanitizer (SEGV at 0x41) and in an ordinary build (Segmentation fault). With this change the same packets leave the router alive and log 'Address is not set' instead.\n\nBuilds with no warnings, make -C tests passes."
+    },
+    {
      "number": 2601,
      "title": "Suspected network connection issues.",
      "is_pr": false,
@@ -253,6 +264,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6257649391,
+     "issue": 2602,
+     "issue_title": "Don't send data if remote address is not set",
+     "created_at": "2026-10-19T01:22:16Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2602#issuecomment-6257649391",
+     "body": "Removing as asked, you have fixed it in another place."
+    },
     {
      "id": 6255867016,
      "issue": 2601,
@@ -306,6 +326,28 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7198,
+     "title": "Fix fragmented TLS sniffing and add opt-in timeout rejection",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-19T01:08:15Z",
+     "updated_at": "2026-10-19T01:37:17Z",
+     "user": "hagz0r",
+     "url": "https://github.com/XTLS/Xray-core/pull/7198",
+     "body": "An IP-based SOCKS connection can be routed before its TLS ClientHello arrives. In a loopback reproduction, the same 517-byte ClientHello for `www.youtube.com` takes the domain-selected outbound when sent immediately, but takes the default IP route when sent 350 ms after SOCKS success. Once dispatched, later SNI cannot change the route. Splitting the handshake across reads or TLS records also loses the domain in the current parser.\n\nThis change:\n\n- Reassembles ClientHello across TLS records and reports incomplete TLS as `ErrProtoNeedMoreData`. The QUIC `ReadClientHello` caller is unchanged, and forwarded bytes are preserved.\n- Adds an opt-in inbound `sniffing.tlsSniffingTimeout` in milliseconds. For IP TCP/443 destinations, it waits before outbound dispatch and rejects a timeout, cancellation, incomplete EOF, exhausted prefix budget, or admission overload instead of falling back to IP routing.\n- Keeps SOCKS success before waiting for application data, so clients that require SOCKS success before sending ClientHello can progress.\n- Preserves existing routing rules, exclusions, complete unknown/no-SNI behavior, and usable FakeDNS mappings. It does not assign unknown domains to a proxy outbound.\n\nExample inbound sniffing settings:\n\n```json\n{\n  \"enabled\": true,\n  \"destOverride\": [\"http\", \"tls\"],\n  \"routeOnly\": true,\n  \"tlsSniffingTimeout\": 3000\n}\n```\n\nThe single deadline covers first-byte waiting and subsequent classification; fragments do not restart it. Accepted values are 1–60000 ms; zero retains the existing timeout/fallback policy. The prefix budget is 64 KiB, with 1024 pending workers per dispatcher. A pending read retains its admission slot until its owner closes the input and the read exits. JSON and protobuf configuration paths both validate the option. See `app/dispatcher/README.md` for the full behavior and limits.\n\nOther ports, UDP, and destinations supplied as domains use ordinary sniffing. The parser fix applies even when the option is off: partial TLS now continues within the existing 200 ms budget instead of hitting the two-read early exit. Server-first protocols on an enabled IP TCP/443 connection will time out; oversized or excessively delayed ClientHellos are rejected. This does not make hidden SNI/ECH or QUIC identifiable.\n\nValidation on Windows amd64, Go 1.27.2:\n\n- `go test -timeout 5m ./...` passed; affected tests were rerun after the final compatibility adjustment.\n- `go test -race ./app/dispatcher ./app/proxyman ./common/protocol/tls ./infra/conf` passed.\n- `go test ./common/protocol/tls -run '^$' -fuzz FuzzSniffTLS -fuzztime 20s -parallel 4` passed, with approximately 2.36 million executions.\n- Repository formatting check, protobuf generator-header check, and `git diff --check` passed.\n- Built-binary SOCKS loopback comparisons cover immediate, 350 ms and 2 s delayed ClientHellos, multiple writes/records, idle and incomplete connections, timeout rejection with no outbound accept, ordinary/no-SNI routing, other ports, domain destinations, and byte preservation. The final binary also passed a 32 KiB ClientHello case. Both dispatcher APIs have regression tests, including cancellation, data returned with EOF, prefix/admission limits, and FakeDNS compatibility.\n\nThe loopback reproduction demonstrates the routing mechanism; it does not establish the cause of an individual production incident. End-user application integration and Linux/macOS execution have not been validated locally.\r\n"
+    },
+    {
+     "number": 7197,
+     "title": "Bump github.com/klauspost/cpuid/v2 from 2.4.0 to 2.4.1",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-19T00:20:52Z",
+     "updated_at": "2026-10-19T00:20:56Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7197",
+     "body": "Bumps [github.com/klauspost/cpuid/v2](https://github.com/klauspost/cpuid) from 2.4.0 to 2.4.1.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/klauspost/cpuid/releases\">github.com/klauspost/cpuid/v2's releases</a>.</em></p>\n<blockquote>\n<h2>v2.4.1</h2>\n<h2>What's Changed</h2>\n<ul>\n<li>Add amd64 CPU topology tree enumeration by <a href=\"https://github.com/klauspost\"><code>@​klauspost</code></a> in <a href=\"https://redirect.github.com/klauspost/cpuid/pull/179\">klauspost/cpuid#179</a></li>\n<li>fix: update riscv vendor ids by <a href=\"https://github.com/Jvlegod\"><code>@​Jvlegod</code></a> in <a href=\"https://redirect.github.com/klauspost/cpuid/pull/177\">klauspost/cpuid#177</a></li>\n<li>fix: assign unified L1 cache size to L1D by <a href=\"https://github.com/ProjectMutilation\"><code>@​ProjectMutilation</code></a> in <a href=\"https://redirect.github.com/klauspost/cpuid/pull/180\">klauspost/cpuid#180</a></li>\n</ul>\n<h2>New Contributors</h2>\n<ul>\n<li><a href=\"https://github.com/Jvlegod\"><code>@​Jvlegod</code></a> made their first contribution in <a href=\"https://redirect.github.com/klauspost/cpuid/pull/177\">klauspost/cpuid#177</a></li>\n<li><a href=\"https://github.com/ProjectMutilation\"><code>@​ProjectMutilation</code></a> made their first contribution in <a href=\"https://redirect.github.com/klauspost/cpuid/pull/180\">klauspost/cpuid#180</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/klauspost/cpuid/compare/v2.4.0...v2.4.1\">https://github.com/klauspost/cpuid/compare/v2.4.0...v2.4.1</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/klauspost/cpuid/commit/8ce0278afc65fd3fd8a19e73c582a5dcd07c7d58\"><code>8ce0278</code></a> fix: assign unified L1 cache size to L1D (<a href=\"https://redirect.github.com/klauspost/cpuid/issues/180\">#180</a>)</li>\n<li><a href=\"https://github.com/klauspost/cpuid/commit/10231090e5b59ff4ea6cf163f9b8b8b411b46a7c\"><code>1023109</code></a> Add amd64 CPU topology tree enumeration (<a href=\"https://redirect.github.com/klauspost/cpuid/issues/179\">#179</a>)</li>\n<li><a href=\"https://github.com/klauspost/cpuid/commit/4e17f594cf93028625810b6faf32e0446a2c2081\"><code>4e17f59</code></a> fix: update riscv vendor ids (<a href=\"https://redirect.github.com/klauspost/cpuid/issues/177\">#177</a>)</li>\n<li>See full diff in <a href=\"https://github.com/klauspost/cpuid/compare/v2.4.0...v2.4.1\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=github.com/klauspost/cpuid/v2&package-manager=go_modules&previous-version=2.4.0&new-version=2.4.1)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yo"
+    },
     {
      "number": 7185,
      "title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
@@ -558,72 +600,6 @@
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7181",
      "body": "builds on #7170. as RPRX asked, h2 + utls by default and h1 the DoH way from #7140: xdrive dials utls chrome even without tlsSettings and one http.Transport speaks what the server picked, so security tls against google works again (main offers h2 in the hello, then speaks h1 and gets http2_handshake_failed). a host gets one connection, a host that answers over h1 moves to a transport with up to 32. the handshake runs inside the dial with the stall limit, so a hung one can't hold the host. alpn http/1.1 without echConfigList gets a warning, the dead REALITY branch and x/net http2 are gone\n\nfrom a VPS to googleapis, 32 parallel 4 MiB puts and gets, 2-3 runs each, main vs this: at ~1 ms put 17.2 to 18.8 MiB/s, get 17.0 to 20.7. with 150 ms added the get still gains (16.8 to 19.6) but the put falls from 10.8 to 3.4, google gives a connection 1 MiB of window, and 4 h2 connections bring it back to 9-11. @RPRX keep one connection or allow a few?\n"
-    },
-    {
-     "number": 7151,
-     "title": "WireGuard outbound: Keep the device when its setup fails",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-14T14:15:39Z",
-     "updated_at": "2026-10-17T04:25:01Z",
-     "user": "T3ST3ST3R0N",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151",
-     "body": "init called device.NewDevice on every call until IpcSet and Up both\nsucceeded. When one failed (an endpoint name that does not resolve yet, a\nsocket error), that device stayed alive, and its goroutines kept reading the\nTUN shared with the next device. Once a later attempt worked, the leftovers\ntook part of the outgoing packets. In the new test five failed inits grow the\ngoroutine count from 100 to 460 on main.\n\nNow the device is created once, and a failed configuration or Up is retried\non the next connection.\n"
-    },
-    {
-     "number": 7135,
-     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T01:29:50Z",
-     "updated_at": "2026-10-17T04:06:41Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135",
-     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
-    },
-    {
-     "number": 7170,
-     "title": "XDRIVE transport: End a request that stalls, not one that runs long",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-15T21:56:47Z",
-     "updated_at": "2026-10-17T04:05:22Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7170",
-     "body": "every Drive request of xdrive has a 60 s limit for the whole request, body included. on a slow line that is too short for big segments: with segmentBytes at 4 MiB the reader fetches 8 at once, at 0.5 MiB/s that takes 64 s, so every attempt times out the same way and after 8 of them the connection is gone. the growing segments talked about in #6748 would hit it even sooner\n\nnow a request ends only after 60 s without progress: no answer that long after the body went out, or no byte of either body, so a stuck request is still cut at 60 s. there is a unit test for slow and stuck requests, and in a Drive simulator at 0.5 MiB/s down main fails with 4 MiB segments while this passes at 0.48 MiB/s\n"
-    },
-    {
-     "number": 7162,
-     "title": "676a600 后 VLESS+REALITY+Vision 服务端 SIGSEGV",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-15T11:45:45Z",
-     "updated_at": "2026-10-17T03:37:16Z",
-     "user": "VariatezzZ",
-     "url": "https://github.com/XTLS/Xray-core/issues/7162",
-     "body": "服务端入站 vless-tcp-reality，客户端和服务端相同版本，裸核使用\n676a6000以后仅服务端出现SIGSEGV，回退低于676a6000即恢复，配置未动。\n\n核心崩溃堆栈日志：\n[1.log](https://github.com/user-attachments/files/33490416/1.log)\n\n问的AI分析的根因：\n```\n新 reality（Go1.27 同步）把 Conn.rawInput 由 bytes.Buffer 值改成\n*bytes.Buffer 指针池化（另加 smallInput，见 conn.go:113-128,888-973，\n空闲还会 Put+置nil 再换新 Buffer）。\n而 inbound.go:577-586、outbound.go:278-287 仍用\nrawInput = (*bytes.Buffer)(unsafe.Pointer(p+r.Offset))，\n偏移处现在只有 8 字节指针，被当成整个 Buffer 结构体解释，\nw.rawInput 即为野指针，读即崩。"
-    },
-    {
-     "number": 7176,
-     "title": "XTLS Vision: Compatible with Go 1.27.3+",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-16T08:03:03Z",
-     "updated_at": "2026-10-17T03:37:15Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7176",
-     "body": "close #7162"
-    },
-    {
-     "number": 7165,
-     "title": "Finalmask realm: Fix portMapping on Android 11+",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-15T15:24:03Z",
-     "updated_at": "2026-10-16T23:31:41Z",
-     "user": "eegov",
-     "url": "https://github.com/XTLS/Xray-core/pull/7165",
-     "body": "On Android 11+ `portMapping` never maps anything, it fails within a few milliseconds:\n\n```\n[realm] [port mapping] [53520] init failed after 4.636302ms > gateway discovery failed: no NAT found\n```\n\nAndroid 11+ doesn't let apps bind a `NETLINK_ROUTE` socket or send `RTM_GETLINK`, so `net.Interfaces()` fails (golang/go#40569). A small program calling it in the same Termux prints `route ip+net: netlinkrib: permission denied`. go-nat drops discovery errors, so the realm log only shows `no NAT found`, and it shows it before any SSDP wait could happen. Every go-nat path runs into it: goupnp's `DiscoverDevicesCtx` picks SSDP source addresses with `net.Interfaces()` (`localIPv4MCastAddrs`), koron/go-ssdp's `Search` lists interfaces with it too, and go-netroute (NAT-PMP) dumps routes over netlink. `DiscoverGateway` ends with `ErrNoNATFound`. Even past discovery, `upnp_NAT.AddPortMapping` gets the internal address from `GetInternalAddress`, which calls `net.Interfaces()` again, and returns `(0, nil)` if that fails.\n\n`portmap_android.go` still runs `nat.DiscoverGateway` first and keeps its result when it works, NAT-PMP included. If it fails and the timeout isn't used up, it does the UPnP part itself:\n\n- multicast IPv4 addresses from `wlynxg/anet` (`RTM_GETADDR` without bind, flags via ioctl), filtered like goupnp does. anet is already linked through pion/transport's stdnet\n- SSDP search for `WANConnectionDevice:1` and `:2` from those addresses, then `goupnp.DeviceByURLCtx`\n- a small `nat.NAT` over `WANIPConnection1/2` and `WANPPPConnection1`. The internal address is the local address the SSDP response arrived on (goupnp's `goupnp-local-address`) instead of `net.Interfaces()`. Port selection copies go-nat's: the previous port, else 3 random ports from 10000-65534\n\nOther platforms build `portmap_other.go`, which is the old `nat.DiscoverGateway` call.\n\nanet reads the API level through cgo, which the release workflow has for android (NDK, `CGO_ENABLED=1`). Without cgo it falls back to `net.Interfaces()`, so a `CGO_ENABLED=0` android build keeps the old behavior.\n\nTested on a POCO with Android 16: Xray in Termux, a socks inbound and a hysteria outbound with realm and `portMapping`, Wi-Fi with mobile data on. Home router is MiniUPnPd 1.8 (IGD1, port-restricted), the server is behind a symmetric NAT. Same config and network, 12 minutes apart, server online both times:\n\n<details><summary>v26.10.10 release</summary>\n<pre><code>[realm] [port mapping] [53520] init failed after 4.636302ms > gateway discovery failed: no NAT found\n[realm] update stun locals [198.51.100.7:53520 198.51.100.7:53520 198.51.100.7:53520] with 137.89125ms\n[realm] ... connect [203.0.113.5:11296 203.0.113.5:6627 203.0.113.5:6628] with 597.118489ms\n... transport/internet/finalmask/realm: punch fail > transport/internet/finalmask/realm: timeout\n</code></pre>\n</details>\n\n<details><summary>this PR</summary>\n<pre><code>[realm] [port mapping] [48113] gateway UPNP (IG1-IP1), external 198.51.100.7:58743\n[realm] [port mapping] [48113] init success with 2.294053697s\n[realm] update stun locals [198.51.100.7:48113 198.51.100.7:48113 198.51.100.7:48113 198.51.100.7:58743] with 139.959375ms\n[realm] ... connect [203.0.113.5:11323 203.0.113.5:6627 203.0.113.5:6628] with 1.632484739s\n[realm] punch peer 203.0.113.5:11267 with 294.427µs\n</code></pre>\n</details>\n\nThe peer's hello arrives from a port it never advertised (11267), which only gets in because the UPnP mapping accepts any source. The router's UPnP table shows the `hysteria-realm` UDP mapping for the phone.\n\n- windows: the release and this PR behave the same, both map through the unchanged go-nat path and connect\n- `go vet` for android, linux and windows; builds for linux and windows, and for android with the NDK and `CGO_ENABLED=1` like release.yml; `go list -deps ./main` is unchanged on all three; android binary +32 KiB with release.yml's build flags (both built locally with the same toolchain)\n- not tested: Android 10 and older, clien"
     }
    ],
    "comments": [
@@ -1319,74 +1295,22 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6230361142",
      "body": "@RPRX 权限的问题我想了一下，可以按能力申请，像手机那样摄像头、相册、网络等分开，最后统一签名\r\n@Fangliding 说的 DNS 隧道的问题就能在合理框架下解决，不申请“任意公网权限”则只能给硬编码的 DoH 通信\r\n\r\n具体的实现是，用户不能用命令加参数显式授权，必须是脚本的注解 declare 权限\r\n申请敏感权限时，交互式的命令行可以按 **360 卸载风格** 反复多次要求授权，各种多重否定句力争把小白用户绕进去\r\n并且问题顺序打乱，确保用户真逐字阅读了\r\n这样避免恶意脚本提供者同时给一条命令让用户去执行\r\n\r\n内联脚本永远不可能申请权限，这样自定义协议、自定义 Finalmask 有基础能力可以下发订阅"
-    },
-    {
-     "id": 6229694351,
-     "issue": 7181,
-     "issue_title": "XDRIVE transport: Prefer h2 (Chrome CH by default); End stalled requests; Other small changes",
-     "created_at": "2026-10-17T04:35:27Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7181#issuecomment-6229694351",
-     "body": "还需要支持 h3"
-    },
-    {
-     "id": 6229605624,
-     "issue": 7151,
-     "issue_title": "WireGuard outbound: Keep the device when its setup fails",
-     "created_at": "2026-10-17T04:25:01Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7151#issuecomment-6229605624",
-     "body": "正常来讲要突破 4K 就是 UDP 返回个 TC 位对方 fallback TCP 继续请求，但 dnstt 也没有监听 tcp，~就先这样吧~\r\n\r\n只要有一个环节是用的 UDP 就绕不过 edns0，而且每台中转的 edns0 都是允许不同的，传递到最后都是取最小那个，理论上只要到达最后的是 4K 是可以适用 txt wg quic 的不用 kcp"
-    },
-    {
-     "id": 6229439386,
-     "issue": 7135,
-     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "created_at": "2026-10-17T04:06:41Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6229439386",
-     "body": "~~看来今天的新版本无缘新指纹了~~"
-    },
-    {
-     "id": 6229426922,
-     "issue": 7170,
-     "issue_title": "XDRIVE transport: End a request that stalls, not one that runs long",
-     "created_at": "2026-10-17T04:05:21Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6229426922",
-     "body": "Replaced by https://github.com/XTLS/Xray-core/pull/7181"
-    },
-    {
-     "id": 6229389636,
-     "issue": 7181,
-     "issue_title": "XDRIVE transport: Prefer h2 (Chrome CH by default); End stalled requests; Other small changes",
-     "created_at": "2026-10-17T04:01:51Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7181#issuecomment-6229389636",
-     "body": "@4RH1T3CT0R7 XMUX 加进来后在 Google Drive 上的默认 maxConnections 可以调大些"
-    },
-    {
-     "id": 6229087350,
-     "issue": 7176,
-     "issue_title": "XTLS Vision: Compatible with Go 1.27.3+",
-     "created_at": "2026-10-17T03:32:58Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7176#issuecomment-6229087350",
-     "body": "没看 Go 1.27.3 那个 pool 是什么机制，不过先改了一行 https://github.com/XTLS/Xray-core/pull/7176/commits/ab507b7a0dc5134235bfde737b836d9ef4907cf8 防止那个 pool 出问题，~~本来也占不了多少内存~~"
-    },
-    {
-     "id": 6226639757,
-     "issue": 7165,
-     "issue_title": "Finalmask realm: Fix portMapping on Android 11+",
-     "created_at": "2026-10-16T23:31:41Z",
-     "user": "eegov",
-     "url": "https://github.com/XTLS/Xray-core/pull/7165#issuecomment-6226639757",
-     "body": "Thanks, makes sense. Sent it upstream to Hysteria: [HyNetworks/hysteria#1705](https://github.com/HyNetworks/hysteria/pull/1705)"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3279,
+     "title": "[Windows][5.0.3.0] Excluding Weixin.exe via app split tunneling breaks voice/video calls, while text messaging works",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-13T02:31:32Z",
+     "updated_at": "2026-10-19T04:34:40Z",
+     "user": "start-point",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3279",
+     "body": "## Describe the bug\n\nOn Windows 10, excluding `Weixin.exe` (WeChat for Windows) from the VPN using application-based split tunneling causes WeChat video calls to fail.\n\nThe VPN connection itself works correctly, and WeChat video calls succeed when application-based split tunneling is disabled or when `Weixin.exe` is not excluded.\n\nAfter performing six controlled tests (A–F), I found that **adding `Weixin.exe` to the application exclusion list consistently triggers the problem**, while excluding `WeChatAppEx.exe` alone does not.\n\nWeChat TCP connections appear to use the physical Ethernet interface when the main executable is excluded. However, the video call fails, and the observed UDP socket bindings differ from those seen during successful calls.\n\nIn some cases, the problem temporarily persists after disconnecting the VPN and fully restarting WeChat.\n\nImportant clarification: WeChat text messaging works normally in all tested configurations (A–F). I can send and receive text messages without any issues, even when Weixin.exe is excluded from the VPN. Only voice and video calls fail to connect.\n\nThis suggests that the issue specifically affects real-time calling functionality rather than general network connectivity. It may be related to UDP traffic handling, socket binding, or network interface selection, although the exact cause has not yet been confirmed.\n\n## To Reproduce\n\n1. On Windows 10, install AmneziaVPN 5.0.3.0 and connect to a self-hosted VPN server.\n2. Disable site-based split tunneling and keep KillSwitch disabled.\n3. Enable application-based split tunneling.\n4. Select the mode where applications in the list should bypass the VPN.\n5. Add `Weixin.exe` to the exclusion list.\n6. Connect to the VPN.\n7. Completely restart WeChat.\n8. Start a new WeChat voice or video call.\n\n**Actual result:** WeChat text messages can still be sent and received normally, but voice and video calls fail to connect or show a call-disconnected message.\n\n**Expected result:** WeChat should use the physical network connection for all required traffic, including video calls, while the VPN remains active for other applications.\n\n## Controlled test results\n\n| Test | VPN | App split tunneling | Excluded WeChat executables | Voice/video calls|\n|---|---|---|---|---|\n| A | Off | N/A | N/A | Works |\n| B | On | Off | None | Works |\n| C | On | On | `Weixin.exe` + `WeChatAppEx.exe` | Fails |\n| D | On | On | Neither executable | Works |\n| E | On | On | Only `Weixin.exe` | Fails |\n| F | On | On | Only `WeChatAppEx.exe` | Works |\n\nText messaging works normally in all six scenarios.\n\nThis strongly suggests that the issue is specifically triggered by excluding the main `Weixin.exe` process, rather than simply enabling the split-tunneling driver.\n\nAnother observation:\n\n- After test C failed, disconnecting the VPN and fully restarting WeChat did not immediately restore video calling.\n- Switching back to test B restored video calling.\n- Subsequently, test A also worked again.\n\n## Network observations\n\nPhysical Ethernet IPv4 address:\n\n`192.168.1.100`\n\nVPN/TUN interface observed:\n\n`tun2` — `10.33.0.2`\n\nUsing PowerShell `Get-NetTCPConnection`, WeChat TCP connections showed different local addresses depending on the configuration:\n\n- With VPN enabled and app split tunneling disabled (B), observed TCP local address: `10.33.0.2`.\n- With app split tunneling enabled and WeChat excluded (C), observed TCP local address: `192.168.1.100`.\n\nThis suggests that at least some TCP connections are being directed toward the physical interface when WeChat is excluded.\n\nHowever, the UDP socket bindings also differ.\n\nDuring successful video calls (A/B), `Get-NetUDPEndpoint` showed entries such as:\n\n```text\nLocalAddress             LocalPort\n::                       50241\n::ffff:192.168.1.100     50248\n::ffff:192.168.1.100     41446\n::ffff:192.168.1.100     35673\n```\n\nDuring a failed video call with both executables excluded (C), only the following UDP endpoint was observed for the inspe"
+    },
     {
      "number": 3277,
      "title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
@@ -1584,20 +1508,18 @@
      "user": "pers1307",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090",
      "body": "**Describe the bug**\n\n  On Linux, client 5.0.1.5 fails to read the routing table and never installs\n  exclusion routes for the VPN endpoint. With `0.0.0.0/1` and `128.0.0.0/1`\n  pointing at the tunnel, WireGuard packets addressed to the server are routed\n  back into the tunnel itself, creating a routing loop. Packets grow with each\n  iteration until the socket rejects them with `sendmmsg: message too long`.\n\n  Client 4.8.21 on the very same machine installs the routes correctly and works.\n  The issue is protocol-independent — reproduced with both AmneziaWG 2.0 and 3.1\n  servers.\n\n  **To Reproduce**\n\n  Steps to reproduce the behavior:\n  1. Install 5.0.1.5 on Ubuntu 24.04 with a normal DHCP default route\n  2. Connect to any AmneziaWG server\n  3. Run `ip route get <server-ip>` — it points at the tunnel (`dev amn0`) instead\n     of the physical gateway\n  4. See `sendmmsg: message too long` in the daemon log; no traffic passes\n\n  **Expected behavior**\n\n  The daemon should add an exclusion route for the server endpoint through the\n  physical default gateway, as 4.8.21 does:\n  ```\n  <server-ip> via 192.168.31.1 dev wlp0s20f3\n  ```\n\n  **Log files**\n\n  Same 15-second window, two client versions on one machine:\n\n  | Log line | 5.0.1.5 | 4.8.21 |\n  |---|---|---|\n  | `Error in received packet: Numerical argument out of domain` | 10 | 0 |\n  | `No default gateway available, skipping exclusion route` | 10 | 0 |\n  | exclusion routes actually installed | none | all |\n\n5.0.1.5:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  Error in received packet: No such file or directory\n  LinuxRouteMonitor : No default gateway available, skipping exclusion route\n  ...\n  WireguardGo : ERROR: (amn0) peer(XXXX…) - Failed to send data packets:\n                write udp 0.0.0.0:54793: sendmmsg: message too long\n  ```\n  \n  4.8.21, same step:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  ```\n  (no warning, route present in `ip route`)\n  \n  Other errors present in both versions, possibly related:\n  ``` \n  Error: argument \"amnvpnrt\" is wrong: table id value is invalid\n  mkdir: cannot create directory '/sys/fs/cgroup/net_cls/amnvpnexclusions/'\n  LinuxRouteMonitor : Adding exclusion route for /999999 → Invalid destination prefix\n  net_cls cgroup v1 not available, traffic splitting disabled\n  ```\n  \n  **Screenshots**\n  \n  N/A — the client reports \"Connected\".\n\n  **Desktop (please complete the following information):**\n   - OS: Ubuntu 24.04.4 LTS (kernel 6.17), KDE Plasma / X11\n   - Version: 5.0.1.5 (regression — 4.8.21 works)\n\n  **Smartphone (please complete the following information):**\n   - Not affected — mobile clients handle routing through the OS VPN API\n\n  **Server (please complete the following information):**\n   - OS: Ubuntu 24.04, Docker\n\n**Additional context**\n  \n  Workaround — add the exclusion route manually before connecting:\n  ```\n  sudo ip route add <server-ip> via <lan-gateway> dev <iface>\n  ```\n  The loop disappears and `sendmmsg: message too long` stops.\n  \n  Possibly related: #1498, #1357, #2048 — all report \"connected but no internet\"\n  on Linux with the same `amnvpnrt` / `Invalid destination prefix` log noise."
-    },
-    {
-     "number": 3279,
-     "title": "[Windows][5.0.3.0] Excluding Weixin.exe via app split tunneling breaks voice/video calls, while text messaging works",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-13T02:31:32Z",
-     "updated_at": "2026-10-17T05:02:11Z",
-     "user": "start-point",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3279",
-     "body": "## Describe the bug\n\nOn Windows 10, excluding `Weixin.exe` (WeChat for Windows) from the VPN using application-based split tunneling causes WeChat video calls to fail.\n\nThe VPN connection itself works correctly, and WeChat video calls succeed when application-based split tunneling is disabled or when `Weixin.exe` is not excluded.\n\nAfter performing six controlled tests (A–F), I found that **adding `Weixin.exe` to the application exclusion list consistently triggers the problem**, while excluding `WeChatAppEx.exe` alone does not.\n\nWeChat TCP connections appear to use the physical Ethernet interface when the main executable is excluded. However, the video call fails, and the observed UDP socket bindings differ from those seen during successful calls.\n\nIn some cases, the problem temporarily persists after disconnecting the VPN and fully restarting WeChat.\n\nImportant clarification: WeChat text messaging works normally in all tested configurations (A–F). I can send and receive text messages without any issues, even when Weixin.exe is excluded from the VPN. Only voice and video calls fail to connect.\n\nThis suggests that the issue specifically affects real-time calling functionality rather than general network connectivity. It may be related to UDP traffic handling, socket binding, or network interface selection, although the exact cause has not yet been confirmed.\n\n## To Reproduce\n\n1. On Windows 10, install AmneziaVPN 5.0.3.0 and connect to a self-hosted VPN server.\n2. Disable site-based split tunneling and keep KillSwitch disabled.\n3. Enable application-based split tunneling.\n4. Select the mode where applications in the list should bypass the VPN.\n5. Add `Weixin.exe` to the exclusion list.\n6. Connect to the VPN.\n7. Completely restart WeChat.\n8. Start a new WeChat voice or video call.\n\n**Actual result:** WeChat text messages can still be sent and received normally, but voice and video calls fail to connect or show a call-disconnected message.\n\n**Expected result:** WeChat should use the physical network connection for all required traffic, including video calls, while the VPN remains active for other applications.\n\n## Controlled test results\n\n| Test | VPN | App split tunneling | Excluded WeChat executables | Voice/video calls|\n|---|---|---|---|---|\n| A | Off | N/A | N/A | Works |\n| B | On | Off | None | Works |\n| C | On | On | `Weixin.exe` + `WeChatAppEx.exe` | Fails |\n| D | On | On | Neither executable | Works |\n| E | On | On | Only `Weixin.exe` | Fails |\n| F | On | On | Only `WeChatAppEx.exe` | Works |\n\nText messaging works normally in all six scenarios.\n\nThis strongly suggests that the issue is specifically triggered by excluding the main `Weixin.exe` process, rather than simply enabling the split-tunneling driver.\n\nAnother observation:\n\n- After test C failed, disconnecting the VPN and fully restarting WeChat did not immediately restore video calling.\n- Switching back to test B restored video calling.\n- Subsequently, test A also worked again.\n\n## Network observations\n\nPhysical Ethernet IPv4 address:\n\n`192.168.1.100`\n\nVPN/TUN interface observed:\n\n`tun2` — `10.33.0.2`\n\nUsing PowerShell `Get-NetTCPConnection`, WeChat TCP connections showed different local addresses depending on the configuration:\n\n- With VPN enabled and app split tunneling disabled (B), observed TCP local address: `10.33.0.2`.\n- With app split tunneling enabled and WeChat excluded (C), observed TCP local address: `192.168.1.100`.\n\nThis suggests that at least some TCP connections are being directed toward the physical interface when WeChat is excluded.\n\nHowever, the UDP socket bindings also differ.\n\nDuring successful video calls (A/B), `Get-NetUDPEndpoint` showed entries such as:\n\n```text\nLocalAddress             LocalPort\n::                       50241\n::ffff:192.168.1.100     50248\n::ffff:192.168.1.100     41446\n::ffff:192.168.1.100     35673\n```\n\nDuring a failed video call with both executables excluded (C), only the following UDP endpoint was observed for the inspe"
     }
    ],
    "comments": [
+    {
+     "id": 6259737089,
+     "issue": 3279,
+     "issue_title": "[Windows][5.0.3.0] Excluding Weixin.exe via app split tunneling breaks voice/video calls, while text messaging works",
+     "created_at": "2026-10-19T04:34:40Z",
+     "user": "start-point",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3279#issuecomment-6259737089",
+     "body": "> 1. I've run into this problem too. Do you have any solutions yet?\n\nThere is no solution. I have now replaced a VPS with a boutique line, and then let them all go to the PROXY, so that the speed is not slow and it will not affect normal use."
+    },
     {
      "id": 6254316969,
      "issue": 3277,
@@ -1716,24 +1638,6 @@
      "body": "I've run into this problem too. Do you have any solutions yet?"
     },
     {
-     "id": 6228992185,
-     "issue": 3090,
-     "issue_title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
-     "created_at": "2026-10-17T03:22:47Z",
-     "user": "pers1307",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090#issuecomment-6228992185",
-     "body": "@albexk @outspace @kolobchanin help us, pls."
-    },
-    {
-     "id": 6228952283,
-     "issue": 3277,
-     "issue_title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
-     "created_at": "2026-10-17T03:18:11Z",
-     "user": "MSPDaniel",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3277#issuecomment-6228952283",
-     "body": "I have observed the same behavior on my windows machine. "
-    },
-    {
      "id": 6224661639,
      "issue": 3090,
      "issue_title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
@@ -1761,21 +1665,10 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-17T00:56:29Z",
-     "updated_at": "2026-10-17T00:56:29Z",
+     "updated_at": "2026-10-19T04:00:14Z",
      "user": "wizd",
      "url": "https://github.com/HyNetworks/hysteria/pull/1706",
      "body": "## Summary\r\n\r\nAdds an optional `l3tun` mode that copies whole IP packets between a local TUN device and QUIC datagrams. It does not terminate TCP or UDP. The intended use is to run VXLAN (or any other IP protocol) between the two TUNs, so the overlay keeps a normal 1500-byte inner MTU instead of squeezing VXLAN through `udpForwarding` and a reduced MTU.\r\n\r\nBoth ends opt in. The client sends `Hysteria-L3: true` on the existing auth request only when `l3tun` is configured, and the server grants it only when it has `l3tun` as well. The header is also sent as `false` otherwise; an older peer ignores the unknown header. L3 datagrams use session id 0 and a zero address-length byte, which `ParseUDPMessage` already rejects, so an older peer drops them.\r\n\r\n## How packets are carried\r\n\r\nOne IP packet is sent as one QUIC datagram. If that datagram is larger than the peer's current payload limit (`quic.DatagramTooLargeError`), it is split into evenly sized fragments.\r\n\r\nThe datagram prefix is 11 bytes:\r\n\r\n```\r\nSessionID u32 = 0 | PacketID low 16 | FragID u8 | FragCount u8 | 0x00 | PacketID high 16 | IP packet\r\n```\r\n\r\nFragments of different packets may interleave and are reassembled by the 32-bit packet id. A missing fragment drops the whole packet. There is no fragment retransmission; an inner TCP retransmits. Reassembly gives up after 200 ms. The largest IP packet is 1600 bytes. A 1600-byte packet under the usual 1200-byte datagram frame is two fragments of about 800 bytes.\r\n\r\nThe server keeps one L3 peer: the latest authenticated client that requested L3 replaces the previous one. Packets read from the local TUN while no peer is connected are discarded. Before a received packet is written into the local TUN, its source address must equal the configured `peer`.\r\n\r\nThe client L3 device stays up across QUIC reconnects. Traffic is counted with the existing `TrafficLogger`, in the same direction as UDP proxying.\r\n\r\n`l3tun` is supported on Linux, Darwin, Windows, and Android (sing-tun). Creating the device needs root or `CAP_NET_ADMIN`. Hysteria creates and addresses `hytun0` only. The operator adds the VXLAN interface after the TUN exists. VXLAN's UDP port stays inside the tunnel, so it does not need a public firewall opening.\r\n\r\n## Configuration\r\n\r\nClient:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.2/30\r\n  peer: 10.200.0.1\r\n```\r\n\r\nServer:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.1/30\r\n  peer: 10.200.0.2\r\n```\r\n\r\n`mtu` defaults to 1600 and cannot be higher. `address` is a prefix; `peer` must be the same IP version. A `/30` gives a connected route, so this tunnel does not need IP forwarding and does not capture the path back to the server's public address.\r\n\r\nOperator notes, including the VXLAN commands, are in `VXLAN.md` (currently written in Chinese). For an inner MTU of 1500 the outer packet is about 1550 bytes (Ethernet 14 + VXLAN 8 + UDP 8 + IPv4 20), which fits in the 1600-byte TUN without kernel fragmentation:\r\n\r\n```bash\r\nping -M do -s 1472 -c 3 10.201.0.1\r\n```\r\n\r\n## Test results\r\n\r\nMeasured on this branch, Linux amd64 at both ends. `hytun0` MTU 1600. VXLAN between the two TUN addresses. Path: a residential PPPoE link (uplink about 40 Mbps) to a Tokyo VPS, then to a second Tokyo host running iperf3 3.16. The iperf3 client is 3.9. Brutal limits on the client were 90 Mbps up and 200 Mbps down, with loss compensation disabled. The QUIC max datagram frame size is 1200 bytes.\r\n\r\nSame-region control, VPS to the iperf3 host, 8 seconds: 4374 Mbps up, 4441 Mbps down. The iperf3 server is not the bottleneck.\r\n\r\nTunnel RTT to that host, 10/10: min / avg / max 60.4 / 66.3 / 97.9 ms.\r\n\r\nEach VXLAN MTU below is one 10-second single TCP stream in each direction. Numbers are receiver goodput. Retransmissions are the sender's 10-second total. \"Outer IP\" is `vx MTU + 50`. A packet becomes two QUIC datagrams once the outer IP plus the 11-byte L3 header no longer fits in the 1200-byte frame; 1140 (outer"
-    },
-    {
-     "number": 1705,
-     "title": "fix(realm): UPnP port mapping on Android 11+",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-16T23:24:06Z",
-     "updated_at": "2026-10-16T23:24:06Z",
-     "user": "eegov",
-     "url": "https://github.com/HyNetworks/hysteria/pull/1705",
-     "body": "On Android 11+ realm `portMapping` never maps anything:\n\n```\nWARN\trealm port mapping failed; continuing without it\t{\"error\": \"gateway discovery failed: no NAT found\"}\n```\n\nAndroid 11+ denies apps `bind()` on a netlink route socket and `RTM_GETLINK`, so `net.Interfaces()` fails (same cause as golang/go#40569; a small test program on the test phone prints `route ip+net: netlinkrib: permission denied`). Every go-nat discovery path runs into it, and go-nat drops the errors, so only `no NAT found` is logged. Past discovery, `upnp_NAT.GetInternalAddress` calls `net.Interfaces()` again and `AddPortMapping` returns `(0, nil)` when that fails.\n\n`portmap_android.go` keeps `nat.DiscoverGateway` when `net.Interfaces()` works (NAT-PMP included). Otherwise it does the UPnP part itself: multicast IPv4 addresses from `wlynxg/anet` (already linked through pion/transport), SSDP through goupnp's `httpu`/`ssdp`, `DeviceByURLCtx`, and a small `nat.NAT` that takes the internal address from the socket the SSDP reply arrived on. Port selection copies go-nat's. Other platforms build `portmap_other.go` with the old call. anet needs cgo for the API level, which the android build in `hyperbole.py` has.\n\nTested on Android 16 in Termux, MiniUPnPd 1.8 router (port-restricted), server behind a symmetric NAT (the server is Xray-core's realm implementation, same protocol). v2.13.0 logs `no NAT found` and the punch times out. This PR maps the port (`UPNP (IG1-IP1)`, 2.2 s), punches in 126 ms and connects. On Windows both builds behave the same.\n\n<details><summary>v2.13.0</summary>\n<pre><code>realm port mapping started\t{\"port\": 60905}\nrealm port mapping failed; continuing without it\t{\"error\": \"gateway discovery failed: no NAT found\"}\nrealm client STUN discovery completed\t{\"addresses\": [\"198.51.100.7:60905\"], \"duration\": \"261ms\"}\nrealm client connect request started\t{\"addresses\": [\"198.51.100.7:60905\"]}\nrealm client punch started\t{\"candidates\": [\"203.0.113.5:22869\", \"203.0.113.5:22904\", \"203.0.113.5:22905\"]}\nfailed to initialize client\t{\"error\": \"invalid config: realm.punch: punch timed out\"}\n</code></pre>\n</details>\n\n<details><summary>this PR</summary>\n<pre><code>realm port mapping started\t{\"port\": 33719}\nrealm port mapping added\t{\"gateway\": \"UPNP (IG1-IP1)\", \"port\": 33719, \"external\": \"198.51.100.7:40845\", \"duration\": \"2.242s\"}\nrealm client STUN discovery completed\t{\"addresses\": [\"198.51.100.7:33719\"], \"duration\": \"242ms\"}\nrealm client connect request started\t{\"addresses\": [\"198.51.100.7:33719\", \"198.51.100.7:40845\"]}\nrealm client punch started\t{\"candidates\": [\"203.0.113.5:22849\", \"203.0.113.5:22904\", \"203.0.113.5:22905\"]}\nrealm client punch completed\t{\"peer\": \"203.0.113.5:22851\", \"packet\": \"hello\", \"duration\": \"126ms\"}\nconnected to server\t{\"addr\": \"203.0.113.5:22851\", \"udpEnabled\": true}\n</code></pre>\n</details>\n\nThe peer's hello comes from port 22851, which isn't one of its candidates. The port-restricted router drops that on the STUN-mapped port, so it most likely came in through the UPnP mapping.\n\nLimits:\n- NAT-PMP still fails on Android 11+: go-netroute binds a netlink route socket\n- without a UPnP gateway the fallback gives up after about 4.2 s instead of right away: two SSDP searches, each waits MX 2 s + 100 ms (from the code, not measured)\n- a send error on any one multicast interface fails the whole search (goupnp's `MultiClient` uses an errgroup), as goupnp does on other platforms\n- go-nat's generic IGD path (`ssdp:all`) isn't ported\n- untested: Android 10 and older, IGD2 routers, renewal, clients inside a VpnService\n\nBuilds for android/arm64 (NDK, cgo), linux and windows; `go list -deps ./app` is unchanged on all three. Android binary +28 KiB, windows +512 B.\n\ngo-nat could run the same discovery itself (goupnp's `DiscoverDevicesCtx` takes no address list). I reported it there as libp2p/go-nat#45 and can send the change there too; if you'd rather have the fix only in go-nat, let me know. Until it lands, this keeps the workaround in one Android-only fi"
     }
    ],
    "comments": []

@@ -1,9 +1,20 @@
 {
- "generated_at": "2026-10-19T04:40:04Z",
- "since": "2026-10-17T04:40:04Z",
+ "generated_at": "2026-10-19T13:14:19Z",
+ "since": "2026-10-17T13:14:19Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 672,
+     "title": "Popular proxy software Xray-core covered up a certification verification bypass vulnerability for half a year",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-02T09:40:26Z",
+     "updated_at": "2026-10-19T11:54:18Z",
+     "user": "dyhkwong",
+     "url": "https://github.com/net4people/bbs/issues/672",
+     "body": "Disclaimer: I am the reporter of the vulnerability.\n\nXray-core maintainers look down on \"skip certificate verification\" feature (i.e. the `allowInsecure` option in Xray-core) or similar options in proxy software, arguing that this is equivalent to having no security measures at all and leaves users \"streaking\", exposing them to the risk of man-in-the-middle attacks. However, if a vulnerability in Xray-core itself causes users to be \"streaking\" and fall victim to man-in-the-middle attacks, Xray-core will cover it up and act as if nothing has happened.\n\nOn [October 21, 2021](https://github.com/XTLS/Xray-core/commit/acb81ebe3de44e7ca197bf079f1d1122ff49b490), the `pinnedPeerCertificateChainSha256` option, with no known issues, was added to Xray-core. This provides a double layer of security: if this option is enabled, custom certificate chain pinning logic will be performed in addition to the regular certificate verification. This also facilitates the use of self-signed certificates: to use a self-signed certificate securely, a user can enable both `allowInsecure` and `pinnedPeerCertificateChainSha256` to skip the regular certificate verification and perform only the custom certificate chain pinning logic.\n\nHowever, Xray-core later claimed that `allowInsecure` is insecure and enabling `allowInsecure` is like \"streaking\" and would leave users vulnerable to man-in-the-middle attacks.\n\nOn [January 9, 2026](https://github.com/XTLS/Xray-core/commit/0ca13452b8e99824e08c2c860dd0f84a4ae2859d), Xray-core removed `pinnedPeerCertificateChainSha256` and replaced it with a new option, `pinnedPeerCertSha256`, to stop users from skipping certificate verification (or so-called \"streaking\"). For self-signed certificates, both `allowInsecure` and `pinnedPeerCertSha256` must be enabled, which skips the regular certificate verification and only performs the custom certificate pinning logic. This should have helped the users to use self-signed certificates securely. However, `pinnedPeerCertSha256` contains a certificate verification bypass vulnerability.\n\nOn [January 13, 2026](https://github.com/XTLS/Xray-core/releases/tag/v26.1.13), Xray-core released the first version containing this certificate verification bypass vulnerability. Since the old option had been removed, users had no choice but to migrate to the new vulnerable option. At this point, the certificate verification defense was already teetering on the brink of collapse. Fortunately, as long as users neither use a self-signed certificate nor enable `allowInsecure`, the regular certificate verification could still provide some protection.\n\nOn [January 16, 2026](https://github.com/XTLS/Xray-core/commit/760223ad70f822fcb859a217e60e038a970610f9), Xray-core modified the logic of `pinnedPeerCertSha256`, making it always skip the regular certificate verification and only performs the custom certificate pinning logic. This means a protection layer has been missing: the regular certificate verification is always skipped. If a verification bypass vulnerability exists in `pinnedPeerCertSha256` (and unfortunately, it does), the custom certificate pinning logic will fail to function, effectively leaving no certificate verification in place, which allows a man-in-the-middle attack to be successfully performed. At this point, the certificate verification defense has completely collapsed.\n\nOn February 6, 2026, I found the above certificate verification bypass vulnerability in Xray-core’s `pinnedPeerCertSha256` and privately reported to Xray-core maintainers. A man-in-the-middle attacker could insert a leaf certificate at any place in the certificate chain, and the custom certificate pinning logic would verify the leaf certificate successfully, thereby leading to the success of man-in-the-middle attacks. This is an overly simple vulnerability; even without advanced security knowledge, I was able to discover it at a glance.\n\n[On the same day](https://github.com/XTLS/Xray-core/commit/4632984b66a4f2ab3d4eda8de"
+    },
     {
      "number": 676,
      "title": "[Iran] Since Oct 2026: only ICMP echo passes Iran→abroad on some routes; ~50k pps cap, volume-triggered reroute, one-way ping blocks",
@@ -21,6 +32,39 @@
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
     {
+     "number": 1385,
+     "title": "Link-password authentication bypass through unvalidated Ed25519 identity keys, also affecting Ironwood routing authentication",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-17T13:42:37Z",
+     "updated_at": "2026-10-19T09:14:06Z",
+     "user": "peigongdsd",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1385",
+     "body": "This report is generated by AI, I am submitting in a hurry to let you know what is going on.\n\n\n## Summary\n\nWe identified this during an AI-assisted source audit.\n\nA remote peer that can reach a password-protected Yggdrasil listener can supply an Ed25519 public key representing the curve's identity point. The handshake relies on a signature under that peer-supplied key to establish knowledge of the link password. For this degenerate key, signature verification can succeed independently of the signed message, so the password-dependent digest does not provide the intended authentication boundary.\n\nIronwood also accepts this identity in its routing signature checks. This means its subsequent checks do not compensate for the link-handshake weakness.\n\nThis report is based on upstream source inspection. We did not execute a PoC, reproduce an exploit, or validate a live deployment. The supported conclusion is an authentication flaw permitting unauthorized peering and routing-state admission under the conditions below; arbitrary traffic hijacking is not established.\n\n## Source examined\n\n- Yggdrasil `v0.5.14`: [`src/core/version.go`](https://github.com/yggdrasil-network/yggdrasil-go/blob/v0.5.14/src/core/version.go#L91), containing the affected link-password verifier.\n- Yggdrasil `develop`, inspected on 2026-10-17: the same [handshake logic](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/src/core/version.go#L91), and [connection authorization and handoff](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/src/core/link.go#L589).\n- Ironwood `4dfb1af8c1ed`, the dependency selected by the inspected [Yggdrasil develop manifest](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/go.mod): routing behavior described below.\n- Go `1.26.0`: the inspected [Ed25519 public-key parsing and verification implementation](https://github.com/golang/go/blob/go1.26.0/src/crypto/internal/fips140/ed25519/ed25519.go#L128), corresponding to the Go baseline declared by that develop manifest.\n\nThe release observation concerns the handshake source; the detailed Ironwood trace concerns the pinned develop dependency. We have not established the first affected release, a complete affected-version range, or a fixed release.\n\n## Why the password check fails\n\nIn `version_metadata.decode()`, the remote public key is read from the handshake. Its field length is checked, but it is not checked for being an acceptable cryptographic identity.\n\nThe receiver then computes a BLAKE2b-512 digest keyed by its configured link password, with the peer's declared public key as input, and calls:\n\n```go\ned25519.Verify(m.publicKey, hash, sig)\n```\n\nThe critical detail is that the password contributes to the **message being verified**, while the remote peer chooses the **verification key**. There is no separate password-authentication check after this signature succeeds.\n\nIn Ed25519, the verification equation is:\n\n```text\n[S]B = R + [H(R, A, M)]A\n```\n\nHere `A` is the public key, `M` is the signed message, and `R` and `S` are signature components. If `A` is the identity point, the entire message-dependent term vanishes. Message-independent signatures can therefore satisfy the equation even when the sender does not know the password-dependent message.\n\nThe inspected Go verifier checks point decoding and scalar encoding, but does not reject this public key. Yggdrasil consequently needs an explicit identity-validity policy at this boundary. This is not a claim that signatures under ordinary, honestly generated Ed25519 public keys can be forged.\n\n## Why Ironwood does not stop the identity\n\nYggdrasil hands the declared key to Ironwood after its authorization checks. [`network.PacketConn.HandleConn()`](https://github.com/Arceliar/ironwood/blob/4dfb1af8c1ed/network/packetconn.go#L141) rejects a wrong length or the local node's own key, but does not reject small-order points.\n\nThe subsequent source path is:\n\n1. [`peer._handleSigRes()`](https://github.com/Arcel"
+    },
+    {
+     "number": 1389,
+     "title": "Invalid listener options can leave the port bound after Core.Listen returns an error",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-19T05:07:12Z",
+     "updated_at": "2026-10-19T05:07:12Z",
+     "user": "krivonosoff161",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1389",
+     "body": "An invalid listener `priority` can leave a TCP port bound even though `Core.Listen` returns a nil listener and an error. The caller has no returned handle to close it, and the listener has not yet been registered for core cleanup.\n\nI reproduced this on `develop` at `6ad41376b69c1fa223dfacf577a6f947ca39de6c`, using Go 1.26.9 on Windows/amd64. The adjacent overlong `password` error path has the same allocation-before-validation ordering.\n\n### Reproduction\n\nIn a local core test, create a core with a disposable generated configuration/certificate and no configured peers, discovery or TUN. Then:\n\n```go\nprobe, err := net.Listen(\"tcp\", \"127.0.0.1:0\")\nif err != nil {\n    t.Fatal(err)\n}\naddr := probe.Addr().String()\nif err := probe.Close(); err != nil {\n    t.Fatal(err)\n}\nu, err := url.Parse(\"tcp://\" + addr + \"?priority=invalid\")\nif err != nil {\n    t.Fatal(err)\n}\nlistener, err := c.Listen(u, \"\")\nif listener != nil {\n    listener.Cancel()\n    t.Fatal(\"invalid priority returned a listener\")\n}\nif err != ErrLinkPriorityInvalid {\n    t.Fatalf(\"got %v, want ErrLinkPriorityInvalid\", err)\n}\nreplacement, err := net.Listen(\"tcp\", addr)\nif err != nil {\n    t.Fatalf(\"port remains occupied after rejected listener: %v\", err)\n}\nreplacement.Close()\n```\n\n**Actual on the baseline:** the invalid-priority call returns the expected option error, but the immediate second bind fails because the port is still occupied.\n\n**Expected:** rejecting the listener configuration should not leave a bound port behind. With the proposed change below, the second bind succeeds.\n\nThis reproducer briefly releases a reserved ephemeral port before calling `Listen`; run it without another process competing for that port. For deterministic regression coverage, I also used the occupied-port test described below. I am not claiming that the TCP resource survives garbage collection or process exit indefinitely.\n\n### Cause and proposed fix\n\nIn [src/core/link.go](https://github.com/yggdrasil-network/yggdrasil-go/blob/6ad41376b69c1fa223dfacf577a6f947ca39de6c/src/core/link.go#L446-L501), `protocol.listen` allocates the listener before `priority` and `password` are validated. Both validation error paths return without calling the listener's cancellation/close function. Registration in `l._listeners` happens later, so these resources are also absent from that map.\n\nMove the existing validation block after protocol selection but before creating the child context or calling `protocol.listen`:\n\n```diff\n func (l *links) listen(u *url.URL, sintf string, local bool) (*Listener, error) {\n-    ctx, ctxcancel := context.WithCancel(l.core.ctx)\n     var protocol linkProtocol\n     switch strings.ToLower(u.Scheme) {\n     // existing protocol cases unchanged\n     default:\n-        ctxcancel()\n         return nil, ErrLinkUnrecognisedSchema\n     }\n+    var options linkOptions\n+    if p := u.Query().Get(\"priority\"); p != \"\" {\n+        pi, err := strconv.ParseUint(p, 10, 8)\n+        if err != nil {\n+            return nil, ErrLinkPriorityInvalid\n+        }\n+        options.priority = uint8(pi)\n+    }\n+    if p := u.Query().Get(\"password\"); p != \"\" {\n+        if len(p) > blake2b.Size {\n+            return nil, ErrLinkPasswordInvalid\n+        }\n+        options.password = []byte(p)\n+    }\n+    ctx, ctxcancel := context.WithCancel(l.core.ctx)\n     listener, err := protocol.listen(ctx, u, sintf)\n```\n\nThe above is an abbreviated diff: remove the old validation block from its current position after construction of `li`. Validation rules and error values remain unchanged. When both the options and bind target are invalid, the option error now takes precedence; unsupported schemes are still rejected first.\n\n### Validation of the local patch\n\n- The actual TCP-port reproduction above was confirmed before the change and passed after it on Windows.\n- Twenty regression cases cover TCP, TLS, WS and QUIC with nonnumeric/negative/overflowing priority, a 65-byte ASCII password, and a multibyte password exceeding 64 bytes."
+    },
+    {
+     "number": 1388,
+     "title": "yggdrasilctl exits successfully after a recovered fatal error",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-19T04:44:41Z",
+     "updated_at": "2026-10-19T04:44:41Z",
+     "user": "krivonosoff161",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1388",
+     "body": "`yggdrasilctl` exits with status **0** after recovering a panic and printing `Fatal error`. This makes shell scripts and monitoring treat a failed admin command as successful.\n\nI reproduced this on `develop` at `6ad41376b69c1fa223dfacf577a6f947ca39de6c` with Go 1.26.9 on Windows/amd64. The same recovery path handles connection failures, invalid JSON and errors decoding typed responses.\n\n### Minimal reproduction\n\nBuild the unmodified console:\n\n```sh\ngo build -o yggdrasilctl ./cmd/yggdrasilctl\n```\n\nRun it against an invalid local TCP destination; no daemon is needed:\n\n```sh\n./yggdrasilctl -endpoint=tcp://127.0.0.1:0 getSelf\necho $?\n```\n\nPowerShell equivalent:\n\n```powershell\n.\\yggdrasilctl.exe -endpoint=tcp://127.0.0.1:0 getSelf\n$LASTEXITCODE\n```\n\n**Actual:** a `Fatal error: dial tcp ...` message, followed by exit status `0`.\n**Expected:** a nonzero exit status, consistent with other admin command errors.\nThe exact dial error wording is platform-dependent.\n\n### Cause and minimal proposed change\n\nIn [cmd/yggdrasilctl/main.go](https://github.com/yggdrasil-network/yggdrasil-go/blob/6ad41376b69c1fa223dfacf577a6f947ca39de6c/cmd/yggdrasilctl/main.go#L33-L50), the deferred recovery function returns `1`, but that return value is discarded. After recovery, `run()` returns its zero result and `main()` passes it to `os.Exit`.\n\nA named result lets the deferred function set the actual exit status while retaining deferred cleanup:\n\n```diff\n-func run() int {\n+func run() (exitCode int) {\n \tlogbuffer := &bytes.Buffer{}\n \tlogger := log.New(logbuffer, \"\", log.Flags())\n \n-\tdefer func() int {\n+\tdefer func() {\n \t\tif r := recover(); r != nil {\n \t\t\tlogger.Println(\"Fatal error:\", r)\n \t\t\tfmt.Print(logbuffer)\n-\t\t\treturn 1\n+\t\t\texitCode = 1\n \t\t}\n-\t\treturn 0\n \t}()\n```\n\n### Local validation of the proposed change\n\nI added subprocess regression tests that invoke the real `main()` and inspect the OS exit status. Before the change, connection failure, invalid JSON, and a malformed typed response all incorrectly returned `0`. After the change, all three return `1`.\n\nFive additional cases verify unchanged behavior: API errors with and without an error message return `1`; a successful JSON response, version output and usage output return `0`.\n\n- Windows/amd64: all eight cases pass; console build and `go vet ./cmd/yggdrasilctl` pass. A separate run of the built executable confirms failure status `1` and version status `0`.\n- Linux/amd64 (Alpine 3.24.2, Go 1.26.9, GCC 15.2.0): `go test -json -count=1 -timeout=180s -parallel=2 ./...` and `go test -race -json -count=1 -timeout=300s -parallel=2 ./...` pass with `GOMAXPROCS=2` and `GOFLAGS=-p=1`. Each run records 67 passing test/subtest events, zero skips/failures and no race reports.\n- Linux tests ran in an isolated network namespace with loopback only. This is local validation, not an upstream CI run or a live mesh test; native Windows race and other OS integration checks were not run.\n\nI searched open and closed issues/PRs for `yggdrasilctl`, exit status/code, `Fatal error` and recovery. I did not find a matching report. Historical #641 introduced the `run()`/`os.Exit` structure but does not resolve this recovery result. This is separate from the admin daemon crash reported in #1387.\n"
+    },
+    {
      "number": 1387,
      "title": "Admin API: explicit null arguments can terminate the daemon",
      "is_pr": false,
@@ -30,17 +74,6 @@
      "user": "krivonosoff161",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1387",
      "body": "An admin request with explicit `\"arguments\": null` can terminate the daemon with a nil-pointer panic. I reproduced this against `develop` at `6ad41376b69c1fa223dfacf577a6f947ca39de6c` and verified a small local fix.\n\n### Reproduction\n\nStart a disposable daemon built from that revision with `-useconf`, supplying this configuration on stdin:\n\n```json\n{\n  \"AdminListen\": \"tcp://127.0.0.1:19001\",\n  \"IfName\": \"none\",\n  \"MulticastInterfaces\": [],\n  \"Peers\": [],\n  \"Listen\": []\n}\n```\n\nOnce the admin endpoint is listening, send:\n\n```python\nimport socket\n\nwith socket.create_connection((\"127.0.0.1\", 19001), timeout=2) as client:\n    client.sendall(b'{\"request\":\"getPeers\",\"arguments\":null}\\n')\n    print(client.recv(4096))\n```\n\n**Actual:** the connection closes and the daemon terminates with a nil-pointer panic (exit code 2 in my Windows reproduction).\n\n**Expected:** an invalid admin request should receive a JSON error response without terminating the daemon. A connection using `keepalive` should remain usable for a subsequent valid request.\n\nI also reproduced the same null-pointer failure for `addPeer` and `removePeer` in local handler tests. This requires access to the admin endpoint; I have not established reachability through ordinary overlay peer traffic.\n\n### Cause and proposed fix\n\nThe handlers allocate a request pointer and then call `json.Unmarshal(in, &req)`. JSON `null` sets that pointer to nil, after which handlers such as `getPeersHandler` dereference it. The default `{}` assigned in `handleRequest` only covers omitted arguments, not an explicit null value.\n\nRelevant source: [admin request decoding and dispatch](https://github.com/yggdrasil-network/yggdrasil-go/blob/6ad41376b69c1fa223dfacf577a6f947ca39de6c/src/admin/admin.go), [getPeers handler](https://github.com/yggdrasil-network/yggdrasil-go/blob/6ad41376b69c1fa223dfacf577a6f947ca39de6c/src/admin/getpeers.go).\n\nMy local fix adds the `bytes` import and rejects explicit null immediately before calling `handler.handler(req.Arguments)` in `handleRequest`:\n\n```go\n// Null would clear the request pointers allocated by handlers.\nif bytes.Equal(bytes.TrimSpace(req.Arguments), []byte(\"null\")) {\n    return errors.New(\"arguments must not be null\")\n}\n```\n\nOmitted arguments retain the existing `{}` default. Ordinary object arguments remain unchanged.\n\n### Local verification\n\n- Regression tests fail for null arguments on the original code and pass with the guard. They cover omitted arguments, empty/nonempty objects, null with whitespace, rejection before dispatch, and `getPeers`/`addPeer`/`removePeer` followed by a valid request on the same keepalive connection.\n- With the fix, a real Windows daemon returned errors for all three null commands, stayed alive, and accepted subsequent valid commands on the same connection. TUN, discovery and peers were disabled for this reproduction.\n- Go 1.26.9, Windows amd64: build, `go vet ./...`, and the selected test suite passed.\n- Go 1.26.9, Linux amd64 (Alpine 3.24.2 under WSL2, GCC 15.2.0, CGO enabled): the full suite and full race suite passed, each with 67 tests/subtests and no test skips or race reports. Commands were `go test -count=1 -timeout=180s -parallel=2 ./...` and `go test -race -count=1 -timeout=300s -parallel=2 ./...`, with `GOFLAGS=-p=1`. These ran in a network namespace with loopback only and no external route.\n\nThese are local results, not GitHub CI results or a claim of validation on every supported platform. I searched existing issues/PRs and checked the relevant changes in #1364 and #1365; I did not find a matching null-argument fix.\n"
-    },
-    {
-     "number": 1385,
-     "title": "Link-password authentication bypass through unvalidated Ed25519 identity keys, also affecting Ironwood routing authentication",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-17T13:42:37Z",
-     "updated_at": "2026-10-18T19:51:58Z",
-     "user": "peigongdsd",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1385",
-     "body": "This report is generated by AI, I am submitting in a hurry to let you know what is going on.\n\n\n## Summary\n\nWe identified this during an AI-assisted source audit.\n\nA remote peer that can reach a password-protected Yggdrasil listener can supply an Ed25519 public key representing the curve's identity point. The handshake relies on a signature under that peer-supplied key to establish knowledge of the link password. For this degenerate key, signature verification can succeed independently of the signed message, so the password-dependent digest does not provide the intended authentication boundary.\n\nIronwood also accepts this identity in its routing signature checks. This means its subsequent checks do not compensate for the link-handshake weakness.\n\nThis report is based on upstream source inspection. We did not execute a PoC, reproduce an exploit, or validate a live deployment. The supported conclusion is an authentication flaw permitting unauthorized peering and routing-state admission under the conditions below; arbitrary traffic hijacking is not established.\n\n## Source examined\n\n- Yggdrasil `v0.5.14`: [`src/core/version.go`](https://github.com/yggdrasil-network/yggdrasil-go/blob/v0.5.14/src/core/version.go#L91), containing the affected link-password verifier.\n- Yggdrasil `develop`, inspected on 2026-10-17: the same [handshake logic](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/src/core/version.go#L91), and [connection authorization and handoff](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/src/core/link.go#L589).\n- Ironwood `4dfb1af8c1ed`, the dependency selected by the inspected [Yggdrasil develop manifest](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/go.mod): routing behavior described below.\n- Go `1.26.0`: the inspected [Ed25519 public-key parsing and verification implementation](https://github.com/golang/go/blob/go1.26.0/src/crypto/internal/fips140/ed25519/ed25519.go#L128), corresponding to the Go baseline declared by that develop manifest.\n\nThe release observation concerns the handshake source; the detailed Ironwood trace concerns the pinned develop dependency. We have not established the first affected release, a complete affected-version range, or a fixed release.\n\n## Why the password check fails\n\nIn `version_metadata.decode()`, the remote public key is read from the handshake. Its field length is checked, but it is not checked for being an acceptable cryptographic identity.\n\nThe receiver then computes a BLAKE2b-512 digest keyed by its configured link password, with the peer's declared public key as input, and calls:\n\n```go\ned25519.Verify(m.publicKey, hash, sig)\n```\n\nThe critical detail is that the password contributes to the **message being verified**, while the remote peer chooses the **verification key**. There is no separate password-authentication check after this signature succeeds.\n\nIn Ed25519, the verification equation is:\n\n```text\n[S]B = R + [H(R, A, M)]A\n```\n\nHere `A` is the public key, `M` is the signed message, and `R` and `S` are signature components. If `A` is the identity point, the entire message-dependent term vanishes. Message-independent signatures can therefore satisfy the equation even when the sender does not know the password-dependent message.\n\nThe inspected Go verifier checks point decoding and scalar encoding, but does not reject this public key. Yggdrasil consequently needs an explicit identity-validity policy at this boundary. This is not a claim that signatures under ordinary, honestly generated Ed25519 public keys can be forged.\n\n## Why Ironwood does not stop the identity\n\nYggdrasil hands the declared key to Ironwood after its authorization checks. [`network.PacketConn.HandleConn()`](https://github.com/Arceliar/ironwood/blob/4dfb1af8c1ed/network/packetconn.go#L141) rejects a wrong length or the local node's own key, but does not reject small-order points.\n\nThe subsequent source path is:\n\n1. [`peer._handleSigRes()`](https://github.com/Arcel"
     },
     {
      "number": 1265,
@@ -88,6 +121,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6263790221,
+     "issue": 1385,
+     "issue_title": "Link-password authentication bypass through unvalidated Ed25519 identity keys, also affecting Ironwood routing authentication",
+     "created_at": "2026-10-19T09:14:06Z",
+     "user": "peigongdsd",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1385#issuecomment-6263790221",
+     "body": "> 12\\. For the PR, it's not obvious to me why non-identity low-order keys are a problem, or why the logic in the code would be sufficient to protect against them (if I'm reading it right, it would protect against keys of order 2, 4, or 8, but it's not obvious to me that this is enough if low-order keys are really a concern).\n\nI would indeed insist that we need a patch ASAP. This is not functionality update, but a security patch. There may be systems under threat. A better handshake scheme could definitely be designed but the eariler a security mitigation lands, the better. Moreover, GPT suggets that the GroupPassword functionality may also be affected by a similiar mechanism."
+    },
     {
      "id": 6254347137,
      "issue": 1385,
@@ -219,6 +261,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2601,
+     "title": "Suspected network connection issues.",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-18T19:28:47Z",
+     "updated_at": "2026-10-19T12:07:46Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601",
+     "body": "The host with running i2pd is responding to most (or many) SYN TCP packets by sending a large number of RST TCP packets. CPU usage is less than 200% on a dual-core processor, and there is some free memory and swap and file descriptors (`ss -s` is about 6000, LimitNOFILE=20000 in i2pd.service). Enabled NTCP2 and SSU2 IPv4 only.\nPossible DDoS attack?\nHow to discover:\n`# tshark -n -f \"(tcp[tcpflags] == tcp-syn and dst host $IP and dst port $PORT)  or  (tcp[tcpflags] & tcp-rst != 0 and src host $IP and src port $PORT)\"  -i $IFACE -a duration:$DUR`\nSubstitute your own IP, PORT, IFACE, DUR in seconds.\n\nVDS with real IP, Debian 12 64 bit\ni2pd version 2.61.0-813-g7f04a350 (0.9.70)\nNetwork status: OK, Router Caps:XfR, NTCP2 transports 5000\nTransit 30-35 Mbit/s\n"
+    },
+    {
      "number": 2602,
      "title": "Don't send data if remote address is not set",
      "is_pr": true,
@@ -228,17 +281,6 @@
      "user": "pobregat0",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2602",
      "body": "SendData takes the header protection key from m_Address->i, but an incoming session has no address until SessionConfirmed. A block from a SessionRequest payload can reach SendData before that: HandlePayload parses RelayRequest regardless of session state, and HandleRelayRequest answers through SendData when the relay tag is not found. The result is a read at a null address and the router dies.\n\nReachable by anyone: the token that ProcessSessionRequest requires is handed out by the receiver itself in Retry, and the static key for the handshake is published in its RouterInfo.\n\nReproduced on 3.0.0 (ec19bfb5) with a crafted SessionRequest whose payload is a datetime block, a RelayRequest block with an unknown relay tag and padding: the router dies both under AddressSanitizer (SEGV at 0x41) and in an ordinary build (Segmentation fault). With this change the same packets leave the router alive and log 'Address is not set' instead.\n\nBuilds with no warnings, make -C tests passes."
-    },
-    {
-     "number": 2601,
-     "title": "Suspected network connection issues.",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-18T19:28:47Z",
-     "updated_at": "2026-10-18T22:20:27Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2601",
-     "body": "The host with running i2pd is responding to most (or many) SYN TCP packets by sending a large number of RST TCP packets. CPU usage is less than 200% on a dual-core processor, and there is some free memory and swap and file descriptors (`ss -s` is about 6000, LimitNOFILE=20000 in i2pd.service). Enabled NTCP2 and SSU2 IPv4 only.\nPossible DDoS attack?\nHow to discover:\n`# tshark -n -f \"(tcp[tcpflags] == tcp-syn and dst host $IP and dst port $PORT)  or  (tcp[tcpflags] & tcp-rst != 0 and src host $IP and src port $PORT)\"  -i $IFACE -a duration:$DUR`\nSubstitute your own IP, PORT, IFACE, DUR in seconds.\n"
     },
     {
      "number": 2591,
@@ -264,6 +306,24 @@
     }
    ],
    "comments": [
+    {
+     "id": 6266827852,
+     "issue": 2601,
+     "issue_title": "Suspected network connection issues.",
+     "created_at": "2026-10-19T12:07:46Z",
+     "user": "Vort",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6266827852",
+     "body": "Win7, белый IP, флудфил.\nНу и ещё я вообще не фильтровал при захвате.\nНо не суть, если бы было много RST, то они бы повылазили всё равно."
+    },
+    {
+     "id": 6266751655,
+     "issue": 2601,
+     "issue_title": "Suspected network connection issues.",
+     "created_at": "2026-10-19T12:03:33Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6266751655",
+     "body": "Какая ОС? Какой IP - серый, белый? Флудфил?\nДополнил описание своей конфигурации.\n\n"
+    },
     {
      "id": 6257649391,
      "issue": 2602,
@@ -589,17 +649,6 @@
      "user": "4RH1T3CT0R7",
      "url": "https://github.com/XTLS/Xray-core/pull/7182",
      "body": "as RPRX asked in #6748, xdrive now takes only VLESS with VLESS Encryption and no flow, and on the client mux has to carry everything: enabled, no negative concurrency or xudpConcurrency, no xudpProxyUDP443 skip, no testpre. there are no minimums, so it shouldn't get in the way of the mux changes, and reverse is left out since it opens its own mux. an xdrive inbound now listens on one port only, a port range started a listener per port on the same folder and each of them took the same session\n\nthe service is now google-drive. \"Google Drive\" still works with a deprecation warning, and the transport takes both names for protobuf configs. configs without mux or encryption stop loading, so this needs a line in the release notes, and panels like 3x-ui will need the new name\n"
-    },
-    {
-     "number": 7181,
-     "title": "XDRIVE transport: Prefer h2 (Chrome CH by default); End stalled requests; Other small changes",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-16T18:54:40Z",
-     "updated_at": "2026-10-17T09:24:54Z",
-     "user": "4RH1T3CT0R7",
-     "url": "https://github.com/XTLS/Xray-core/pull/7181",
-     "body": "builds on #7170. as RPRX asked, h2 + utls by default and h1 the DoH way from #7140: xdrive dials utls chrome even without tlsSettings and one http.Transport speaks what the server picked, so security tls against google works again (main offers h2 in the hello, then speaks h1 and gets http2_handshake_failed). a host gets one connection, a host that answers over h1 moves to a transport with up to 32. the handshake runs inside the dial with the stall limit, so a hung one can't hold the host. alpn http/1.1 without echConfigList gets a warning, the dead REALITY branch and x/net http2 are gone\n\nfrom a VPS to googleapis, 32 parallel 4 MiB puts and gets, 2-3 runs each, main vs this: at ~1 ms put 17.2 to 18.8 MiB/s, get 17.0 to 20.7. with 150 ms added the get still gains (16.8 to 19.6) but the put falls from 10.8 to 3.4, google gives a connection 1 MiB of window, and 4 h2 connections bring it back to 9-11. @RPRX keep one connection or allow a few?\n"
     }
    ],
    "comments": [
@@ -1169,137 +1218,44 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7187#issuecomment-6235085000",
      "body": "感觉这个 PR 最好配合 https://github.com/XTLS/Xray-core/pull/7135 ，~~虽然我不确定 TSPU 会不会针对 Google IP 也限制旧版 Chrome 指纹的连接数~~\r\n\r\n所以 h3 时默认 maxConnections 是 1？"
-    },
-    {
-     "id": 6234180904,
-     "issue": 7175,
-     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
-     "created_at": "2026-10-17T13:00:46Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6234180904",
-     "body": "Please understand that we must design the abstraction well from the beginning; otherwise, the code will quickly become chaotic and uncontrollable.\r\nEspecially with `fm.lua`, it must have a brand-new pool that allocates an `LState` for each connection, and there should not be any configuration fields specific to a particular `fm` implementation.\r\nI expect to submit a PR for the basic implementation very soon."
-    },
-    {
-     "id": 6234145145,
-     "issue": 7175,
-     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
-     "created_at": "2026-10-17T12:56:49Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6234145145",
-     "body": "ok, no more force pushing.\n\nthe error now just says the script must define at least one hook. `reset` became `noiseReset` in the config and `noise_reset_min`/`noise_reset_max` in the proto since it only paces the noise, and your timer or event can take it over later. `registerObjects` is gone too: a state makes the plan, the stream, the header or the packet the first time one of its own hooks needs it, so a noise only script carries one object instead of four, and a new ability is one map entry instead of another table on every state. the receiver check sits in a single `borrowed()` helper now, a method still refuses anything its hook wasn't given, and there's a test for that.\n\nwaiting is fine. a pooled state has nowhere to keep anything about one connection, so that part has to come from your PR instead of me guessing it here. tell me which shape it takes and i'll move these hooks onto it.\n\nabout hanging the script under header-custom, that was #7174 and i closed it because @Fangliding asked for the opposite, one lua mask doing header-custom's job in its own place instead of another lua beside it. moving it back is quick, so settle it with him and i'll follow.\n"
-    },
-    {
-     "id": 6232200404,
-     "issue": 7160,
-     "issue_title": "sockopt.interface: when the interface does not exist, the dial silently goes unbound (can loop back into TUN)",
-     "created_at": "2026-10-17T09:18:16Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/issues/7160#issuecomment-6232200404",
-     "body": "> 17\\. 代理服务器当然绝大多数都是 v4v6 双栈，然而上面的重点是本地直连（Direct outbound）流量，TUN 有 v6 但物理出口网卡没 v6 的情况\n\nWhen there is a domain (sniffing or fakedns), freedom already handles it: with `AsIs`, Go's dialer falls back to IPv4, and with `UseIP`/`ForceIP` in `sockopt.domainStrategy`, Xray's happy eyeballs does, since the IPv6 attempt now fails at once when binding fails.\n\n**The real problem is a direct connection to a bare IPv6 address that can't be sniffed**: there is no IPv6 path, so it can't work, and the best we can do is fail it as early as possible so that the app falls back to IPv4. **But the TUN comes before routing: it has already completed the TCP handshake before Xray even decides where the connection goes**, so by the time the direct dial fails, it's too late for the app to notice."
-    },
-    {
-     "id": 6232010290,
-     "issue": 7160,
-     "issue_title": "sockopt.interface: when the interface does not exist, the dial silently goes unbound (can loop back into TUN)",
-     "created_at": "2026-10-17T08:56:50Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7160#issuecomment-6232010290",
-     "body": "代理服务器当然绝大多数都是 v4v6 双栈，然而上面的重点是本地直连（Direct outbound）流量，TUN 有 v6 但物理出口网卡没 v6 的情况"
-    },
-    {
-     "id": 6231892043,
-     "issue": 7160,
-     "issue_title": "sockopt.interface: when the interface does not exist, the dial silently goes unbound (can loop back into TUN)",
-     "created_at": "2026-10-17T08:44:22Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/issues/7160#issuecomment-6231892043",
-     "body": "> @patterniha 我觉得类似 https://github.com/XTLS/Xray-core/pull/7092 ，autoOutboundsInterface 应当识别目标网卡是否有 IPv6 然后决定是否路由 IPv6 进来？\n\nI think the TUN should keep routing IPv6 even if the outbound interface has no IPv6. Suppose a program sends data to an IPv6 address: we want it to go through our proxy server, which has IPv6, not to bypass Xray or fail on our device. Xray carries it inside its connection to the server, which can be plain IPv4, and the server reaches the IPv6 address on its side. So regardless of whether our PC supports IPv6, the TUN should accept that connection and route it to the proxy; not routing IPv6 would break IPv6 through the proxy."
-    },
-    {
-     "id": 6230908913,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:54:12Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230908913",
-     "body": "ok"
-    },
-    {
-     "id": 6230896134,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:52:40Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230896134",
-     "body": "@Meo597 我看了下 Maintainers team 有那个仓库的 admin 权限，刚加了五个人进去，还覆盖别的一些仓库，~~先这样吧~~"
-    },
-    {
-     "id": 6230802517,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:41:56Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230802517",
-     "body": "话说 install 那边的 PR 没人管了"
-    },
-    {
-     "id": 6230774340,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:38:54Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230774340",
-     "body": "也没必要为了这个单独维护一个 geosite，升级版本的时候不兼容启动失败很正常吧\r\n用这种细分类的还是少，想了想不用管\r\n\r\n~而且说好了不对中国大陆用户服务的~"
-    },
-    {
-     "id": 6230760942,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:37:38Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230760942",
-     "body": "代码上没必要对此进行兼容倒是，不过可能要提前知会用户， ~~虽然用户也不一定会用打包附送的~~\r\n\r\n这么一说的话 Xray-install 动了会出问题的可能性还要大一些"
-    },
-    {
-     "id": 6230706350,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:30:54Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230706350",
-     "body": "以及一些 Loyalsoldier 后加的分类\r\n`geosite:google-cn`、`geosite:apple-cn` 这两个可能会有少量用户在用\r\n上游是 `geosite:google@cn`\r\n\r\n但是我觉得不应该改代码强行转换、或者分类不存在也能启动，会破坏用户愿有意图"
-    },
-    {
-     "id": 6230662006,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geosite to v2fly/domain-list-community",
-     "created_at": "2026-10-17T06:25:28Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6230662006",
-     "body": "docker 那边好像也得改"
-    },
-    {
-     "id": 6230432862,
-     "issue": 7175,
-     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
-     "created_at": "2026-10-17T05:58:22Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-6230432862",
-     "body": "这个 PR 需要暂时 delay\r\n因为做成了 finalmask.lua 不能这样连接状态无关\r\n需要等我另一个 PR 后再说\r\n\r\n如果在 header-custom 下挂 script 的话可以 approve"
-    },
-    {
-     "id": 6230361142,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-17T05:49:37Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6230361142",
-     "body": "@RPRX 权限的问题我想了一下，可以按能力申请，像手机那样摄像头、相册、网络等分开，最后统一签名\r\n@Fangliding 说的 DNS 隧道的问题就能在合理框架下解决，不申请“任意公网权限”则只能给硬编码的 DoH 通信\r\n\r\n具体的实现是，用户不能用命令加参数显式授权，必须是脚本的注解 declare 权限\r\n申请敏感权限时，交互式的命令行可以按 **360 卸载风格** 反复多次要求授权，各种多重否定句力争把小白用户绕进去\r\n并且问题顺序打乱，确保用户真逐字阅读了\r\n这样避免恶意脚本提供者同时给一条命令让用户去执行\r\n\r\n内联脚本永远不可能申请权限，这样自定义协议、自定义 Finalmask 有基础能力可以下发订阅"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3126,
+     "title": "fix: register unacknowledged Play purchase when gateway has no record",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-09-04T15:37:26Z",
+     "updated_at": "2026-10-19T09:11:45Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3126",
+     "body": ""
+    },
+    {
+     "number": 3302,
+     "title": "Зачем AmneziaWG изменяет глобальные sysctl хоста? Возможные проблемы на VPS с несколькими сервисами.",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-19T07:30:34Z",
+     "updated_at": "2026-10-19T07:32:08Z",
+     "user": "foxidermist",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3302",
+     "body": "Здравствуйте!\n\n‎При установке AmneziaWG 3.1 через AmneziaVPN на VPS с Ubuntu Server 24.04.5 LTS обнаружил, что установщик изменяет большое количество глобальных параметров Linux.\n‎\n‎Конфигурация сервера:\n‎\n· ‎Ubuntu Server 24.04.5 LTS, ядро 6.8.0-147-generic.\n· ‎KVM, 4 vCPU, 4 ГБ RAM.\n· ‎Docker Engine 29.9.1.\n· ‎AmneziaWG tools 3.1.20260812.\n· ‎Self-hosted AmneziaWG в Docker-контейнере.\n‎\n‎Изменения выполняются сценарием \"client/server_scripts/setup_host_firewall.sh\" версии 5.0.3.0.\n‎\n‎Из 21 проверенного параметра sysctl после установки изменились 17.\n‎\n‎Наиболее заметные изменения:\n‎\n‎Параметр| До установки| После установки\n‎\"fs.file-max\"| 9223372036854775807| 51200\n‎\"net.ipv4.tcp_congestion_control\"| cubic| hybla\n‎\"net.netfilter.nf_conntrack_max\"| 65536| 262144\n‎\"net.core.rmem_max\"| 212992| 67108864\n‎\"net.core.wmem_max\"| 212992| 67108864\n‎\"net.ipv4.tcp_max_tw_buckets\"| 16384| 5000\n‎\"net.ipv4.ip_local_port_range\"| 32768–60999| 10000–65000\n‎\n‎В исходном коде также присутствует попытка установить \"net.ipv4.tcp_tw_recycle\", хотя этот параметр отсутствует в современных ядрах Linux.\n‎\n‎Заметил, что комментарий в скрипте объясняет увеличение \"nf_conntrack_max\" требованиями Telegram-прокси (MTProxy/TeleMT/TProxy).\n‎\n‎Хотелось бы уточнить:\n‎\n1. ‎Какие из этих изменений действительно необходимы для работы исключительно AmneziaWG 3.1?\n2. ‎Почему установщик снижает \"fs.file-max\" до 51200, если исходное значение значительно выше? Есть ли техническая причина не сохранять более высокий лимит?\n3. ‎Почему для всех TCP-соединений VPS принудительно выбирается \"hybla\" вместо штатного \"cubic\"? Есть ли измерения, показывающие преимущество такой настройки именно для AmneziaWG?\n4. ‎Могут ли изменения TCP-буферов, лимитов соединений и сетевых очередей отрицательно влиять на другие приложения или потребление памяти VPS с 4 ГБ RAM?\n5. ‎Безопасно ли вернуть исходные значения \"fs.file-max\" и \"tcp_congestion_control\", оставив контейнер AmneziaWG работающим?\n6. ‎Возможно ли сделать этот тюнинг необязательным либо применять только параметры, необходимые выбранному протоколу?\n7. ‎Будут ли эти настройки применяться повторно при обновлении или пересоздании AmneziaWG?\n‎\n‎Ожидаемое поведение: установка отдельного VPN-протокола не должна без необходимости менять глобальные параметры работающего сервера либо должна предупреждать администратора о таких изменениях.\n‎\n‎Буду признателен за техническое объяснение и рекомендации для VPS, на котором AmneziaWG работает одновременно с другими Docker-сервисами."
+    },
+    {
+     "number": 3301,
+     "title": "fix: add new dep to test",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-19T07:18:56Z",
+     "updated_at": "2026-10-19T07:18:56Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3301",
+     "body": "fixing dependencies for test\n"
+    },
     {
      "number": 3279,
      "title": "[Windows][5.0.3.0] Excluding Weixin.exe via app split tunneling breaks voice/video calls, while text messaging works",
@@ -1475,39 +1431,6 @@
      "user": "vkamn",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3295",
      "body": ""
-    },
-    {
-     "number": 3294,
-     "title": "xx",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-16T13:12:32Z",
-     "updated_at": "2026-10-17T12:25:04Z",
-     "user": "jozheph34-max",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3294",
-     "body": "/."
-    },
-    {
-     "number": 2808,
-     "title": "Self-hosted: optional per-config update endpoint for in-app fleet failover/rotation",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-07-06T20:07:21Z",
-     "updated_at": "2026-10-17T10:52:48Z",
-     "user": "wintergenius",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2808",
-     "body": "## Summary\n\nAn optional, opt-in improvement for self-hosted users: let a `SelfHosted` config include the operator's own update endpoint together with a pinned public key, so the client can periodically pull a refreshed config from it. This gives self-hosters automatic failover / rotation across their own fleet of servers. It is purely additive and off by default.\n\n## Problem\n\nSelf-hosting is great, but a single server occasionally goes down — the hosting provider, a block, or just a crash. So people who self-host usually run a small fleet of servers rather than one. Today the app only understands static configs: when a server goes down, the user has to manually switch between separate configs. There is no way to do failover or rotation across your own infrastructure from inside the app.\n\n## Proposal\n\nAdd an optional field to a self-hosted config: the operator's update endpoint plus a pinned public key. When those fields are present, the client periodically fetches a refreshed config from that endpoint, verifies the response signature against the pinned key, and applies it (server list / active server / DNS, etc.). Properties:\n\n- **opt-in** — only active when the imported config includes these fields;\n- **scoped** — only for user-imported `SelfHosted` configs;\n- **verified** — the response must be signed by the key pinned at import time, so a config can only ever update itself from the operator who issued it.\n\nIn practice the operator (the self-hoster) runs a tiny endpoint that returns the current best config for their fleet, and the app follows it automatically instead of the user re-importing configs by hand.\n\n## It fits the existing code well\n\n*(paths/lines as of tag 4.8.19.0)*\n\n- The `SelfHosted` config type and a per-config `api_endpoint` field already exist — [apiDefs.h (ConfigType)](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/core/api/apiDefs.h#L8-L16) and [apiEndpoint key](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/core/api/apiDefs.h#L26).\n- The client already knows how to fetch a config from a remote source and apply it (containers / hostName / DNS) — [fillServerConfig()](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/ui/controllers/api/apiConfigsController.cpp#L159).\n- The request base URL for those fetches is a single settable value, not hardcoded at the call sites — [Settings::setGatewayEndpoint()](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/settings.cpp#L505) — so the same fetch machinery can target a per-config endpoint.\n- The architecture already supports third-party operators distributing configs through the app — the external-premium / external-trial service types in [apiUtils::getConfigType()](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/core/api/apiUtils.cpp#L85-L124). A self-hoster with a fleet is the same shape: they would just point at their own control plane.\n\n## Result\n\nMulti-server self-hosting gets real, in-app failover and rotation across your own fleet, via a small, opt-in, signature-verified mechanism that reuses machinery already present in the client. Happy to help with a PR or a test config if the direction is interesting.\n\n---\n\n**Reference server implementation** (runnable, clean-room, MIT): **https://github.com/wintergenius/Fleetcore** — it speaks the exact wire format this proposal implies (`GET /v1/config` → an Ed25519-signed `vpn://…` config), so the whole loop can be run with `docker run`. Details in the comment below.\n"
-    },
-    {
-     "number": 3090,
-     "title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-08-29T11:32:06Z",
-     "updated_at": "2026-10-17T05:05:04Z",
-     "user": "pers1307",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090",
-     "body": "**Describe the bug**\n\n  On Linux, client 5.0.1.5 fails to read the routing table and never installs\n  exclusion routes for the VPN endpoint. With `0.0.0.0/1` and `128.0.0.0/1`\n  pointing at the tunnel, WireGuard packets addressed to the server are routed\n  back into the tunnel itself, creating a routing loop. Packets grow with each\n  iteration until the socket rejects them with `sendmmsg: message too long`.\n\n  Client 4.8.21 on the very same machine installs the routes correctly and works.\n  The issue is protocol-independent — reproduced with both AmneziaWG 2.0 and 3.1\n  servers.\n\n  **To Reproduce**\n\n  Steps to reproduce the behavior:\n  1. Install 5.0.1.5 on Ubuntu 24.04 with a normal DHCP default route\n  2. Connect to any AmneziaWG server\n  3. Run `ip route get <server-ip>` — it points at the tunnel (`dev amn0`) instead\n     of the physical gateway\n  4. See `sendmmsg: message too long` in the daemon log; no traffic passes\n\n  **Expected behavior**\n\n  The daemon should add an exclusion route for the server endpoint through the\n  physical default gateway, as 4.8.21 does:\n  ```\n  <server-ip> via 192.168.31.1 dev wlp0s20f3\n  ```\n\n  **Log files**\n\n  Same 15-second window, two client versions on one machine:\n\n  | Log line | 5.0.1.5 | 4.8.21 |\n  |---|---|---|\n  | `Error in received packet: Numerical argument out of domain` | 10 | 0 |\n  | `No default gateway available, skipping exclusion route` | 10 | 0 |\n  | exclusion routes actually installed | none | all |\n\n5.0.1.5:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  Error in received packet: No such file or directory\n  LinuxRouteMonitor : No default gateway available, skipping exclusion route\n  ...\n  WireguardGo : ERROR: (amn0) peer(XXXX…) - Failed to send data packets:\n                write udp 0.0.0.0:54793: sendmmsg: message too long\n  ```\n  \n  4.8.21, same step:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  ```\n  (no warning, route present in `ip route`)\n  \n  Other errors present in both versions, possibly related:\n  ``` \n  Error: argument \"amnvpnrt\" is wrong: table id value is invalid\n  mkdir: cannot create directory '/sys/fs/cgroup/net_cls/amnvpnexclusions/'\n  LinuxRouteMonitor : Adding exclusion route for /999999 → Invalid destination prefix\n  net_cls cgroup v1 not available, traffic splitting disabled\n  ```\n  \n  **Screenshots**\n  \n  N/A — the client reports \"Connected\".\n\n  **Desktop (please complete the following information):**\n   - OS: Ubuntu 24.04.4 LTS (kernel 6.17), KDE Plasma / X11\n   - Version: 5.0.1.5 (regression — 4.8.21 works)\n\n  **Smartphone (please complete the following information):**\n   - Not affected — mobile clients handle routing through the OS VPN API\n\n  **Server (please complete the following information):**\n   - OS: Ubuntu 24.04, Docker\n\n**Additional context**\n  \n  Workaround — add the exclusion route manually before connecting:\n  ```\n  sudo ip route add <server-ip> via <lan-gateway> dev <iface>\n  ```\n  The loop disappears and `sendmmsg: message too long` stops.\n  \n  Possibly related: #1498, #1357, #2048 — all report \"connected but no internet\"\n  on Linux with the same `amnvpnrt` / `Invalid destination prefix` log noise."
     }
    ],
    "comments": [
@@ -1620,33 +1543,6 @@
      "body": "It seems the issue has been partially resolved by a third-party repository: `https://fdroid.noql.net/fdroid/repo/`\n\n<details markdown=\"1\">\n<summary>Click to see screenshot</summary>\n\n---\n\n<img width=\"356\" height=\"1070\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/5a5528a1-f0f9-48c0-a030-35ff6b569770\" />\n \n---\n\n</details>\n\nThe version there, however, lags behind by three months."
     },
     {
-     "id": 6233042334,
-     "issue": 2808,
-     "issue_title": "Self-hosted: optional per-config update endpoint for in-app fleet failover/rotation",
-     "created_at": "2026-10-17T10:52:48Z",
-     "user": "Crashermage",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2808#issuecomment-6233042334",
-     "body": "Good suggestion. +1"
-    },
-    {
-     "id": 6229926375,
-     "issue": 3279,
-     "issue_title": "[Windows][5.0.3.0] Excluding Weixin.exe via app split tunneling breaks voice/video calls, while text messaging works",
-     "created_at": "2026-10-17T05:02:11Z",
-     "user": "Xiaotingwen",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3279#issuecomment-6229926375",
-     "body": "I've run into this problem too. Do you have any solutions yet?"
-    },
-    {
-     "id": 6224661639,
-     "issue": 3090,
-     "issue_title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
-     "created_at": "2026-10-16T21:04:10Z",
-     "user": "ychr13",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090#issuecomment-6224661639",
-     "body": "Confirming on **5.0.3.0** (Linux, self-hosted AmneziaWG 3.x), plus one detail I have not seen here.\n\n**The failure is positional, not all-or-nothing.** In one and the same connect, the exclusions before the overflow point are installed and everything after it is skipped — in list order:\n\n```\nAdding exclusion route for 172.20.0.0/16     ← installed\nAdding exclusion route for 172.20.1.0/24     ← installed\nAdding exclusion route for 172.20.2.0/24\nError in received packet: Operation not supported     ← stale errno, not the real reason\nNo default gateway available, skipping exclusion route\n… and the same for every remaining entry, including the site exclusions (e.g. api.avito.ru)\n```\n\nOf 35 exclusion routes processed in that connection, 8 were installed (the first ones in the list) and 27 were skipped. So it is not only the VPN endpoint route: split tunneling is applied **partially**, the GUI still shows *Connected*, and the domains the user explicitly excluded silently go through the tunnel.\n\n**Measurements** (ordinary desktop: 4 Docker bridges, 10 veth, 18 links, 20 IPv6 addresses in total):\n\n| state | RTM_GETROUTE dump | free in 8192 | result |\n|---|---|---|---|\n| IPv6 enabled on Docker interfaces (default) | **8820 B** (`chunks=3`) | −628 | gateway not found, 27 of 35 exclusions skipped |\n| IPv6 disabled on `docker0` / `br-*` / `veth*` | **3444 B** (`chunks=2`) | +4748 | gateway found, no skips |\n\nA C copy of the 5.x read loop (`recv(sock, ptr, sizeof(buffer) - msg_len, 0)` + `NLMSG_OK`) reproduces it deterministically: with `BUFFER_SIZE 8192` → `FAIL@recv#3: NLMSG_OK=0 recv=0 msg_len=8192`; with `262144` → `dump bytes=8820 chunks=3`, gateway found.\n\n**Workaround:** disabling IPv6 on `veth*` alone was not enough on my machine — the `br-*` bridges carry IPv6 entries in the `local` table as well. My rule covers `docker0|docker_gwbridge|br-*|veth*`, applied on interface creation (udev) and after Docker start (systemd unit), so it survives reboots and new `docker network create`.\n"
-    },
-    {
      "id": 5782560525,
      "issue": 2457,
      "issue_title": "[Android] [Critical] Per-app split tunneling bypass for AmneziaWG 2.0 allows blacklisted apps to see the ip address of the VPN.",
@@ -1665,7 +1561,7 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-17T00:56:29Z",
-     "updated_at": "2026-10-19T04:00:14Z",
+     "updated_at": "2026-10-19T06:46:11Z",
      "user": "wizd",
      "url": "https://github.com/HyNetworks/hysteria/pull/1706",
      "body": "## Summary\r\n\r\nAdds an optional `l3tun` mode that copies whole IP packets between a local TUN device and QUIC datagrams. It does not terminate TCP or UDP. The intended use is to run VXLAN (or any other IP protocol) between the two TUNs, so the overlay keeps a normal 1500-byte inner MTU instead of squeezing VXLAN through `udpForwarding` and a reduced MTU.\r\n\r\nBoth ends opt in. The client sends `Hysteria-L3: true` on the existing auth request only when `l3tun` is configured, and the server grants it only when it has `l3tun` as well. The header is also sent as `false` otherwise; an older peer ignores the unknown header. L3 datagrams use session id 0 and a zero address-length byte, which `ParseUDPMessage` already rejects, so an older peer drops them.\r\n\r\n## How packets are carried\r\n\r\nOne IP packet is sent as one QUIC datagram. If that datagram is larger than the peer's current payload limit (`quic.DatagramTooLargeError`), it is split into evenly sized fragments.\r\n\r\nThe datagram prefix is 11 bytes:\r\n\r\n```\r\nSessionID u32 = 0 | PacketID low 16 | FragID u8 | FragCount u8 | 0x00 | PacketID high 16 | IP packet\r\n```\r\n\r\nFragments of different packets may interleave and are reassembled by the 32-bit packet id. A missing fragment drops the whole packet. There is no fragment retransmission; an inner TCP retransmits. Reassembly gives up after 200 ms. The largest IP packet is 1600 bytes. A 1600-byte packet under the usual 1200-byte datagram frame is two fragments of about 800 bytes.\r\n\r\nThe server keeps one L3 peer: the latest authenticated client that requested L3 replaces the previous one. Packets read from the local TUN while no peer is connected are discarded. Before a received packet is written into the local TUN, its source address must equal the configured `peer`.\r\n\r\nThe client L3 device stays up across QUIC reconnects. Traffic is counted with the existing `TrafficLogger`, in the same direction as UDP proxying.\r\n\r\n`l3tun` is supported on Linux, Darwin, Windows, and Android (sing-tun). Creating the device needs root or `CAP_NET_ADMIN`. Hysteria creates and addresses `hytun0` only. The operator adds the VXLAN interface after the TUN exists. VXLAN's UDP port stays inside the tunnel, so it does not need a public firewall opening.\r\n\r\n## Configuration\r\n\r\nClient:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.2/30\r\n  peer: 10.200.0.1\r\n```\r\n\r\nServer:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.1/30\r\n  peer: 10.200.0.2\r\n```\r\n\r\n`mtu` defaults to 1600 and cannot be higher. `address` is a prefix; `peer` must be the same IP version. A `/30` gives a connected route, so this tunnel does not need IP forwarding and does not capture the path back to the server's public address.\r\n\r\nOperator notes, including the VXLAN commands, are in `VXLAN.md` (currently written in Chinese). For an inner MTU of 1500 the outer packet is about 1550 bytes (Ethernet 14 + VXLAN 8 + UDP 8 + IPv4 20), which fits in the 1600-byte TUN without kernel fragmentation:\r\n\r\n```bash\r\nping -M do -s 1472 -c 3 10.201.0.1\r\n```\r\n\r\n## Test results\r\n\r\nMeasured on this branch, Linux amd64 at both ends. `hytun0` MTU 1600. VXLAN between the two TUN addresses. Path: a residential PPPoE link (uplink about 40 Mbps) to a Tokyo VPS, then to a second Tokyo host running iperf3 3.16. The iperf3 client is 3.9. Brutal limits on the client were 90 Mbps up and 200 Mbps down, with loss compensation disabled. The QUIC max datagram frame size is 1200 bytes.\r\n\r\nSame-region control, VPS to the iperf3 host, 8 seconds: 4374 Mbps up, 4441 Mbps down. The iperf3 server is not the bottleneck.\r\n\r\nTunnel RTT to that host, 10/10: min / avg / max 60.4 / 66.3 / 97.9 ms.\r\n\r\nEach VXLAN MTU below is one 10-second single TCP stream in each direction. Numbers are receiver goodput. Retransmissions are the sender's 10-second total. \"Outer IP\" is `vx MTU + 50`. A packet becomes two QUIC datagrams once the outer IP plus the 11-byte L3 header no longer fits in the 1200-byte frame; 1140 (outer"

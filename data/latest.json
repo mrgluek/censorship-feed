@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-20T00:19:45Z",
- "since": "2026-10-18T00:19:45Z",
+ "generated_at": "2026-10-20T08:31:44Z",
+ "since": "2026-10-18T08:31:44Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -91,17 +91,6 @@
      "user": "dyhkwong",
      "url": "https://github.com/net4people/bbs/issues/672",
      "body": "Disclaimer: I am the reporter of the vulnerability.\n\nXray-core maintainers look down on \"skip certificate verification\" feature (i.e. the `allowInsecure` option in Xray-core) or similar options in proxy software, arguing that this is equivalent to having no security measures at all and leaves users \"streaking\", exposing them to the risk of man-in-the-middle attacks. However, if a vulnerability in Xray-core itself causes users to be \"streaking\" and fall victim to man-in-the-middle attacks, Xray-core will cover it up and act as if nothing has happened.\n\nOn [October 21, 2021](https://github.com/XTLS/Xray-core/commit/acb81ebe3de44e7ca197bf079f1d1122ff49b490), the `pinnedPeerCertificateChainSha256` option, with no known issues, was added to Xray-core. This provides a double layer of security: if this option is enabled, custom certificate chain pinning logic will be performed in addition to the regular certificate verification. This also facilitates the use of self-signed certificates: to use a self-signed certificate securely, a user can enable both `allowInsecure` and `pinnedPeerCertificateChainSha256` to skip the regular certificate verification and perform only the custom certificate chain pinning logic.\n\nHowever, Xray-core later claimed that `allowInsecure` is insecure and enabling `allowInsecure` is like \"streaking\" and would leave users vulnerable to man-in-the-middle attacks.\n\nOn [January 9, 2026](https://github.com/XTLS/Xray-core/commit/0ca13452b8e99824e08c2c860dd0f84a4ae2859d), Xray-core removed `pinnedPeerCertificateChainSha256` and replaced it with a new option, `pinnedPeerCertSha256`, to stop users from skipping certificate verification (or so-called \"streaking\"). For self-signed certificates, both `allowInsecure` and `pinnedPeerCertSha256` must be enabled, which skips the regular certificate verification and only performs the custom certificate pinning logic. This should have helped the users to use self-signed certificates securely. However, `pinnedPeerCertSha256` contains a certificate verification bypass vulnerability.\n\nOn [January 13, 2026](https://github.com/XTLS/Xray-core/releases/tag/v26.1.13), Xray-core released the first version containing this certificate verification bypass vulnerability. Since the old option had been removed, users had no choice but to migrate to the new vulnerable option. At this point, the certificate verification defense was already teetering on the brink of collapse. Fortunately, as long as users neither use a self-signed certificate nor enable `allowInsecure`, the regular certificate verification could still provide some protection.\n\nOn [January 16, 2026](https://github.com/XTLS/Xray-core/commit/760223ad70f822fcb859a217e60e038a970610f9), Xray-core modified the logic of `pinnedPeerCertSha256`, making it always skip the regular certificate verification and only performs the custom certificate pinning logic. This means a protection layer has been missing: the regular certificate verification is always skipped. If a verification bypass vulnerability exists in `pinnedPeerCertSha256` (and unfortunately, it does), the custom certificate pinning logic will fail to function, effectively leaving no certificate verification in place, which allows a man-in-the-middle attack to be successfully performed. At this point, the certificate verification defense has completely collapsed.\n\nOn February 6, 2026, I found the above certificate verification bypass vulnerability in Xray-core’s `pinnedPeerCertSha256` and privately reported to Xray-core maintainers. A man-in-the-middle attacker could insert a leaf certificate at any place in the certificate chain, and the custom certificate pinning logic would verify the leaf certificate successfully, thereby leading to the success of man-in-the-middle attacks. This is an overly simple vulnerability; even without advanced security knowledge, I was able to discover it at a glance.\n\n[On the same day](https://github.com/XTLS/Xray-core/commit/4632984b66a4f2ab3d4eda8de"
-    },
-    {
-     "number": 676,
-     "title": "[Iran] Since Oct 2026: only ICMP echo passes Iran→abroad on some routes; ~50k pps cap, volume-triggered reroute, one-way ping blocks",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-18T07:19:46Z",
-     "updated_at": "2026-10-18T07:19:46Z",
-     "user": "JohnWatsoon",
-     "url": "https://github.com/net4people/bbs/issues/676",
-     "body": "Measurements from several Iran ⇄ Europe server pairs (datacenter, 2 vCPU each), October 2026.\n\n## What gets through\n\nSince early October 2026, on the routes we use, TCP, UDP, GRE, IPIP, SCTP and ESP from Iran to abroad are cut after a few packets. Only ICMP passes reliably. Base RTT is about 40 ms, and random loss is 0.2–2 %, with no relation to load.\n\n## Packet size\n\n- At first, ICMP echo payloads above about 640 bytes were dropped.\n- Since at least 2026-10-12, full 1500-byte ICMP packets pass again in both directions with DF set: 0–0.5 % loss from 640 to 1472 bytes, no fragmentation.\n- Some hosts still have a route `mtu lock 680`, so check `ip route get <peer>` first.\n\n## Packet-rate cap\n\n- Kharej → Iran delivers at most about 50–55k ICMP packets/s, shared by every ICMP type. That is about 33 MB/s at a 640 B payload.\n- Past about 45k pps a queue builds (p99 one-way delay +300 ms) and loss rises.\n- With 1400 B payloads the same path gave 27.5 MB/s down and 26 MB/s up, with 0.3–0.8 % retransmission (3–5 % at 640 B). The per-packet limit appears to bind, not bytes.\n\n## Volume-triggered reroute\n\n- Twice on 2026-10-12, total ICMP held above ~30 MB/s for a few seconds (34.5 and 41.5 MB/s).\n- 5–30 s later, the traffic was rerouted inside Iran (base RTT 40 → 76 ms) for several minutes.\n- On the new route, bulk transfers collapse to about 2 MB/s with 50–90 % loss, while light traffic is fine.\n- Runs at or below ~27 MB/s never triggered it.\n- This looks like a volume-based reaction, not a protocol classifier. Has anyone seen the same on other ASes?\n\n## One-way ICMP blocks\n\n- On some Iran IPs, echo requests from Iran to abroad are dropped (100 % loss), while pings from abroad to the same Iran IP work.\n- The block comes and goes from day to day.\n- Swapping direction works around it: Kharej sends the requests and Iran answers. Linux on the Iran side then also answers every request itself, so `OutEchoReps` = 2 × `InEchos` in `/proc/net/snmp` unless `icmp_ratemask` or `icmp_echo_ignore_all` is changed.\n- Non-echo ICMP types (timestamp 13/14, info 15/16, mask 17/18) pass on the routes we tried.\n\n## CDN\n\n- Iran → Cloudflare → Kharej over `wss`: every variant without ECH failed to connect. The block comes right after the TLS handshake, which points to SNI filtering.\n- With ECH it works: 44–48 MB/s down and up to 82 MB/s up with 4 sessions, RTT 109–116 ms (CDN base 86 ms).\n\n## Tooling\n\nThe measurements were taken with WatTunnel, an open-source (MIT) tunnel I maintain. Full tables and method are here: https://github.com/JohnWatsoon/WatTunnel/blob/main/docs/TECHNICAL.md#icmp-path-limits-and-pacing\n\nQuestions I'd like other data on:\n1. Is the ~30 MB/s reroute threshold per destination IP, per source AS, or global?\n2. Has anyone else seen the 640 B limit lifted on other routes?"
     }
    ],
    "comments": []
@@ -280,24 +269,6 @@
      "body": "@neilalexander @Arceliar @majestrate "
     },
     {
-     "id": 6247217086,
-     "issue": 1385,
-     "issue_title": "Link-password authentication bypass through unvalidated Ed25519 identity keys, also affecting Ironwood routing authentication",
-     "created_at": "2026-10-18T07:37:53Z",
-     "user": "lost0427",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1385#issuecomment-6247217086",
-     "body": "Thanks for following up on this.\n\nFor the record, we found this first, with the help of AI tooling; the issue was opened by @peigongdsd. We'd like to keep working on this together with you privately from here.\n\nThe 64-byte value asked for is the signature `R || S`:\n\n    A   = 0100...00   (declared public key, ed25519 identity element)\n    R   = 0100...00\n    S   = 0000...00\n    sig = R || S = 0100...00 || 0000...00   (64 bytes)\n\nIt is independent of the hashed password: verification checks `[S]*B == R + [k]*A` with `k = H(R || A || M)`. When the declared public key is the identity element `O`, `[k]*O = O` for every `k`, so the equation reduces to `[S]*B == R`. With `S = 0, R = O` this holds for any `M`, and the password only ever enters through `k`, which multiplies `A = O`. Hence the same constant signature verifies for any password.\n\n`R` is not arbitrary: it must equal `[S]*B`; `S` may be any canonical scalar. This is the `S = 0` case.\n\nThe class is the whole small-order subgroup rather than just `O` (order-2/4/8 keys also verify certain signatures), so the fix should reject small-order keys, and ideally use strict verification (reject small-order `A`, small-order `R`, non-canonical `S`) at every verification site: the link handshake, ironwood's per-message peer auth, and the encrypted/session handshake.\n\nWe have a minimal, self-contained PoC (a single Go file using the real `crypto/ed25519`, no network) that reproduces this and shows the acceptance rates per order. We also confirmed the full impact end to end: using a modified Yggdrasil **Windows client** connecting to an unmodified, normal Yggdrasil node, we joined a password-protected network with no password and no private key. The node we joined is our own, but its password is locked away and we could not have retrieved it. The only copy is inside an encrypted ZIP. The node accepted us as a peer and we loaded an HTTP page served on that network.\n\nSince this is an unfixed authentication bypass, we would rather not post exploit details publicly yet, and we would be glad to go through whatever private channel you prefer, such as GitHub private vulnerability reporting, email, or Matrix. Please let us know how you would like to proceed, and we can share the full PoC, the end-to-end details and a regression test privately so we can coordinate a fix and disclosure together.\n\nIf it does qualify, would it be possible to get a CVE assigned for this?"
-    },
-    {
-     "id": 6245653871,
-     "issue": 1385,
-     "issue_title": "Link-password authentication bypass through unvalidated Ed25519 identity keys, also affecting Ironwood routing authentication",
-     "created_at": "2026-10-18T04:28:45Z",
-     "user": "peigongdsd",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1385#issuecomment-6245653871",
-     "body": "> actually, I read it again, I see the issue. you can give an arbitrary ~~32~~ 64 bytes scalar that has nothing to do with the hashed password and it'll still pass just as long as the signature is right.\n\nSorry for throwing huge pile of llm generated shit at you. I was too busy yesterday to think about it or compose a fix myself, but report in a hurry. "
-    },
-    {
      "id": 5480834304,
      "issue": 1265,
      "issue_title": "Yggdrasil may help Iranian users?",
@@ -310,6 +281,50 @@
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2021,
+     "title": "update/fix default values in config file and remove outdated information",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2024-02-20T18:04:20Z",
+     "updated_at": "2026-10-20T02:10:04Z",
+     "user": "agowa",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2021",
+     "body": "The configuration file currently contains some \"alternative\" or better outdated information.\r\n\r\nE.g. it still mentions the defunct and for sell `netdb.i2p2.no` endpoint as a reseed.\r\nHaving non-default values listed as \"default\" within the config is also confusing to users, as it can easily make them waste hours on troubleshooting.\r\n\r\nStated defaults in config file:\r\n```\r\n[reseed]\r\n## Default: \"mainline\" I2P Network reseeds\r\n# urls = https://reseed.i2p-projekt.de/,https://i2p.mooo.com/netDb/,https://netdb.i2p2.no/\r\n```\r\n\r\nactual defaults:\r\nhttps://github.com/PurpleI2P/i2pd/blob/26463c50fc972b57cf8b03e143de2377c14c04f2/libi2pd/Config.cpp#L212-L225"
+    },
+    {
+     "number": 2604,
+     "title": "Fix reseed defaults in sample config",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-20T01:35:53Z",
+     "updated_at": "2026-10-20T01:53:52Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2604",
+     "body": "Three notes in contrib/i2pd.conf disagreed with Config.cpp:\n\n- verification was documented as on by default; reseed.verify defaults to false (the file still sets it to true, only the note was wrong);\n- under 'Default: \"mainline\" I2P Network reseeds' stood three old addresses, one of them (netdb.i2p2.no) long dead, while the built-in list holds nineteen;\n- yggurls listed one address against four in the built-in list.\n\nInstead of repeating the lists in the file, the notes now say the built-in list is used when the option is not set, and the commented examples keep two current addresses.\n\nConfig file only, no code changes.\n\nFix for #2021"
+    },
+    {
+     "number": 2603,
+     "title": "Use proper HTTP status codes for proxy errors",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-20T01:26:54Z",
+     "updated_at": "2026-10-20T01:31:01Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2603",
+     "body": "SendProxyError always answered 500, so every proxy failure looked like an internal server error - including a malformed request from the client.\n\nMeasured on a lone router with the proxy up, before and after:\n\n| case | before | after |\n| --- | --- | --- |\n| host not in addressbook | 500 | 502 |\n| hostname 300 chars | 500 | 502 |\n| non-i2p address, no outproxy | 500 | 502 |\n| b32 of right length that does not exist | 500 | 504 |\n| malformed request line | 500 | 400 |\n\n400 for what the client got wrong (unparsable request, invalid URI, no destination host in request, hostname too long for upstream SOCKS), 502 for naming and upstream proxy failures, 504 when the destination could not be reached. Everything else keeps 500 by default.\n\nJava I2P uses 502 for the not-found case (zzzi2p in the issue).\n\nBuilds with no warnings, make -C tests passes.\n\nFix for #1987"
+    },
+    {
+     "number": 1942,
+     "title": "Intermittent division by zero error in Transports::GetRandomPeer()",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2023-07-06T00:02:59Z",
+     "updated_at": "2026-10-20T01:14:54Z",
+     "user": "chadf",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/1942",
+     "body": "Transports::GetRandomPeer() randomly fails due to division by zero.\r\n```\r\n==38082==ERROR: AddressSanitizer: FPE on unknown address 0x00000186426a (pc 0x00000186426a bp 0x7fffdf3f4cf0 sp 0x7fffdf3f44a0 T7)\r\n    #0 0x186426a in std::__1::shared_ptr<i2p::data::RouterInfo const> i2p::transport::Transports::GetRandomPeer<i2p::transport::Transports::GetRandomPeer(bool) const::$_3>(i2p::transport::Transports::GetRandomPeer(bool) const::$_3) const /projects/i2pd/libi2pd/Transports.cpp:864:12\r\n    #1 0x1863af6 in i2p::transport::Transports::GetRandomPeer(bool) const /projects/i2pd/libi2pd/Transports.cpp:941:10\r\n    #2 0x20002c9 in i2p::tunnel::TunnelPool::StandardSelectPeers(i2p::tunnel::Path&, int, bool, std::__1::function<std::__1::shared_ptr<i2p::data::RouterInfo const> (std::__1::shared_ptr<i2p::data::RouterInfo const>, bool)>) /projects/i2pd/libi2pd/TunnelPool.cpp:515:38\r\n    #3 0x2002859 in i2p::tunnel::TunnelPool::SelectPeers(i2p::tunnel::Path&, bool) /projects/i2pd/libi2pd/TunnelPool.cpp:569:10\r\n    #4 0x1ff0d06 in i2p::tunnel::TunnelPool::CreateOutboundTunnel() /projects/i2pd/libi2pd/TunnelPool.cpp:661:7\r\n    #5 0x1fef524 in i2p::tunnel::TunnelPool::CreateTunnels() /projects/i2pd/libi2pd/TunnelPool.cpp:290:5\r\n    #6 0x1ff91fe in i2p::tunnel::TunnelPool::ManageTunnels(unsigned long) /projects/i2pd/libi2pd/TunnelPool.cpp:397:4\r\n    #7 0x1e8918d in i2p::tunnel::Tunnels::ManageTunnelPools(unsigned long) /projects/i2pd/libi2pd/Tunnel.cpp:822:11\r\n    #8 0x1e8333f in i2p::tunnel::Tunnels::Run() /projects/i2pd/libi2pd/Tunnel.cpp:550:7\r\n    #9 0x1f12fcd in decltype(*(static_cast<i2p::tunnel::Tunnels*&>(fp0)).*fp()) std::__1::__invoke<void (i2p::tunnel::Tunnels::*&)(), i2p::tunnel::Tunnels*&, void>(void (i2p::tunnel::Tunnels::*&)(), i2p::tunnel::Tunnels*&) /usr/include/c++/v1/type_traits:3565:23\r\n    #10 0x1f12e0d in std::__1::__bind_return<void (i2p::tunnel::Tunnels::*)(), std::__1::tuple<i2p::tunnel::Tunnels*>, std::__1::tuple<>, __is_valid_bind_return<void (i2p::tunnel::Tunnels::*)(), std::__1::tuple<i2p::tunnel::Tunnels*>, std::__1::tuple<> >::value>::type std::__1::__apply_functor<void (i2p::tunnel::Tunnels::*)(), std::__1::tuple<i2p::tunnel::Tunnels*>, 0ul, std::__1::tuple<> >(void (i2p::tunnel::Tunnels::*&)(), std::__1::tuple<i2p::tunnel::Tunnels*>&, std::__1::__tuple_indices<0ul>, std::__1::tuple<>&&) /usr/include/c++/v1/__functional/bind.h:263:12\r\n    #11 0x1f12b54 in std::__1::__bind_return<void (i2p::tunnel::Tunnels::*)(), std::__1::tuple<i2p::tunnel::Tunnels*>, std::__1::tuple<>, __is_valid_bind_return<void (i2p::tunnel::Tunnels::*)(), std::__1::tuple<i2p::tunnel::Tunnels*>, std::__1::tuple<> >::value>::type std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*>::operator()<>() /usr/include/c++/v1/__functional/bind.h:298:20\r\n    #12 0x1f126db in decltype(static_cast<std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*>>(fp)()) std::__1::__invoke<std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*> >(std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*>&&) /usr/include/c++/v1/type_traits:3640:23\r\n    #13 0x1f1262d in void std::__1::__thread_execute<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*> >(std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*> >&, std::__1::__tuple_indices<>) /usr/include/c++/v1/thread:282:5\r\n    #14 0x1f11244 in void* std::__1::__thread_proxy<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct> >, std::__1::__bind<void (i2p::tunnel::Tunnels::*)(), i2p::tunnel::Tunnels*> > >(void*) /usr/include/c++/v1/thread:293:5\r\n    #15 0x80271ea79 in thread_start /usr/src/lib/libthr/thread/thr_create.c:292:16\r\n`"
+    },
     {
      "number": 2601,
      "title": "Suspected network connection issues.",
@@ -521,10 +536,21 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-10-19T21:27:13Z",
+     "updated_at": "2026-10-20T03:13:48Z",
      "user": "KobeArthurScofield",
      "url": "https://github.com/XTLS/Xray-core/pull/7185",
      "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
+    },
+    {
+     "number": 7206,
+     "title": "feat(finalmask): add TCP and UDP source IP filtering",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-20T01:00:04Z",
+     "updated_at": "2026-10-20T01:04:19Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7206",
+     "body": "起因是避免 REALITY 的好邻居们互相偷跟国足似的半天~永远~不射门\r\n本来只做那个入站，发现太麻烦改为霍霍 FinalMask\r\n\r\n之所以不用 Lua 是因为 UDP 逐包过滤\r\n原生 Go 实现还可以给 Hy2、XHTTP/3 用\r\n\r\n```json\r\n{\r\n  \"finalmask\": {\r\n    \"tcp\": [\r\n      {\r\n        \"type\": \"ip-filter\",\r\n        \"settings\": {\r\n          \"blockedIPs\": [\"192.0.2.0/24\", \"2001:db8::/32\", \"geoip:cn\"]\r\n        }\r\n      }\r\n    ],\r\n    \"udp\": [\r\n      {\r\n        \"type\": \"ip-filter\",\r\n        \"settings\": {\r\n          \"blockedIPs\": [\"192.0.2.0/24\", \"2001:db8::/32\", \"geoip:cn\"]\r\n        }\r\n      }\r\n    ]\r\n  }\r\n}\r\n```"
     },
     {
      "number": 7205,
@@ -888,64 +914,18 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7136",
      "body": "- Lua 脚本现默认运行在沙箱内\r\n  原则是零信任策略以预期 Lua 脚本可以被安全的分享、订阅下发随意使用\r\n  因此沙箱的实现是白名单提供有限的函数和库，并进一步防止随机数种子和内存布局探测以被更高级的攻击手段利用\r\n- 封堵上游 https://github.com/yuin/gopher-lua 错误实现导致的沙箱逃逸问题\r\n- 出于安全审慎，暂时禁用内联脚本，待沙箱的可靠性~经得起历史和人民的检验~再开启\r\n- 经测试，精心构造的配置文件可用于启动 core 的同时还是合法 Lua 脚本\r\n  为防下游校验不严且全盘接收订阅下发，core 本地配置文件和 Lua 脚本穿透后的路径必须是合法扩展名否则拒绝启动\r\n  这同样是出于安全审慎，因为沙箱本就足够安全，且下游订阅实现从不是整个 json/yaml... 而是自行拼装\r\n- 经测试，精心构造的 geodata 文件可用于分流的同时还是合法 Lua 脚本\r\n  威胁模型是下游接收同一来源的 `geodata` `dns` `router` `finalmask` 块的订阅，攻击者可依赖特定时序导致 Lua 脚本被下发后启动\r\n  现 core 的 geodata 下载器会写入头 `\\x12\\x01\\x00` 杜绝此风险，因为它是非法 Lua 字节\r\n  如果下游自己下载 geodata 且来源和订阅都是攻击者，那么还有 core 的扩展名防护和沙箱机制\r\n  这同样是出于安全审慎的预防性措施，因为沙箱足够安全，且此潜在攻击路径对攻击者（你的机场）要求过于苛刻\r\n- 杂项：顺手发现并修复了精心构造的 geodata 可导致 xray 启动或热更新 geodata 时的 oom 问题，没有安全影响，攻击者只能恶作剧\r\n- 杂项：降低了 Lua 实例预分配栈大小以降低内存占用\r\n- 准备了 Lua 脚本公私钥签名机制和特权模式机制，但暂时禁用，同样是出于安全审慎原则\r\n- 由于零信任策略，因此使 xray api 提供的 `slice` 只读防止 race\r\n- 同上，收紧了 https://github.com/layeh/gopher-luar 暴露的方法，要求必须白名单"
-    },
-    {
-     "number": 7193,
-     "title": "HTTP outbound: Fix hang on server-first protocols",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-18T07:58:06Z",
-     "updated_at": "2026-10-18T08:19:59Z",
-     "user": "Shilmoon",
-     "url": "https://github.com/XTLS/Xray-core/pull/7193",
-     "body": "The HTTP outbound waits for the first client payload before it sends CONNECT. With protocols where the server talks first (FTP, SMTP, MySQL, or SSH clients that wait for the server banner, which is probably what #3459 ran into with XShell/MobaXterm) the client waits for the greeting and Xray waits for the client, so the connection hangs until one side gives up.\n\n- Read the first payload with a 500 ms timeout, like the VLESS outbound does since #1425, so a server greeting gets through after at most 500 ms.\n- After the `200`, keep tunneled bytes that `bufio` already read together with the response instead of dropping them.\n\nv2fly has the same two changes: v2fly/v2ray-core#1517 and the `Buffered()` drain in its `connectHTTP1`.\n\nTests (both fail on main):\n- `TestHTTPOutboundServerFirst` in `testing/scenarios`: dokodemo → HTTP outbound → HTTP inbound → a server that sends first.\n- `TestHTTP1TunnelKeepsDataReadWithResponse` in `proxy/http`: the proxy writes the `200` and the greeting in one write.\n\nAlso tried with real binaries: FTP to vsftpd 3.0.5 through the HTTP outbound, via Xray's HTTP inbound, squid 6.13 and Caddy 2.11.7 forward_proxy, and from a SOCKS inbound with sniffing, times out on main and works with this change. Plain HTTP latency and throughput are unchanged.\n"
-    },
-    {
-     "number": 7160,
-     "title": "sockopt.interface: when the interface does not exist, the dial silently goes unbound (can loop back into TUN)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-15T04:13:53Z",
-     "updated_at": "2026-10-18T07:06:34Z",
-     "user": "SashaAch",
-     "url": "https://github.com/XTLS/Xray-core/issues/7160",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nIf an outbound has `streamSettings.sockopt.interface` set and that interface does not exist at dial time, Xray does not fail the dial. It logs `failed to apply socket options > failed to get interface ...` at **Info** level and opens the connection without any binding, so it follows the system routing table.\n\n`transport/internet/system_dialer.go` (v26.10.10, lines 134-139; same in v26.9.9) only logs the error returned by `applyOutboundSocketOptions` and goes on to `dialer.DialContext`. The UDP path does the same (lines 77-81). The error itself comes from `net.InterfaceByName` in `transport/internet/sockopt_darwin.go:136-140`. From reading the source, Linux takes the same path (the error is logged, not returned); I tested macOS only.\n\nWhy this matters. A typical full-tunnel setup on a desktop routes everything into a TUN interface handled by Xray (default route split as 0.0.0.0/1 + 128.0.0.0/1 into the TUN), and binds outbounds with `sockopt.interface` so that their own sockets do not enter the TUN again. If the bound interface goes away, the fallback sends the outbound's sockets into the TUN, Xray routes them to the same outbound, and the connection loops.\n\nWe hit this loop in practice on macOS. A separate OpenVPN client provided a corporate network through its own utun interface, and the corporate subnet was routed to a freedom outbound so that it would follow that VPN's route. At night the OpenVPN client lost its connection and its utun interface was removed. From then on, every connection to the corporate subnet (including DNS queries to the corporate DNS server) entered the TUN, came back to the same outbound and entered the TUN again. When we looked, there were about 8,000 looped connections, all 16,384 ephemeral ports were in use, and other processes on the host got `EADDRNOTAVAIL` (`Can't assign requested address`) on connect until the loop was broken by restarting Xray.\n\nIn that incident the outbound had no `sockopt.interface` at all, so the loop itself is a config problem. The obvious fix is to bind the outbound to the other VPN's interface (`\"interface\": \"utunN\"`), so that it can never fall into the TUN. That does not work because of this issue: once the interface disappears, the binding is skipped and the loop is back. The only visible sign is an Info-level log line, which is hidden at the usual `warning` level.\n\nExpected: if the interface named in `sockopt.interface` cannot be found, the dial fails (fail closed), as a bound socket does when its interface has no route. At the very least the error should be logged as a warning. A silent fallback to the routing table defeats the purpose of binding: it can send traffic into a tunnel (loop) or past it (leak).\n\n### Reproduction Method\n\nNo server and no TUN are needed. Run Xray with the config below (interface `utun99` does not exist) and send a request through the SOCKS inbound:\n\n```\ncurl --socks5-hostname 127.0.0.1:1080 http://example.com/\n```\n\nResult: HTTP 200. The log shows that the interface was not found and the connection was opened anyway; its local endpoint is the address of whatever interface the routing table chose (on our machine, the address of a TUN interface that held the default route).\n\nFor comparison, with `\"interface\": \"en0\"` the same request goes out through en0 (local endpoint is en0's address) and no error is logged.\n\nExpected result: the connection through the outbound bound "
-    },
-    {
-     "number": 6846,
-     "title": "XHTTP over HTTP/2: reducing per-stream memory",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-09-27T19:28:11Z",
-     "updated_at": "2026-10-18T06:57:34Z",
-     "user": "Medium1992",
-     "url": "https://github.com/XTLS/Xray-core/issues/6846",
-     "body": "XHTTP over HTTP/2 uses noticeably more memory than RAW on both ends. This shows up most on memory-limited clients (#5944, #6268).\n\nPrevious discussions:\n\n- #6268: the client allocates a per-stream upload scratch buffer of `min(peer SETTINGS_MAX_FRAME_SIZE, 512 KiB)` and holds it for the whole life of the stream, although a single body read in Xray never returns more than 8 KiB. With REALITY/TLS straight to an Xray server the peer advertises 1 MiB, so every idle stream on a reused xmux connection holds 512 KiB.\n- golang/go#79831: proposal to lower that cap to 32 KiB in Go. Open since June with no decision.\n- #6663: advertising 16 KiB from the Xray server. Not planned, because a CDN in front of the server advertises its own value.\n\nThere are two separate causes:\n\n1. **Idle streams.** The 512 KiB scratch buffer described above.\n2. **Slow readers.** Go's HTTP/2 flow-control windows are fixed: 1 MiB per stream on the server, 4 MiB on the client. When the reader is slower than the link (a video player with a full buffer, a relay whose next hop is slower, a slow upload target), the peer fills the whole window and the data sits unread in process memory. While the reader keeps up there is no difference. Kernel TCP avoids this with receive-buffer autotuning. Go's HTTP/2 has nothing like it: golang/go#63520 only proposes static window settings, and a small static window caps throughput on high-BDP paths.\n\n### Idle streams: options until Go changes\n\n- Patch `frameScratchBufferLen` (512 KiB → 32 KiB) in GOROOT and in vendored x/net in the release workflow. This is quick, but it only reaches official release binaries; mobile apps and distributions that build from source do not get it.\n- Cap the peer's `SETTINGS_MAX_FRAME_SIZE` at 16 KiB inside Xray before `net/http` reads it (part of the proposal below). This works for every build and behind any CDN.\n\n### Proposal\n\nA frame-level shim between the TLS/REALITY conn and `net/http` that manages HTTP/2 flow control on its own side of the connection. It needs no x/net fork, no toolchain patch and no config fields.\n\n- **Frame size:** the peer's `SETTINGS_MAX_FRAME_SIZE` is rewritten to 16 KiB in both directions. On the client this caps the scratch buffer at 16 KiB whatever the server or a CDN advertises, which addresses the concern in #6663. On the server it does the same for stock clients.\n- **Windows:** each stream starts at the protocol default of 64 KiB. The window grows to twice what the reader consumed per RTT (RTT measured by PING, the same idea as gRPC-Go's BDP estimator) and shrinks by a quarter at a time once the reader stays well below it. It is bounded on both sides: never above what stock Go would grant, and never below 64 KiB or twice the current consumption per RTT.\n- **Roles:** the server governs uploads and downloads; the client governs downloads only. It works with unmodified official Xray and mihomo peers. HTTP/1.1 and HTTP/3 are not touched. It can be disabled with `XRAY_XHTTP_FLOW=off`.\n\n### Measurements\n\nIdle upload streams: 40 streams on a reused connection, heap of both ends in one process.\n\n| server | client | heap per stream |\n|---|---|---|\n| stock | stock | ~555 KiB |\n| stock (same as behind a CDN) | shim | ~65 KiB |\n| shim | stock | ~67 KiB |\n\nSlow readers: 100 Mbit/s, 50 ms RTT, 30 sessions, REALITY.\n\n| scenario | stock | shim |\n|---|---|---|\n| client, app reads downloads slowly | 146 MB | 31–65 MB |\n| server, receiver of uploads is slow | 70 MB | 20 MB |\n| fast then slow stream, unread data per stream | 4.2 MB | 0.17 MB |\n| latency behind a bulk transfer | ~1.1 s | ~0.1 s |\n\nSteady-state throughput is unchanged. The cost is a slower ramp for new streams: 5-second transfers are 3% slower at 30 ms RTT, 13% at 80 ms and 30% at 150 ms.\n\nTested with REALITY and TLS × stream-one, stream-up and packet-up against official Xray and mihomo clients, plus model, fuzz and `-race` tests and soak runs, with no leaks, stalls or data corruption.\n\n\nWould you take the build-time patch as"
-    },
-    {
-     "number": 6797,
-     "title": "XHTTP: xmux.maxConnections is ineffective in Go 1.27 builds (v26.9.8+, main) — one TCP connection per session while TLS handshakes hang, leading to OOM",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-21T11:47:54Z",
-     "updated_at": "2026-10-18T06:52:17Z",
-     "user": "ivulit",
-     "url": "https://github.com/XTLS/Xray-core/issues/6797",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：v26.9.8 起使用 Go 1.27 构建，x/net http2.Transport 改为包装 net/http.Transport。当 TLS 握手被阻断而挂起时，每个会话都会新建一条 TCP 连接，XMUX 的 maxConnections 实际失效，连接数和内存随会话数线性增长。使用 `-tags http2legacy` 构建可恢复正常。与 #6644 不同，这里的额外连接与 MaxConcurrentStreams 无关。\n\nSince v26.9.8 Xray is built with Go 1.27 (`fd2ca748`, \"go.mod: Specify Go 1.27.x\"); the v26.9.9 release binary reports `go1.27.1`, and the release workflow builds without extra tags. With Go 1.27, `golang.org/x/net` (v0.58.0 in v26.9.9, v0.59.0 on main) compiles `http2/transport_wrap.go`:\n\n```go\n//go:build go1.27 && !http2legacy\n// Transport wrapping a net/http.Transport.\n```\n\nIn this mode `http2.Transport.RoundTrip` is delegated to an internal `net/http.Transport` instead of x/net's own `clientConnPool`. The old pool deduplicated in-flight dials per address (`p.dialing[addr]`), so an XMUX client whose handshake hangs held exactly one socket and all further requests waited on it. The new path does not: while no HTTP/2 connection to the host is established yet, every waiting request dials its own TCP connection.\n\nNormally this is invisible — the first handshake completes in one RTT and everything is multiplexed afterwards. But when handshakes hang (e.g. a middlebox blackholes the flow after the ClientHello — the TSPU scenario from #6376), **every proxied session gets its own TCP connection**. `xmux.maxConnections` still limits the number of XMUX clients (the debug log below shows two `XMUX: creating xmuxClient` lines and no removals), but not the dials underneath them.\n\nConsequences:\n\n- `maxConnections: 2`/`3`, introduced as the anti-TSPU default (`18e28390`, #6376), no longer keeps the client under the ~4-connection limit — it opens hundreds or thousands of connections and keeps re-triggering the ban;\n- memory grows linearly with hung sessions; in a memory-limited container the process is OOM-killed, taking every other (healthy) outbound down with it.\n\n**Affected:** v26.9.8, v26.9.9 and main (`d562d894`) — all Go 1.27 + x/net ≥ v0.58.0. v26.7.28 and earlier are built with Go 1.26 and use the legacy transport. Tested: XHTTP `stream-one` over TLS (h2). I did not test `packet-up`/`stream-up` or h3.\n\n**Field observation.** Linux client in an LXC container with a memory limit, VLESS + XHTTP `stream-one` + TLS, `maxConnections: 2` (effective config verified with `xray run -dump`, no `extra`). During a TSPU episode against one server (pcap on the router WAN):\n\n- up to **2348** simultaneously open client sockets to that server; bursts of 26 SYNs within 90 ms;\n- 1258 of 1261 new connections: SYN/SYN-ACK OK, the ClientHello is never ACKed, retransmitted for minutes;\n- the process was OOM-killed twice, 193 s apart (`Memory cgroup out of memory: Killed process ... (xray) ... anon-rss:218772kB`); the healthy HTTP/2 connections of the other outbounds were reset along with it.\n\nAnother outbound (different server) in the same process was unaffected — its handshakes complete, so the first HTTP/2 connection is established and everything multiplexes.\n\n**Related**\n\n- #6644 (closed, not merged) proposed bounding physical H2 connections for `maxConnections`. It was closed after the observation that a transport only opens extra connections when the peer's `MAX_CONCURRENT_STREAMS` is exceeded, which a server-side setting fixes. That analysis was done on v26.7.28 (Go 1.26) and is correct for the legacy pool. **The connections here are unrelated to stream "
-    },
-    {
-     "number": 7192,
-     "title": "Linux-only：UDP通配套接字进程识别失败，导致Xray TUN下Hysteria2/XHTTP(h3)测速失败，但实际上可用",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-18T01:23:28Z",
-     "updated_at": "2026-10-18T01:23:28Z",
-     "user": "Anthrop44",
-     "url": "https://github.com/XTLS/Xray-core/issues/7192",
-     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\nLinux v2rayN启用新版Xray TUN（关闭Legacy TUN Protect）后，Hysteria2和XHTTP(h3)的延迟测试返回-1，下载测速被跳过，但节点本身仍可能正常使用。最初在v2rayN中发现这个问题，但让AI研究代码后它说其实应该修Xray <https://github.com/2dust/v2rayN/issues/10384>\n\n```log\n[Error] app/router: Unables to find local process name: common/net: connection for <TUN_IP>:<PORT> not found in /proc/net/udp\nfrom udp:<TUN_IP>:<PORT> accepted udp:<REMOTE_IP>:443 [tun -> block]\n```\n\n<details><summary>下面是AI的分析，我自己搞不定</summary>\n<p>\n检查Xray-core 26.10.17源码后，发现以下调用链：\n\n1. `transport/internet/system_dialer.go`使用`ListenPacket`创建未连接的UDP套接字，默认绑定`0.0.0.0`或`::`\n2. Hysteria2和XHTTP的HTTP/3拨号均使用这条路径\n3. `common/net/find_process_linux.go`根据数据包的源IP和源端口，精确匹配`/proc/net/udp`中的本地地址\n4. 对于绑定`0.0.0.0:<PORT>`的套接字，实际发出的包具有具体源IP，但`/proc/net/udp`仍记录通配绑定地址，因此精确匹配失败\n\n在本次环境中，主TUN配置包含将Xray进程流量直连的保护规则。进程识别失败后，这部分流量未命中保护规则，随后命中了UDP/443阻断规则\n\n这里的UDP/443阻断是后续路由结果，疑似根因是此前的进程归属查询失败\n\n**独立复现**\n\n不启动v2rayN或TUN，也可以在Linux本机复现查询缺陷：\n\n1. 创建绑定`0.0.0.0:0`的未连接UDP套接字，取得分配的端口`port`\n2. 保持套接字打开，调用：\n\n```go\nFindProcess(\"udp\", \"127.0.0.1\", port, \"127.0.0.1\", 443)\n```\n\n预期识别出当前进程，实际返回在`/proc/net/udp`中找不到连接。显式绑定`127.0.0.1`的IPv4对照套接字可以成功识别\n\n这说明进程查询缺陷可以脱离v2rayN复现，而相关查询代码也是Linux平台专用实现\n\n**补充验证与边界**\n\n对同一个XHTTP(h3)节点进行对照测试：临时测速内核未绑定出口网卡时，延迟返回`-1`；显式绑定实际出口网卡后，延迟为125–185ms，限量下载也得到有效速度。这与测速内核流量进入TUN后未能获得进程保护的解释一致，但单凭绑定网卡的结果不能完全证明根因\n\n请确认Linux UDP进程查询对通配绑定套接字的处理是否正确，以及这一缺陷是否可以解释上述TUN测速现象\n</p>\n</details> \n\n<details><summary>English ver</summary>\n<p>\n\nAfter enabling the new Xray TUN in Linux v2rayN (with Legacy TUN Protect disabled), latency tests for Hysteria2 and XHTTP (h3) return -1, download speed tests are skipped, but the node itself may still work normally. This issue was initially found in v2rayN, but after having AI study the code, it said fixing it in Xray would be more correct <https://github.com/2dust/v2rayN/issues/10384>\n\n```log\n[Error] app/router: Unables to find local process name: common/net: connection for <TUN_IP>:<PORT> not found in /proc/net/udp\nfrom udp:<TUN_IP>:<PORT> accepted udp:<REMOTE_IP>:443 [tun -> block]\n```\n\n\nAfter checking the Xray-core 26.10.17 source code, I found the following call chain:\n\n1. `transport/internet/system_dialer.go` uses `ListenPacket` to create an unconnected UDP socket, which binds to `0.0.0.0` or `::` by default.\n2. Both Hysteria2 and XHTTP's HTTP/3 dialing use this path.\n3. `common/net/find_process_linux.go` exactly matches the local address in `/proc/net/udp` based on the packet's source IP and source port.\n4. For a socket bound to `0.0.0.0:<PORT>`, the actual outgoing packet has a concrete source IP, but `/proc/net/udp` still records the wildcard bind address, so the exact match fails.\n\nIn this environment, the main TUN configuration includes a protection rule that routes Xray process traffic directly. After process identification fails, this traffic does not hit the protection rule and subsequently hits the UDP/443 block rule.\n\nThe UDP/443 block here is a downstream routing result; the suspected root cause is the preceding process ownership lookup failure.\n\n**Independent reproduction**\n\nThe lookup defect can also be reproduced locally on Linux without starting v2rayN or TUN:\n\n1. Create an unconnected UDP socket bound to `0.0.0.0:0` and obtain the assigned port `port`.\n2. Keep the socket open and call:\n\n```go\nFindProcess(\"udp\", \"127.0.0.1\", port, \"127.0.0.1\", 443)\n```\n\nIt is expected to identify the current process, but it actually returns that no connection is found in `/proc/net/udp`. An IPv4 control socket explicitly bound to `127.0.0.1` can be identified successfully.\n\nThis shows that the process lookup defect can be reproduced independently of v2rayN, and the relevant lookup code is also a Linux-specific implementation.\n\n**Supplementary verification and boundaries**\n\nA control test was performed on the same XHTTP (h3) node: when "
     }
    ],
    "comments": [
+    {
+     "id": 6282476080,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-20T03:13:48Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6282476080",
+     "body": "如果没什么变动的话其实也可以合了"
+    },
     {
      "id": 6277256035,
      "issue": 7185,
@@ -1512,120 +1492,54 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6247949693",
      "body": "这样的话我觉得应该大刀阔斧的改\r\n\r\ngeoip 问题在于 maxmind 国际的不全，等同没用，应改用 ipinfo\r\nCN IR RU 要的其实都不是真正归属该国的 IP\r\n而是你处于该国应该把那些 IP 分流出去\r\nRU IR 甚至还有一些私网地址\r\n\r\n为防打包体积过大，我觉得可以小改一下 geodata 这样两个 dat 就不要再打包进去\r\n让能启动时直接下载，并且不再要求文件必须存在（当时怕不安全，现在能写文件头了似乎也没什么）\r\n\r\ngeoipcn 这块我的仓库可以给过来 https://github.com/Meo597/geoip\r\n在此基础上定制一下 IR RU\r\nIP这块就差不多了\r\n\r\ngeosite 我用不到，暂时没想法，因为用域名分流国内外就是个错误"
-    },
-    {
-     "id": 6247439263,
-     "issue": 7187,
-     "issue_title": "XDRIVE transport: Support XMUX (\"maxConnections\": 4 on Google Drive by default) and h3",
-     "created_at": "2026-10-18T08:05:05Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7187#issuecomment-6247439263",
-     "body": "另外你的下一个 PR 会是 https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6208051867 吗，保留 @Ahmad-2213 的 commits、author 等信息就行"
-    },
-    {
-     "id": 6247391805,
-     "issue": 7188,
-     "issue_title": "XDRIVE transport: Support two-step template operations (hrefPath)",
-     "created_at": "2026-10-18T07:59:31Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7188#issuecomment-6247391805",
-     "body": "未深度优化版 XDRIVE 的速度太差了，@genkauzen 你通过 Yandex Disk API 下载个大文件是什么速度？https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6128144242\r\n\r\n按我说的方案深度优化 XDRIVE 后它在俄罗斯、伊朗未尝不能取代 XHTTP，~~不打游戏的话~~"
-    },
-    {
-     "id": 6247264881,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-18T07:43:44Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6247264881",
-     "body": "设想是这个仓库同时提供 geosite.dat 和 geoip.dat，所以别直接 fork，仓库中 credit 给到位就行，LICENSE 就 GPL 吧\r\n\r\n这只是个开端，你们可以汇聚更多源，觉得数据有不合理的地方/更合适的改动也可以自己修改、接受外部 PR，~~再也不用换了~~"
-    },
-    {
-     "id": 6247203010,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-18T07:36:08Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6247203010",
-     "body": "能做的好像只有 fork https://github.com/Loyalsoldier/domain-list-custom 然后修一下他的CI"
-    },
-    {
-     "id": 6247177356,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-18T07:33:00Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6247177356",
-     "body": "换来换去的都不完美，当初 https://github.com/XTLS/Xray-rules-dat 没搞起来的原因是~~负责人没弄~~，刚刚我重新开放了这个仓库并把 Maintainers team 对其的权限改为了 admin，@KobeArthurScofield @Meo597 你们弄吧，先基于 Loyalsoldier 的数据\r\n\r\n@Fangliding 你试试通过 team 穿透的权限能不能把这个仓库加给群里 GitHub BOT，这个 PR 保持 open，你们弄好后换源即可"
-    },
-    {
-     "id": 6246944012,
-     "issue": 7160,
-     "issue_title": "sockopt.interface: when the interface does not exist, the dial silently goes unbound (can loop back into TUN)",
-     "created_at": "2026-10-18T07:05:41Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7160#issuecomment-6246944012",
-     "body": "@patterniha 你描述的矛盾类似于 Xray 进行 MITM 时我们所遇到的 ALPN 问题（得先连接目标才知道是否仅 h1）\n\n我的意思是有些程序可能看网卡有 IPv6 地址就 prefer 它了，不过这种情况的话直接让 TUN reject IPv6 也不好，会影响真正走代理的流量\n\n> proxy/tun: [tun] falied to set interface > multierr: An invalid argument was supplied.\n\n~~以上报错我本来以为是 IPv6 UDP 专属，看了下 IPv4 UDP 似乎也出现了~~"
-    },
-    {
-     "id": 6246771822,
-     "issue": 6797,
-     "issue_title": "XHTTP: xmux.maxConnections is ineffective in Go 1.27 builds (v26.9.8+, main) — one TCP connection per session while TLS handshakes hang, leading to OOM",
-     "created_at": "2026-10-18T06:52:17Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/6797#issuecomment-6246771822",
-     "body": "> The fix went into x/net\n\n~~如果没通过这个外部库、直接 net/http 呢~~"
-    },
-    {
-     "id": 6246731405,
-     "issue": 7179,
-     "issue_title": "TUN inbound: Read large TCP segments straight into Xray-core's buffers on Linux",
-     "created_at": "2026-10-18T06:47:48Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7179#issuecomment-6246731405",
-     "body": "@4RH1T3CT0R7 我的意思是能不能比如说先用一两块 buf 接收 TCP/IP header，然后直接用 Xray buf 接收 TCP payload"
-    },
-    {
-     "id": 6246528551,
-     "issue": 7187,
-     "issue_title": "XDRIVE transport: Support XMUX (\"maxConnections\": 4 on Google Drive by default) and h3",
-     "created_at": "2026-10-18T06:23:56Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7187#issuecomment-6246528551",
-     "body": "UA 目前是什么情况"
-    },
-    {
-     "id": 6244942284,
-     "issue": 6797,
-     "issue_title": "XHTTP: xmux.maxConnections is ineffective in Go 1.27 builds (v26.9.8+, main) — one TCP connection per session while TLS handshakes hang, leading to OOM",
-     "created_at": "2026-10-18T02:56:15Z",
-     "user": "ivulit",
-     "url": "https://github.com/XTLS/Xray-core/issues/6797#issuecomment-6244942284",
-     "body": "> v26.10.17 已修复，不需要 `-tags http2legacy`。修复在 x/net 而不是 Go：golang/net@01e3d033 恢复了拨号合并，随 v0.60.0 发布；#7133 和 #7147 把依赖升到了 v0.61.0。\n\nFixed in v26.10.17.\n\nThe fix went into x/net rather than Go: golang/net@01e3d033 — *\"The wrapping implementation inadvertently removed dial coalescing. Add it back.\"* — released in x/net v0.60.0. #7133 and #7147 moved the dependency to v0.61.0, so no build tag is needed. The two net/http CLs were abandoned, so nothing has to change in a Go release. golang/go#81646 is closed as completed.\n\nOfficial `Xray-linux-64` builds, 500 concurrent sessions against a server that completes the TCP handshake and never answers the ClientHello, peak TCP connections to it:\n\n| build | `maxConnections: 1` | `2` | `3` |\n|---|---|---|---|\n| v26.10.10 (x/net v0.59.0) | 500 | 500 | 500 |\n| v26.10.17 (x/net v0.61.0) | **1** | **2** | **3** |\n\n`packet-up` on v26.10.17 behaves the same (`maxConnections: 3` → 3 connections), and RSS drops from ~93 MB to ~55 MB at that load.\n"
-    },
-    {
-     "id": 6235794781,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-17T15:30:15Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6235794781",
-     "body": "我记得我当初也反对换这个 不过出发点是比较大"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
     {
+     "number": 3305,
+     "title": "ErrorCode: 1100. Error when retrieving configuration from API",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-20T08:25:47Z",
+     "updated_at": "2026-10-20T08:29:44Z",
+     "user": "vault-thirteen",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3305",
+     "body": "**Describe the bug**\nI can not connect to Amnazia Free.\n\nWhen I try to reload the configuration as stated in the documentation ( https://docs.amnezia.org/troubleshooting/amneziafree-key-not-working/ )\n\n`Gear icon` -> `Servers` -> `Anmezia Free` -> `Reload API config`,\n\nthe client shows an error (1100):\n\n`ErrorCode: 1100. Error when retrieving configuration from API`.\n\nOther apps are not interfering with the client, I checked the list ( https://docs.amnezia.org/troubleshooting/conflicting-apps/ ).\n\nI can not write a message into Telegram while it is blocked.\n\n**To Reproduce**\nSteps to reproduce the behaviour:\n1. `Gear icon` -> `Servers` -> `Anmezia Free` -> `Reload API config`.\n2. The client shows an error (1100): `ErrorCode: 1100. Error when retrieving configuration from API`.\n\n**Expected behaviour**\nA working functionality to reload the configuration.\n\n**Log files**\nFile is attached.\n[AmneziaVPN.log](https://github.com/user-attachments/files/33707361/AmneziaVPN.log)\n\n**Desktop:**\n - OS: Windows 10\n - Version 5.0.3.0.\n"
+    },
+    {
      "number": 3304,
      "title": "Android: auto-reconnect when the AmneziaWG tunnel stalls after idle (connection watchdog)",
      "is_pr": false,
      "state": "open",
      "created_at": "2026-10-19T19:55:05Z",
-     "updated_at": "2026-10-19T19:55:05Z",
+     "updated_at": "2026-10-20T04:19:30Z",
      "user": "Dragonsdeath",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3304",
      "body": "AmneziaVPN 5.0.3.1 (AWG 3.1), Android 16, OnePlus 15.\nSelf-hosted AmneziaWG, mobile network (Russia), battery set\nto \"Unrestricted\" for AmneziaVPN.\n\nProblem\nAfter the phone has been idle with the screen off, the tunnel\nsometimes stalls: nothing works (Telegram, browser) until I\nmanually disconnect and reconnect in AmneziaVPN. It happens\nseveral times a day. A manual reconnect always fixes it\nimmediately.\n\nWhat we see on the server side\nWe captured traffic on our server during these episodes. While\nthe tunnel is stalled, no packets from the phone reach the server\nat all — no handshake initiation, nothing, for 4–44 minutes.\nOther devices on the same server work normally at the same time.\nTypical sequence: the phone wakes up, sends a few data packets\nwith the old session from a new NAT port (the mobile operator\nchanged it during sleep), the server drops them (keys older than\n180 s), and then the phone never sends a new handshake. A manual\nreconnect opens a new socket, the handshake completes in ~0.1 s,\nand traffic flows right away.\n\nFeature request: connection watchdog\nAn option to detect a stalled tunnel and restart it automatically,\nfor example:\n- if the latest handshake is older than ~140 s\n  (REKEY_AFTER_TIME + KEEPALIVE_TIMEOUT + REKEY_TIMEOUT, as in\n  wireguard-tools reresolve-dns) while the app has traffic to send,\n  or\n- if a periodic check through the tunnel (ping/HTTP) fails\n  N times in a row,\nthen recreate the socket and re-handshake — the same as a manual\nreconnect. Configurable interval and on/off switch.\n\nSimilar features exist in other clients: WG Tunnel (\"Restart\ntunnel on ping failure\"), mihomo-based clients (fallback groups\nwith health checks).\n\nServer-side keepalive does not help here: we tried\nPersistentKeepalive 25 on the server for this peer — the server\ncannot reach the phone after the operator's NAT mapping changes,\nonly the phone can recover by sending first.\n\nThank you for AmneziaVPN!"
+    },
+    {
+     "number": 3303,
+     "title": "fix: build libagw with go 1.27.1",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-19T14:09:38Z",
+     "updated_at": "2026-10-20T02:22:36Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3303",
+     "body": "bump libawg go dependency"
+    },
+    {
+     "number": 3301,
+     "title": "fix: add new dep to test",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-19T07:18:56Z",
+     "updated_at": "2026-10-20T02:22:12Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3301",
+     "body": "fixing dependencies for test\n"
     },
     {
      "number": 2143,
@@ -1637,17 +1551,6 @@
      "user": "NickVs2015",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2143",
      "body": ""
-    },
-    {
-     "number": 3303,
-     "title": "fix: build libagw with go 1.27.1",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-19T14:09:38Z",
-     "updated_at": "2026-10-19T14:09:38Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3303",
-     "body": "bump libawg go dependency"
     },
     {
      "number": 3126,
@@ -1670,17 +1573,6 @@
      "user": "foxidermist",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3302",
      "body": "Здравствуйте!\n\n‎При установке AmneziaWG 3.1 через AmneziaVPN на VPS с Ubuntu Server 24.04.5 LTS обнаружил, что установщик изменяет большое количество глобальных параметров Linux.\n‎\n‎Конфигурация сервера:\n‎\n· ‎Ubuntu Server 24.04.5 LTS, ядро 6.8.0-147-generic.\n· ‎KVM, 4 vCPU, 4 ГБ RAM.\n· ‎Docker Engine 29.9.1.\n· ‎AmneziaWG tools 3.1.20260812.\n· ‎Self-hosted AmneziaWG в Docker-контейнере.\n‎\n‎Изменения выполняются сценарием \"client/server_scripts/setup_host_firewall.sh\" версии 5.0.3.0.\n‎\n‎Из 21 проверенного параметра sysctl после установки изменились 17.\n‎\n‎Наиболее заметные изменения:\n‎\n‎Параметр| До установки| После установки\n‎\"fs.file-max\"| 9223372036854775807| 51200\n‎\"net.ipv4.tcp_congestion_control\"| cubic| hybla\n‎\"net.netfilter.nf_conntrack_max\"| 65536| 262144\n‎\"net.core.rmem_max\"| 212992| 67108864\n‎\"net.core.wmem_max\"| 212992| 67108864\n‎\"net.ipv4.tcp_max_tw_buckets\"| 16384| 5000\n‎\"net.ipv4.ip_local_port_range\"| 32768–60999| 10000–65000\n‎\n‎В исходном коде также присутствует попытка установить \"net.ipv4.tcp_tw_recycle\", хотя этот параметр отсутствует в современных ядрах Linux.\n‎\n‎Заметил, что комментарий в скрипте объясняет увеличение \"nf_conntrack_max\" требованиями Telegram-прокси (MTProxy/TeleMT/TProxy).\n‎\n‎Хотелось бы уточнить:\n‎\n1. ‎Какие из этих изменений действительно необходимы для работы исключительно AmneziaWG 3.1?\n2. ‎Почему установщик снижает \"fs.file-max\" до 51200, если исходное значение значительно выше? Есть ли техническая причина не сохранять более высокий лимит?\n3. ‎Почему для всех TCP-соединений VPS принудительно выбирается \"hybla\" вместо штатного \"cubic\"? Есть ли измерения, показывающие преимущество такой настройки именно для AmneziaWG?\n4. ‎Могут ли изменения TCP-буферов, лимитов соединений и сетевых очередей отрицательно влиять на другие приложения или потребление памяти VPS с 4 ГБ RAM?\n5. ‎Безопасно ли вернуть исходные значения \"fs.file-max\" и \"tcp_congestion_control\", оставив контейнер AmneziaWG работающим?\n6. ‎Возможно ли сделать этот тюнинг необязательным либо применять только параметры, необходимые выбранному протоколу?\n7. ‎Будут ли эти настройки применяться повторно при обновлении или пересоздании AmneziaWG?\n‎\n‎Ожидаемое поведение: установка отдельного VPN-протокола не должна без необходимости менять глобальные параметры работающего сервера либо должна предупреждать администратора о таких изменениях.\n‎\n‎Буду признателен за техническое объяснение и рекомендации для VPS, на котором AmneziaWG работает одновременно с другими Docker-сервисами."
-    },
-    {
-     "number": 3301,
-     "title": "fix: add new dep to test",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-19T07:18:56Z",
-     "updated_at": "2026-10-19T07:18:56Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3301",
-     "body": "fixing dependencies for test\n"
     },
     {
      "number": 3279,
@@ -1791,20 +1683,18 @@
      "user": "R4L34",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2457",
      "body": "**Summary**\nIt was mentioned in the previous commit but the person responsible for fixing it did it only for XRay so I feel obligated to mention it again. You can get the ip of the VPN server by explicitly going through the tun0 interface. Like this (in Termux).  `curl -s https://ifconfig.me/ip --interface tun0`\nThat will allow any spyware (which now includes every russian big-tech app) to not only get the fact that you use a VPN but also get the ip address of the server. Then they can log it, and later block it.\n\n\n**Environment**\n\n- App version: 4.8.14.5\n- Android version: 14\n- Device: Samsung Galaxy A33 5G\n- Protocol used: AmneziaWG 2.0\n- Split tunneling: Enabled (Termux excluded from VPN)\n\n**To Reproduce**\nSteps to reproduce the behavior:\n 1. Install AmneziaVPN and configure a working connection.\n 2. Enable Per-app VPN (split tunneling) and exclude Termux (or any test app with INTERNET permission).\n 3. Connect to the VPN.\n 4. In Termux, run:\n```\n#Send traffic through the tun0 interface\ncurl -s https://ifconfig.me/ip --interface tun0\n# Observed: VPN exit IP`\n\n```\n**Expected behavior**\nApplications excluded from VPN routing should not be able to send traffic through the VPN tunnel via a localhost proxy, unless this behavior is explicitly documented and user-controlled. If a local listener is required for internal purposes, access should be restricted to the app's own components.\n\n**Security Impact**\nIf the proxy accepts unauthenticated connections and forwards traffic through the VPN tunnel:\n\n-  User-configured per-app routing policies can be bypassed by any app with INTERNET permission.\n\n-  Traffic that the user explicitly intended to route directly may leak through the VPN (or vice versa).\n\n-  The presence of an open, unauthenticated localhost proxy may serve as a detectable signal of VPN usage to monitoring applications.\n\n**Operational relevance**\nIn environments where applications or platforms monitor network behavior for signs of VPN usage, this issue may increase the detectability of VPN use. Because an app excluded from VPN routing can still access the VPN tunnel via localhost, it can both infer that the VPN is active and send probe traffic through the tunnel. This may also aid enumeration of VPN egress IPs and contribute to blocking of VPN endpoints. This consideration is particularly relevant given recent reports of app-level VPN detection guidelines being distributed to IT platforms [1][2].\n\n**Suggested Mitigations**\nThe same that solved SOCKS5 leak (will be solved if someone merges [this](https://github.com/amnezia-vpn/amnezia-client/pull/2453) pull request).\n\n-  Require authentication (username/password) for the tun0 interface, if the feature is intended for external use.\n-  If there is any alternative way to get the VPN ip address without being in the split-tunneling whitelist - fix it.\n\nI repeat that this vulnerability while not as critical poses a significant threat to the VPN's hosted on private servers which were mostly immune to the direct ip blocking from Russian censors.\n"
-    },
-    {
-     "number": 3297,
-     "title": "[Bug] AmneziaWG 2 Docker container has IPv4 forwarding disabled after automatic installation in Proxmox LXC",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-18T04:12:40Z",
-     "updated_at": "2026-10-18T05:05:41Z",
-     "user": "samwathegreat",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3297",
-     "body": "**Title: [Bug] AmneziaWG 2 Docker container has IPv4 forwarding disabled after automatic installation in Proxmox LXC**\n\n### Environment\n\n- Host: Proxmox VE\n- Guest: Debian 13, unprivileged LXC with nesting enabled\n- VPN: AmneziaWG 2, installed automatically using the official Amnezia Android app\n- Docker: 26.1.5+dfsg1 (installed by Amnezia)\n- Also reproduced with preinstalled Docker 29.8.0\n- `/dev/net/tun` passed through from Proxmox into LXC\n- Container: `amnezia-awg2`\n\n### Problem\n\nThe official Android app successfully installs AmneziaWG 2. The client establishes a VPN connection and completes the handshake, but neither internet nor LAN traffic works.\n\nThe VPN interface, UDP listener, NAT rules, and firewall rules are present.\n\nThe underlying problem is that IPv4 forwarding is disabled **inside the AmneziaWG Docker container**, despite being enabled in the parent LXC.\n\n### Steps to reproduce\n\n1. Create a fresh Debian 13 unprivileged Proxmox LXC with Docker nesting and TUN passthrough.\n2. Install AmneziaWG 2 using the official Android app, allowing it to install Docker.\n3. Connect from Android.\n4. Observe a successful handshake but no internet or LAN connectivity.\n5. Run:\n\n   `docker exec amnezia-awg2 sysctl net.ipv4.ip_forward`\n\n   Result: `net.ipv4.ip_forward = 0`\n\n6. Enable forwarding:\n\n   `docker exec amnezia-awg2 sysctl -w net.ipv4.ip_forward=1`\n\n7. Internet and LAN connectivity immediately work, without restarting the VPN.\n\n### Investigation\n\n- Parent LXC: `net.ipv4.ip_forward = 1`\n- Amnezia Docker container: `net.ipv4.ip_forward = 0`\n- Container NAT and FORWARD rules are configured correctly.\n- The generated `/opt/amnezia/start.sh` configures the tunnel, iptables and MASQUERADE rules but does not enable IPv4 forwarding.\n- Docker inspect shows only `net.ipv4.conf.all.src_valid_mark=1` under `HostConfig.Sysctls`.\n- A fresh Docker container also defaults to forwarding disabled.\n- Reproduced with two Docker versions and a completely fresh LXC installation.\n- A separate installation in a full Debian VM works without manual intervention.\n\n### Expected behavior\n\nThe official installer should explicitly enable IPv4 forwarding inside the VPN container, regardless of the default networking behavior of Docker or the host environment.\n\n### Suggested fix\n\nInclude `net.ipv4.ip_forward=1` in the Docker container's sysctl configuration alongside `net.ipv4.conf.all.src_valid_mark=1`.\n\nAlternatively, ensure forwarding is enabled during the VPN container's initialization.\n\nThis should allow the Android app to manage installation, restarts, and updates without manual intervention.\n\n### Impact\n\nThe installer reports success, and the VPN handshake succeeds, but all routed traffic fails. This is difficult to diagnose because the Docker container appears healthy and the client appears connected."
     }
    ],
    "comments": [
+    {
+     "id": 6283287757,
+     "issue": 3304,
+     "issue_title": "Android: auto-reconnect when the AmneziaWG tunnel stalls after idle (connection watchdog)",
+     "created_at": "2026-10-20T04:19:30Z",
+     "user": "papa-gadim",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3304#issuecomment-6283287757",
+     "body": "My connection also doesn’t reconnect after a period of inactivity, even though it’s active in the app. And sometimes it breaks completely.\nPoco x8 pro android 16\n"
+    },
     {
      "id": 6259737089,
      "issue": 3279,
@@ -1869,15 +1759,6 @@
      "body": "Update: a new test build, [v5.0.3.1-strict.8](https://github.com/amnezia-tun0-fix/amnezia-client/releases/tag/v5.0.3.1-strict.8).\n\n**If you run strict.7, please install this one by hand.** strict.7 cannot tell you about it: it has no update check. strict.8 installs over strict.7 and keeps your servers and settings (same package, same signing key). From strict.8 on, the build checks this fork's releases on GitHub once a day, not the Amnezia servers, and shows a newer one in the VPN notification and on the home screen; Settings → Application → \"Check for updates automatically\" turns it off.\n\n**What it fixes.** A reader on Habr found that the filter was not installed when the split-tunneling app list was empty. A VPN with no list covers the apps of one Android user, while `tun0` is reachable from all of them, so with the VPN in a work profile an app in the personal profile could bind to `tun0` and learn the server's address. The filter now runs without a list too and drops connections from other profiles and users. Measured with the VPN in a Shelter work profile: 0 of 6 attempts reached the server with the switch on, 6 of 6 with it off; apps inside the profile were unaffected. The same fix is in amnezia-vpn/amnezia-client#3199.\n\nAlso in this build:\n- the switch is now called \"Block disallowed apps from the tunnel\", since it no longer needs split tunneling;\n- a cached verdict ages from its lookup, not from when the tunnel reader collected it (from the review of amnezia-vpn/amneziawg-go#199);\n- the About page names where to report a bug in this build: the [fork's issues](https://github.com/amnezia-tun0-fix/amnezia-client/issues), now open, or here;\n- the app reports its version as 5.0.3.1-strict.8; strict.1–7 all said 5.0.2.2 because of a stale build setting.\n\nOne limit widens with the fix: Private DNS by hostname does not work with the VPN in a work profile or another user, as in \"only the apps from the list\" mode. Automatic or Off works.\n\nSHA-256 of the APK: `0208b216d88089b1a90485a4dc4cdf31d3ea19dfec55b01656da87982e9745bf`. Leak probes from an app outside the VPN: 0 of 6 with the switch on, on this very file.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
     },
     {
-     "id": 6245931056,
-     "issue": 3297,
-     "issue_title": "[Bug] AmneziaWG 2 Docker container has IPv4 forwarding disabled after automatic installation in Proxmox LXC",
-     "created_at": "2026-10-18T05:05:41Z",
-     "user": "samwathegreat",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3297#issuecomment-6245931056",
-     "body": "## Additional Findings — Root Cause, Verified Workaround, and Recommended Fix\n\nFurther investigation identified why AmneziaWG 2 fails to route traffic when installed through the official Android app inside an unprivileged Proxmox LXC.\n\n### Root Cause\n\n1. The AmneziaWG 2 Dockerfile configures numerous networking parameters in `/etc/sysctl.conf`, but does not include `net.ipv4.ip_forward=1`.\n\n2. The Dockerfile initially creates a placeholder `/opt/amnezia/start.sh`, which the official Android app subsequently replaces with a generated startup script.\n\n3. The generated startup script successfully initializes the `awg0` interface and configures iptables FORWARD and MASQUERADE rules, but never enables IPv4 forwarding.\n\n4. Docker creates the container with only the following explicit sysctl setting:\n\n   `net.ipv4.conf.all.src_valid_mark=1`\n\n5. IPv4 forwarding is enabled in the parent LXC (`net.ipv4.ip_forward=1`), but disabled inside the AmneziaWG Docker container (`net.ipv4.ip_forward=0`).\n\n6. The problem was reproduced on two installations:\n   - Existing unprivileged Proxmox LXC with Docker 29.8.0.\n   - Completely fresh Debian 13 unprivileged Proxmox LXC, allowing Amnezia to install Docker 26.1.5 itself.\n\nA separate installation in a full Debian VM works without modification.\n\n### Verified Workaround\n\nAdding the following line immediately after `#!/bin/bash` in `/opt/amnezia/start.sh` resolves the routing failure:\n\n```bash\nsysctl -w net.ipv4.ip_forward=1\n```\n\nThis can be applied from the LXC using a single command:\n\n```bash\ndocker exec amnezia-awg2 sh -c 'grep -q \"^sysctl -w net.ipv4.ip_forward=1$\" /opt/amnezia/start.sh || sed -i \"2i sysctl -w net.ipv4.ip_forward=1\" /opt/amnezia/start.sh'\n```\n\nAfter enabling forwarding, both internet and LAN connectivity work immediately through the VPN.\n\n**Reboot test: PASSED.**\n\nThe modified startup script survives a normal LXC reboot and automatically enables forwarding when the AmneziaWG container starts.\n\nNo Docker image rebuild, Docker downgrade, or additional networking changes were required.\n\n### Recommended Upstream Fix\n\nThe preferred solution is to explicitly configure IPv4 forwarding when Amnezia creates the Docker container, alongside the existing `src_valid_mark` setting:\n\n```yaml\nsysctls:\n  net.ipv4.conf.all.src_valid_mark: \"1\"\n  net.ipv4.ip_forward: \"1\"\n```\n\nAlternatively, the Amnezia app could include the following command in its generated startup script:\n\n```bash\nsysctl -w net.ipv4.ip_forward=1\n```\n\nThe startup-script approach has been verified to work, including after reboot.\n\nEither solution would eliminate reliance on Docker's default forwarding behavior and allow the official Amnezia app to manage the VPN without requiring manual intervention.\n\n### Important Clarification: TUN Passthrough\n\nThis issue is **not** a request to eliminate `/dev/net/tun` passthrough.\n\nThe userspace `amneziawg-go` implementation requires access to TUN, and that requirement is expected.\n\nIn this Proxmox environment, TUN was explicitly passed through to the unprivileged LXC before the fresh installation.\n\nThe reported bug is specifically that **IPv4 forwarding remains disabled inside the AmneziaWG Docker container despite successful VPN initialization and handshake**.\n\n### Remaining Limitation\n\nAlthough the workaround survives a normal LXC reboot, it has **not yet been verified against an Amnezia app-managed update, reconfiguration, or Docker container recreation**.\n\nBecause the Android app generates and manages `/opt/amnezia/start.sh`, future management operations could overwrite the modification.\n\nFor this reason, explicitly setting `net.ipv4.ip_forward=1` during Docker container creation is preferable to relying on a manual modification of the generated startup script.\n\n### Expected Outcome\n\nAmneziaWG 2 should initialize its Docker container with IPv4 forwarding enabled whenever the container is intended to route VPN client traffic, regardless of whether it is running inside a full VM or a compatibl"
-    },
-    {
      "id": 5782560525,
      "issue": 2457,
      "issue_title": "[Android] [Critical] Per-app split tunneling bypass for AmneziaWG 2.0 allows blacklisted apps to see the ip address of the VPN.",
@@ -1896,7 +1777,7 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-17T00:56:29Z",
-     "updated_at": "2026-10-19T15:48:11Z",
+     "updated_at": "2026-10-20T08:01:42Z",
      "user": "wizd",
      "url": "https://github.com/HyNetworks/hysteria/pull/1706",
      "body": "## Summary\r\n\r\nAdds an optional `l3tun` mode that copies whole IP packets between a local TUN device and QUIC datagrams. It does not terminate TCP or UDP. The intended use is to run VXLAN (or any other IP protocol) between the two TUNs, so the overlay keeps a normal 1500-byte inner MTU instead of squeezing VXLAN through `udpForwarding` and a reduced MTU.\r\n\r\nBoth ends opt in. The client sends `Hysteria-L3: true` on the existing auth request only when `l3tun` is configured, and the server grants it only when it has `l3tun` as well. The header is also sent as `false` otherwise; an older peer ignores the unknown header. L3 datagrams use session id 0 and a zero address-length byte, which `ParseUDPMessage` already rejects, so an older peer drops them.\r\n\r\n## How packets are carried\r\n\r\nOne IP packet is sent as one QUIC datagram. If that datagram is larger than the peer's current payload limit (`quic.DatagramTooLargeError`), it is split into evenly sized fragments.\r\n\r\nThe datagram prefix is 11 bytes:\r\n\r\n```\r\nSessionID u32 = 0 | PacketID low 16 | FragID u8 | FragCount u8 | 0x00 | PacketID high 16 | IP packet\r\n```\r\n\r\nFragments of different packets may interleave and are reassembled by the 32-bit packet id. A missing fragment drops the whole packet. There is no fragment retransmission; an inner TCP retransmits. Reassembly gives up after 200 ms. The largest IP packet is 1600 bytes. A 1600-byte packet under the usual 1200-byte datagram frame is two fragments of about 800 bytes.\r\n\r\nThe server keeps one L3 peer: the latest authenticated client that requested L3 replaces the previous one. Packets read from the local TUN while no peer is connected are discarded. Before a received packet is written into the local TUN, its source address must equal the configured `peer`.\r\n\r\nThe client L3 device stays up across QUIC reconnects. Traffic is counted with the existing `TrafficLogger`, in the same direction as UDP proxying.\r\n\r\n`l3tun` is supported on Linux, Darwin, Windows, and Android (sing-tun). Creating the device needs root or `CAP_NET_ADMIN`. Hysteria creates and addresses `hytun0` only. The operator adds the VXLAN interface after the TUN exists. VXLAN's UDP port stays inside the tunnel, so it does not need a public firewall opening.\r\n\r\n## Configuration\r\n\r\nClient:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.2/30\r\n  peer: 10.200.0.1\r\n```\r\n\r\nServer:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.1/30\r\n  peer: 10.200.0.2\r\n```\r\n\r\n`mtu` defaults to 1600 and cannot be higher. `address` is a prefix; `peer` must be the same IP version. A `/30` gives a connected route, so this tunnel does not need IP forwarding and does not capture the path back to the server's public address.\r\n\r\nOperator notes, including the VXLAN commands, are in `VXLAN.md` (currently written in Chinese). For an inner MTU of 1500 the outer packet is about 1550 bytes (Ethernet 14 + VXLAN 8 + UDP 8 + IPv4 20), which fits in the 1600-byte TUN without kernel fragmentation:\r\n\r\n```bash\r\nping -M do -s 1472 -c 3 10.201.0.1\r\n```\r\n\r\n## Test results\r\n\r\nMeasured on this branch, Linux amd64 at both ends. `hytun0` MTU 1600. VXLAN between the two TUN addresses. Path: a residential PPPoE link (uplink about 40 Mbps) to a Tokyo VPS, then to a second Tokyo host running iperf3 3.16. The iperf3 client is 3.9. Brutal limits on the client were 90 Mbps up and 200 Mbps down, with loss compensation disabled. The QUIC max datagram frame size is 1200 bytes.\r\n\r\nSame-region control, VPS to the iperf3 host, 8 seconds: 4374 Mbps up, 4441 Mbps down. The iperf3 server is not the bottleneck.\r\n\r\nTunnel RTT to that host, 10/10: min / avg / max 60.4 / 66.3 / 97.9 ms.\r\n\r\nEach VXLAN MTU below is one 10-second single TCP stream in each direction. Numbers are receiver goodput. Retransmissions are the sender's 10-second total. \"Outer IP\" is `vx MTU + 50`. A packet becomes two QUIC datagrams once the outer IP plus the 11-byte L3 header no longer fits in the 1200-byte frame; 1140 (outer"

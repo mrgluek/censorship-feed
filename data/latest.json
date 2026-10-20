@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-19T20:35:07Z",
- "since": "2026-10-17T20:35:07Z",
+ "generated_at": "2026-10-20T00:19:45Z",
+ "since": "2026-10-18T00:19:45Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -316,7 +316,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-10-18T19:28:47Z",
-     "updated_at": "2026-10-19T20:09:23Z",
+     "updated_at": "2026-10-19T23:14:26Z",
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2601",
      "body": "The host with running i2pd is responding to most (or many) SYN TCP packets by sending a large number of RST TCP packets. CPU usage is less than 200% on a dual-core processor, and there is some free memory and swap and file descriptors (`ss -s` is about 6000, LimitNOFILE=20000 in i2pd.service). Enabled NTCP2 and SSU2 IPv4 only.\nPossible DDoS attack?\nHow to discover:\n`# tshark -n -f \"(tcp[tcpflags] == tcp-syn and dst host $IP and dst port $PORT)  or  (tcp[tcpflags] & tcp-rst != 0 and src host $IP and src port $PORT)\"  -i $IFACE -a duration:$DUR`\nSubstitute your own IP, PORT, IFACE, DUR in seconds.\n\nVDS with real IP, Debian 12 64 bit\ni2pd version 2.61.0-813-g7f04a350 (0.9.70)\nNetwork status: OK, Router Caps:XfR, NTCP2 transports 5000\nTransit 30-35 Mbit/s\n"
@@ -345,6 +345,42 @@
     }
    ],
    "comments": [
+    {
+     "id": 6279429076,
+     "issue": 2601,
+     "issue_title": "Suspected network connection issues.",
+     "created_at": "2026-10-19T23:14:26Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6279429076",
+     "body": "Не проще убрать вызвовы с TCP_QUICKACK в коде и проверить изменится ли что нибудь?"
+    },
+    {
+     "id": 6279261923,
+     "issue": 2601,
+     "issue_title": "Suspected network connection issues.",
+     "created_at": "2026-10-19T23:03:07Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6279261923",
+     "body": "ИИ что-то подсказывает, может невпопад:\nCrucial Implementation Details\n    Do NOT call shutdown(): If you invoke socket.shutdown(boost::asio::ip::tcp::socket::shutdown_both) before calling close(), the operating system will begin a normal, graceful closure by sending a FIN packet first, rendering your linger(true, 0) setting useless. Call close() directly.\n    Alternative \"Accidental\" Resets: A TCP stack will also automatically generate a RST if you simply let the boost::asio::ip::tcp::socket instance go out of scope (destructing it) while there is still unread data remaining in the socket's hardware receive buffer. However, explicitly utilizing SO_LINGER is the only deterministic way to force a reset programmatically.\n\n"
+    },
+    {
+     "id": 6278565116,
+     "issue": 2601,
+     "issue_title": "Suspected network connection issues.",
+     "created_at": "2026-10-19T22:15:36Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6278565116",
+     "body": "Может это из-за TCP_QUICKACK?"
+    },
+    {
+     "id": 6276788646,
+     "issue": 2601,
+     "issue_title": "Suspected network connection issues.",
+     "created_at": "2026-10-19T20:37:39Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6276788646",
+     "body": "`# tshark -n -f \"(tcp[tcpflags]&tcp-syn == tcp-syn or tcp[tcpflags]&tcp-rst == tcp-rst or tcp[tcpflags]==tcp-ack)   and host _MY_IP_  and port _MY_PORT_\"  -i ens3 -a duration:100 > somefile`\nВидно следующее:\nСнаружи пришел TCP SYN, произошло трехэтапное рукопожатие.\nЗатем нечто \n```\n14327 3.946747987 _MY_IP_ -> 186.205.17.91 TCP 66 [TCP ACKed unseen segment] _MY_PORT_ -> 7004 [ACK] Seq=1 Ack=151 Win=65024 Len=0 TSval=2720235628 TSecr=4581580\n15279 4.189632923 186.205.17.91 -> _MY_IP_ TCP 66 [TCP ACKed unseen segment] [TCP Previous segment not captured] 7004 -> _MY_PORT_ [ACK] Seq=151 Ack=177 Win=88704 Len=0 TSval=4581651 TSecr=2720235629\nTCP RST исходящий\nTCP RST исходящий\n16061 4.436899567 186.205.17.91 -> _MY_IP_ TCP 66 [TCP ACKed unseen segment] [TCP Previous segment not captured] 7004 -> _MY_PORT_ [ACK] Seq=1141 Ack=212 Win=88704 Len=0 TSval=4581727 TSecr=2720235880\nTCP RST исходящий\n```\nTCP ACKed unseen segment - вероятно проблемы Tshark-а\n\n"
+    },
     {
      "id": 6275816240,
      "issue": 2601,
@@ -480,6 +516,28 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7185,
+     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-17T06:19:36Z",
+     "updated_at": "2026-10-19T21:27:13Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185",
+     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
+    },
+    {
+     "number": 7205,
+     "title": "SOCKS and HTTP inbounds: support dynamic user management",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-19T20:38:16Z",
+     "updated_at": "2026-10-19T20:47:44Z",
+     "user": "FearKamikadze",
+     "url": "https://github.com/XTLS/Xray-core/pull/7205",
+     "body": "## Problem\n\nThe `socks` and `http` inbounds keep their accounts in a `map[string]string` on\nthe protobuf config and read it without a lock on every handshake. Neither\nimplements `proxy.UserManager`, so the API refuses them:\n\n```\n$ xray api adu --server=127.0.0.1:10085 ...\nproxy is not a UserManager\n```\n\nThe only way to add an account is to edit the config and restart xray, which\ndrops every live connection on the inbound. On a gateway whose clients hold\nlong-running TCP sessions, adding one account resets all of them.\n\n## What this does\n\nA new `AccountValidator` in `proxy/http` holds the same username/password pairs,\nbuilt from the config at startup and mutable afterwards. The HTTP server owns\none and exposes it through `Validator()`; the SOCKS server takes that same\ninstance instead of building its own, because #3682 made a single SOCKS inbound\nserve both protocols, and two separate stores would diverge on the first API\ncall.\n\nBoth servers then implement the five `UserManager` methods, so `adu`, `rmu` and\n`inbounduser` work against them.\n\n`main/commands/all/api/inbound_user_add.go` needed one change as well:\n`extractInboundUsers` switches on the inbound protocol to find the user list,\nand had no case for the two protocols that keep accounts in a map rather than in\na `Users` field.\n\n## Why a snapshot instead of an RWMutex\n\nHandshakes read the store constantly and the API writes to it rarely, so the\nvalidator replaces the whole map on a write. Readers load the current one with\n`atomic.Pointer.Load` and no lock; a writer clones it under a mutex and swaps the\npointer. A reader holding the old map finishes against a consistent snapshot.\n\nAn `RWMutex` would be simpler, so I measured both before settling on this\n(Apple M3 Max, 13 and 1000 accounts, `-benchtime=300ms`):\n\n| lookup | ns/op |\n|---|---|\n| bare config map, serial (what the handshake did before) | 5.6 |\n| validator, serial | 9.3 |\n| validator, `RunParallel` | 0.9-1.9 |\n| RWMutex, `RunParallel` | 127-137 |\n\nThe handshake path costs about 4 ns more. Under concurrency the snapshot scales\nwhile the RWMutex does not, since every reader writes to the same lock cache\nline. `validator_bench_test.go` carries the first three rows; the RWMutex row\ncame from a throwaway benchmark that is not part of the diff.\n\n## Behaviour notes\n\n- `AddUser` on a SOCKS inbound whose `auth` is not `password` is refused. Such an\n  inbound never consults accounts on the SOCKS side, so the account would do\n  nothing there, while the HTTP side would immediately start demanding\n  credentials from clients that send none.\n- Users are addressed by e-mail and fall back to the username. Accounts loaded\n  from a config file have no separate e-mail, and an operator naming a user has\n  the username at hand.\n- `GetUser` and `RemoveUser` match case-insensitively, as the other inbounds do\n  with e-mail.\n\n## Testing\n\n- `proxy/http/validator_test.go` and `proxy/socks/usermanager_test.go` cover add,\n  remove, duplicate usernames, the empty-username case, the copy returned by\n  `GetAll`, and a concurrent read/write loop for `-race`.\n- `go build ./...` passes, `gofmt` is clean, and `go test ./proxy/...` passes.\n- `TestTagsCache` in `app/proxyman/outbound` fails on my machine, but it fails\n  the same way on a clean `main`, so it is unrelated to this change.\n- Live check on a running instance: a 20 MB download through an existing account\n  ran to completion (HTTP 200, 81.7 s) while three users were added and two\n  removed over the API, and the process kept its pid.\n- In production on eight gateways since 2026-10-19, where accounts are added and\n  removed daily without a restart.\n\n#6360 added the same capability to the WireGuard inbound.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
+    },
+    {
      "number": 7204,
      "title": "Log: Restrict log permissions and simplify Docker log setup",
      "is_pr": true,
@@ -533,17 +591,6 @@
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7202",
      "body": "UDP Bind 0000 可以往127发导致看到的源IP不一致 只好在UDP的时候尝试只看端口\nclose #7192"
-    },
-    {
-     "number": 7185,
-     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-10-19T18:02:12Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185",
-     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
     },
     {
      "number": 7200,
@@ -896,20 +943,27 @@
      "user": "Anthrop44",
      "url": "https://github.com/XTLS/Xray-core/issues/7192",
      "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\nLinux v2rayN启用新版Xray TUN（关闭Legacy TUN Protect）后，Hysteria2和XHTTP(h3)的延迟测试返回-1，下载测速被跳过，但节点本身仍可能正常使用。最初在v2rayN中发现这个问题，但让AI研究代码后它说其实应该修Xray <https://github.com/2dust/v2rayN/issues/10384>\n\n```log\n[Error] app/router: Unables to find local process name: common/net: connection for <TUN_IP>:<PORT> not found in /proc/net/udp\nfrom udp:<TUN_IP>:<PORT> accepted udp:<REMOTE_IP>:443 [tun -> block]\n```\n\n<details><summary>下面是AI的分析，我自己搞不定</summary>\n<p>\n检查Xray-core 26.10.17源码后，发现以下调用链：\n\n1. `transport/internet/system_dialer.go`使用`ListenPacket`创建未连接的UDP套接字，默认绑定`0.0.0.0`或`::`\n2. Hysteria2和XHTTP的HTTP/3拨号均使用这条路径\n3. `common/net/find_process_linux.go`根据数据包的源IP和源端口，精确匹配`/proc/net/udp`中的本地地址\n4. 对于绑定`0.0.0.0:<PORT>`的套接字，实际发出的包具有具体源IP，但`/proc/net/udp`仍记录通配绑定地址，因此精确匹配失败\n\n在本次环境中，主TUN配置包含将Xray进程流量直连的保护规则。进程识别失败后，这部分流量未命中保护规则，随后命中了UDP/443阻断规则\n\n这里的UDP/443阻断是后续路由结果，疑似根因是此前的进程归属查询失败\n\n**独立复现**\n\n不启动v2rayN或TUN，也可以在Linux本机复现查询缺陷：\n\n1. 创建绑定`0.0.0.0:0`的未连接UDP套接字，取得分配的端口`port`\n2. 保持套接字打开，调用：\n\n```go\nFindProcess(\"udp\", \"127.0.0.1\", port, \"127.0.0.1\", 443)\n```\n\n预期识别出当前进程，实际返回在`/proc/net/udp`中找不到连接。显式绑定`127.0.0.1`的IPv4对照套接字可以成功识别\n\n这说明进程查询缺陷可以脱离v2rayN复现，而相关查询代码也是Linux平台专用实现\n\n**补充验证与边界**\n\n对同一个XHTTP(h3)节点进行对照测试：临时测速内核未绑定出口网卡时，延迟返回`-1`；显式绑定实际出口网卡后，延迟为125–185ms，限量下载也得到有效速度。这与测速内核流量进入TUN后未能获得进程保护的解释一致，但单凭绑定网卡的结果不能完全证明根因\n\n请确认Linux UDP进程查询对通配绑定套接字的处理是否正确，以及这一缺陷是否可以解释上述TUN测速现象\n</p>\n</details> \n\n<details><summary>English ver</summary>\n<p>\n\nAfter enabling the new Xray TUN in Linux v2rayN (with Legacy TUN Protect disabled), latency tests for Hysteria2 and XHTTP (h3) return -1, download speed tests are skipped, but the node itself may still work normally. This issue was initially found in v2rayN, but after having AI study the code, it said fixing it in Xray would be more correct <https://github.com/2dust/v2rayN/issues/10384>\n\n```log\n[Error] app/router: Unables to find local process name: common/net: connection for <TUN_IP>:<PORT> not found in /proc/net/udp\nfrom udp:<TUN_IP>:<PORT> accepted udp:<REMOTE_IP>:443 [tun -> block]\n```\n\n\nAfter checking the Xray-core 26.10.17 source code, I found the following call chain:\n\n1. `transport/internet/system_dialer.go` uses `ListenPacket` to create an unconnected UDP socket, which binds to `0.0.0.0` or `::` by default.\n2. Both Hysteria2 and XHTTP's HTTP/3 dialing use this path.\n3. `common/net/find_process_linux.go` exactly matches the local address in `/proc/net/udp` based on the packet's source IP and source port.\n4. For a socket bound to `0.0.0.0:<PORT>`, the actual outgoing packet has a concrete source IP, but `/proc/net/udp` still records the wildcard bind address, so the exact match fails.\n\nIn this environment, the main TUN configuration includes a protection rule that routes Xray process traffic directly. After process identification fails, this traffic does not hit the protection rule and subsequently hits the UDP/443 block rule.\n\nThe UDP/443 block here is a downstream routing result; the suspected root cause is the preceding process ownership lookup failure.\n\n**Independent reproduction**\n\nThe lookup defect can also be reproduced locally on Linux without starting v2rayN or TUN:\n\n1. Create an unconnected UDP socket bound to `0.0.0.0:0` and obtain the assigned port `port`.\n2. Keep the socket open and call:\n\n```go\nFindProcess(\"udp\", \"127.0.0.1\", port, \"127.0.0.1\", 443)\n```\n\nIt is expected to identify the current process, but it actually returns that no connection is found in `/proc/net/udp`. An IPv4 control socket explicitly bound to `127.0.0.1` can be identified successfully.\n\nThis shows that the process lookup defect can be reproduced independently of v2rayN, and the relevant lookup code is also a Linux-specific implementation.\n\n**Supplementary verification and boundaries**\n\nA control test was performed on the same XHTTP (h3) node: when "
-    },
-    {
-     "number": 6050,
-     "title": "add speed limiter for download and upload speed in megabytes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-05-01T07:43:44Z",
-     "updated_at": "2026-10-17T23:05:09Z",
-     "user": "SaeedFazlollahzadeh",
-     "url": "https://github.com/XTLS/Xray-core/pull/6050",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 6277256035,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-19T21:02:43Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6277256035",
+     "body": "> > docker 的镜像给的也是 ip-lite 不然体积是真的有点大\r\n> \r\n> 行吧 听起来好像体积膨胀率有点高\r\n\r\n我刚才脑补了一下默认 lite 的情况\r\n如果服务器拿来多出口分流、或者说用来回国\r\n单 docker 还好，只要 docker cp full 进去就行\r\n假如是 k3s 的场景，会极其地麻烦，一点都不云原生\r\n\r\n因此 docker 版还是得打包 full。。。\r\n~不然就是搬起石头砸我自己的脚了~\r\n\r\n只有发版才会生成一次镜像，因此还好"
+    },
+    {
+     "id": 6276977298,
+     "issue": 7205,
+     "issue_title": "SOCKS and HTTP inbounds: support dynamic user management",
+     "created_at": "2026-10-19T20:47:44Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7205#issuecomment-6276977298",
+     "body": "使用 utils.TypedSyncMap 存储用户就行了"
+    },
     {
      "id": 6275732621,
      "issue": 7201,
@@ -1550,42 +1604,6 @@
      "body": "> v26.10.17 已修复，不需要 `-tags http2legacy`。修复在 x/net 而不是 Go：golang/net@01e3d033 恢复了拨号合并，随 v0.60.0 发布；#7133 和 #7147 把依赖升到了 v0.61.0。\n\nFixed in v26.10.17.\n\nThe fix went into x/net rather than Go: golang/net@01e3d033 — *\"The wrapping implementation inadvertently removed dial coalescing. Add it back.\"* — released in x/net v0.60.0. #7133 and #7147 moved the dependency to v0.61.0, so no build tag is needed. The two net/http CLs were abandoned, so nothing has to change in a Go release. golang/go#81646 is closed as completed.\n\nOfficial `Xray-linux-64` builds, 500 concurrent sessions against a server that completes the TCP handshake and never answers the ClientHello, peak TCP connections to it:\n\n| build | `maxConnections: 1` | `2` | `3` |\n|---|---|---|---|\n| v26.10.10 (x/net v0.59.0) | 500 | 500 | 500 |\n| v26.10.17 (x/net v0.61.0) | **1** | **2** | **3** |\n\n`packet-up` on v26.10.17 behaves the same (`maxConnections: 3` → 3 connections), and RSS drops from ~93 MB to ~55 MB at that load.\n"
     },
     {
-     "id": 6243444175,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-17T23:59:09Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6243444175",
-     "body": "@Meo597\n\nI'm testing how to select the best path for each new connection in my fork.\n\nThe first scenario uses one node: I query different DNS resolvers for the destination domain, then test access to the resource through that node using each returned IP address.\n\nThe second scenario uses multiple nodes: I repeat this for each node with different DNS resolvers, then choose which path to use for a new connection. The preference can be faster or more stable access.\n\nThe main challenge is actually applying that choice: the DNS cache can return a previous IP even after a different option has been selected. Changing the DNS resolver or node alone is not enough—the new connection must actually use the selected path.\n\nHave you considered supporting this scenario through Lua?"
-    },
-    {
-     "id": 6243057622,
-     "issue": 7191,
-     "issue_title": "[Feature Request] XDRIVE: Add configurable object naming for storage backends",
-     "created_at": "2026-10-17T23:26:55Z",
-     "user": "thatssoheil",
-     "url": "https://github.com/XTLS/Xray-core/issues/7191#issuecomment-6243057622",
-     "body": "Related history, in case it is useful: this class was proposed in #6789 (configurable object names for xdrive) and closed in September. The position then was core functionality first, with such obfuscation parameters to be added slowly and in a targeted way once related blocking actually appears (RPRX), and that renaming does not remove the stronger signal, since the storage provider can observe the high-frequency write/read/delete pattern itself (Fangliding).\n"
-    },
-    {
-     "id": 6243033171,
-     "issue": 7136,
-     "issue_title": "Lua: Sandbox by default (whitelisted functions); Disable inline scripts for now; Add more checks for security reasons",
-     "created_at": "2026-10-17T23:24:11Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7136#issuecomment-6243033171",
-     "body": "@Meo597 Thanks for the clarification! If you need help with testing through Codex, feel free to reach out here."
-    },
-    {
-     "id": 6242818728,
-     "issue": 6050,
-     "issue_title": "add speed limiter for download and upload speed in megabytes",
-     "created_at": "2026-10-17T23:05:09Z",
-     "user": "p0lyfusion",
-     "url": "https://github.com/XTLS/Xray-core/pull/6050#issuecomment-6242818728",
-     "body": "@SaeedFazlollahzadeh this feature has been requested multiple times and I've got tired of it and [made an external tool ](https://github.com/p0lyfusion/xray-speedlimit)to get it done. Works surprisingly well."
-    },
-    {
      "id": 6235794781,
      "issue": 7185,
      "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
@@ -1784,17 +1802,6 @@
      "user": "samwathegreat",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3297",
      "body": "**Title: [Bug] AmneziaWG 2 Docker container has IPv4 forwarding disabled after automatic installation in Proxmox LXC**\n\n### Environment\n\n- Host: Proxmox VE\n- Guest: Debian 13, unprivileged LXC with nesting enabled\n- VPN: AmneziaWG 2, installed automatically using the official Amnezia Android app\n- Docker: 26.1.5+dfsg1 (installed by Amnezia)\n- Also reproduced with preinstalled Docker 29.8.0\n- `/dev/net/tun` passed through from Proxmox into LXC\n- Container: `amnezia-awg2`\n\n### Problem\n\nThe official Android app successfully installs AmneziaWG 2. The client establishes a VPN connection and completes the handshake, but neither internet nor LAN traffic works.\n\nThe VPN interface, UDP listener, NAT rules, and firewall rules are present.\n\nThe underlying problem is that IPv4 forwarding is disabled **inside the AmneziaWG Docker container**, despite being enabled in the parent LXC.\n\n### Steps to reproduce\n\n1. Create a fresh Debian 13 unprivileged Proxmox LXC with Docker nesting and TUN passthrough.\n2. Install AmneziaWG 2 using the official Android app, allowing it to install Docker.\n3. Connect from Android.\n4. Observe a successful handshake but no internet or LAN connectivity.\n5. Run:\n\n   `docker exec amnezia-awg2 sysctl net.ipv4.ip_forward`\n\n   Result: `net.ipv4.ip_forward = 0`\n\n6. Enable forwarding:\n\n   `docker exec amnezia-awg2 sysctl -w net.ipv4.ip_forward=1`\n\n7. Internet and LAN connectivity immediately work, without restarting the VPN.\n\n### Investigation\n\n- Parent LXC: `net.ipv4.ip_forward = 1`\n- Amnezia Docker container: `net.ipv4.ip_forward = 0`\n- Container NAT and FORWARD rules are configured correctly.\n- The generated `/opt/amnezia/start.sh` configures the tunnel, iptables and MASQUERADE rules but does not enable IPv4 forwarding.\n- Docker inspect shows only `net.ipv4.conf.all.src_valid_mark=1` under `HostConfig.Sysctls`.\n- A fresh Docker container also defaults to forwarding disabled.\n- Reproduced with two Docker versions and a completely fresh LXC installation.\n- A separate installation in a full Debian VM works without manual intervention.\n\n### Expected behavior\n\nThe official installer should explicitly enable IPv4 forwarding inside the VPN container, regardless of the default networking behavior of Docker or the host environment.\n\n### Suggested fix\n\nInclude `net.ipv4.ip_forward=1` in the Docker container's sysctl configuration alongside `net.ipv4.conf.all.src_valid_mark=1`.\n\nAlternatively, ensure forwarding is enabled during the VPN container's initialization.\n\nThis should allow the Android app to manage installation, restarts, and updates without manual intervention.\n\n### Impact\n\nThe installer reports success, and the VPN handshake succeeds, but all routed traffic fails. This is difficult to diagnose because the Docker container appears healthy and the client appears connected."
-    },
-    {
-     "number": 3084,
-     "title": "Проблема с сессией AmneziaWG в Telegram после режима ожидания на Android",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-08-28T17:04:38Z",
-     "updated_at": "2026-10-17T21:55:54Z",
-     "user": "ghost",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3084",
-     "body": "Окружение: \n- Клиент: Amnezia VPN 5.0.1.0 (Android, Arm64, Realme 15T)\n- Протокол: AmneziaWG 3.1 (на собственном VPS)\n- Настройки: Включено раздельное туннелирование (в VPN направлено несколько выбранных приложений, включая Telegram; остальные идут напрямую).\n\nСуть проблемы:\n- После входа телефона в режим ожидания (обычное отключение экрана) \"рукопожатия\" с заданным интервалом преращаются (наблюдаю по входящим на VPS пакетам). Возможно так и должно быть (не уверен), но гораздо интереснее следующее.\n- Если активировать телефон (включить экран) и открыть любое приложение, которое должно теннелироваться, \"рукопожатие\" происходит сразу и без проблем (на VPS видно несколько входящих пакетов и ответ от AmneziaWG сервера)\n- Если открыть Telegram (который тоже настроен на туннелирование) - \"рукорожатие\" долго (до минуты) не происходит, Telegram висит в состоянии \"Connecting...\". При этом на VPS наблюдаю кучу входящих через туннель сообщений и ни одного ответа от AmneziaWG сервера. Выглядит так, будто клиент Amnezia на телефоне \"забыл\", что он спал и нужно обновить рукопожатие, и вместо этого продолжает отправлять трафик в туннель как ни в чем ни бывало. \n- При этом, если в Telegram в то время, когда телефон в режиме ожидания, приходит входящее сообщение - проблем никаких - рукопожатие тут же происходит, Telegram загружает сообщение.\n"
     }
    ],
    "comments": [
@@ -1869,15 +1876,6 @@
      "user": "samwathegreat",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3297#issuecomment-6245931056",
      "body": "## Additional Findings — Root Cause, Verified Workaround, and Recommended Fix\n\nFurther investigation identified why AmneziaWG 2 fails to route traffic when installed through the official Android app inside an unprivileged Proxmox LXC.\n\n### Root Cause\n\n1. The AmneziaWG 2 Dockerfile configures numerous networking parameters in `/etc/sysctl.conf`, but does not include `net.ipv4.ip_forward=1`.\n\n2. The Dockerfile initially creates a placeholder `/opt/amnezia/start.sh`, which the official Android app subsequently replaces with a generated startup script.\n\n3. The generated startup script successfully initializes the `awg0` interface and configures iptables FORWARD and MASQUERADE rules, but never enables IPv4 forwarding.\n\n4. Docker creates the container with only the following explicit sysctl setting:\n\n   `net.ipv4.conf.all.src_valid_mark=1`\n\n5. IPv4 forwarding is enabled in the parent LXC (`net.ipv4.ip_forward=1`), but disabled inside the AmneziaWG Docker container (`net.ipv4.ip_forward=0`).\n\n6. The problem was reproduced on two installations:\n   - Existing unprivileged Proxmox LXC with Docker 29.8.0.\n   - Completely fresh Debian 13 unprivileged Proxmox LXC, allowing Amnezia to install Docker 26.1.5 itself.\n\nA separate installation in a full Debian VM works without modification.\n\n### Verified Workaround\n\nAdding the following line immediately after `#!/bin/bash` in `/opt/amnezia/start.sh` resolves the routing failure:\n\n```bash\nsysctl -w net.ipv4.ip_forward=1\n```\n\nThis can be applied from the LXC using a single command:\n\n```bash\ndocker exec amnezia-awg2 sh -c 'grep -q \"^sysctl -w net.ipv4.ip_forward=1$\" /opt/amnezia/start.sh || sed -i \"2i sysctl -w net.ipv4.ip_forward=1\" /opt/amnezia/start.sh'\n```\n\nAfter enabling forwarding, both internet and LAN connectivity work immediately through the VPN.\n\n**Reboot test: PASSED.**\n\nThe modified startup script survives a normal LXC reboot and automatically enables forwarding when the AmneziaWG container starts.\n\nNo Docker image rebuild, Docker downgrade, or additional networking changes were required.\n\n### Recommended Upstream Fix\n\nThe preferred solution is to explicitly configure IPv4 forwarding when Amnezia creates the Docker container, alongside the existing `src_valid_mark` setting:\n\n```yaml\nsysctls:\n  net.ipv4.conf.all.src_valid_mark: \"1\"\n  net.ipv4.ip_forward: \"1\"\n```\n\nAlternatively, the Amnezia app could include the following command in its generated startup script:\n\n```bash\nsysctl -w net.ipv4.ip_forward=1\n```\n\nThe startup-script approach has been verified to work, including after reboot.\n\nEither solution would eliminate reliance on Docker's default forwarding behavior and allow the official Amnezia app to manage the VPN without requiring manual intervention.\n\n### Important Clarification: TUN Passthrough\n\nThis issue is **not** a request to eliminate `/dev/net/tun` passthrough.\n\nThe userspace `amneziawg-go` implementation requires access to TUN, and that requirement is expected.\n\nIn this Proxmox environment, TUN was explicitly passed through to the unprivileged LXC before the fresh installation.\n\nThe reported bug is specifically that **IPv4 forwarding remains disabled inside the AmneziaWG Docker container despite successful VPN initialization and handshake**.\n\n### Remaining Limitation\n\nAlthough the workaround survives a normal LXC reboot, it has **not yet been verified against an Amnezia app-managed update, reconfiguration, or Docker container recreation**.\n\nBecause the Android app generates and manages `/opt/amnezia/start.sh`, future management operations could overwrite the modification.\n\nFor this reason, explicitly setting `net.ipv4.ip_forward=1` during Docker container creation is preferable to relying on a manual modification of the generated startup script.\n\n### Expected Outcome\n\nAmneziaWG 2 should initialize its Docker container with IPv4 forwarding enabled whenever the container is intended to route VPN client traffic, regardless of whether it is running inside a full VM or a compatibl"
-    },
-    {
-     "id": 6241825485,
-     "issue": 3084,
-     "issue_title": "Проблема с сессией AmneziaWG в Telegram после режима ожидания на Android",
-     "created_at": "2026-10-17T21:55:53Z",
-     "user": "safrankov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3084#issuecomment-6241825485",
-     "body": "Тоже самое на 5.0.3.1 (awg 3.1), samsung galaxy s25 ultra"
     },
     {
      "id": 5782560525,

@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-22T17:10:15Z",
- "since": "2026-10-20T17:10:15Z",
+ "generated_at": "2026-10-22T21:35:28Z",
+ "since": "2026-10-20T21:35:28Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -103,12 +103,23 @@
      "number": 1400,
      "title": "Add signing to the macOS workflow",
      "is_pr": false,
-     "state": "open",
+     "state": "closed",
      "created_at": "2026-10-22T14:17:32Z",
-     "updated_at": "2026-10-22T14:18:50Z",
+     "updated_at": "2026-10-22T20:32:51Z",
      "user": "fulldecent",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400",
      "body": "Please add binary signing to the continuous deployment workflow.\n\nThis will solve the problem that I can't open the binary.\n\n<img width=\"372\" height=\"428\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a462eccd-8e74-44c6-b056-e418449c22ca\" />\n\n> Apple could not verify “yggdrasil-0.5.14-macos-arm64.pkg” is free of malware that may harm your Mac or compromise your privacy.\n\n## Follow-on work\n\nWhile doing this, please also add attestations for the build process. Here is a simple example of a full CD process that also attaches GitHub build attestations to each automated releases.\n\nhttps://github.com/fulldecent/rust-template"
+    },
+    {
+     "number": 1396,
+     "title": "core: don't let a peer without a stream block the QUIC listener",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-22T07:29:26Z",
+     "updated_at": "2026-10-22T17:43:21Z",
+     "user": "winchtester",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1396",
+     "body": "# core: don't let a peer without a stream block the QUIC listener\n\nCloses #1391\n\n## What changes\n\n`src/core/link_quic.go`, accept loop only:\n\n- `AcceptStream` for an accepted QUIC connection is now awaited in a per-connection\n  goroutine instead of the listener goroutine, so `ql.Accept(ctx)` is called again\n  immediately.\n- That wait is bounded by `context.WithTimeout(ctx, quicStreamAcceptTimeout)`\n  (`quicStreamAcceptTimeout = 10 * time.Second`). If the peer does not open the link\n  stream in time, the connection is closed with `qc.CloseWithError(1, ...)`, as it\n  already was on a stream error.\n- The accepted `linkQUICStream` is handed to the listener channel from that goroutine\n  with a `select` on `ctx.Done()`, so the unbuffered `ch` (`link_quic.go:80`) cannot\n  stall the accept loop either.\n- The per-connection goroutines are cancelled when the accept loop exits (the loop\n  derives a cancellable child context and defers the cancel), so closing the listener\n  does not leave them waiting for the full timeout.\n\nNew test: `src/core/link_quic_test.go`.\n\n## Why this way\n\n- The defect is ordering, not a missing check: one connection in the wrong state consumed\n  the only goroutine that could accept the next one. Making the wait concurrent is the\n  smallest change that removes that coupling; it is also what the other link types already\n  do (`src/core/link.go:515` spawns a goroutine per accepted connection).\n- A deadline is needed on top of the goroutine, otherwise a silent peer keeps a\n  connection (and its goroutine) alive forever — the server's own `KeepAlivePeriod: 20s`\n  prevents `MaxIdleTimeout` from firing.\n- 10s is deliberately generous: a real peer opens the stream immediately after the\n  handshake (`linkQUIC.dial`, `link_quic.go:64`), so only peers that are not speaking the\n  link protocol hit the timeout.\n- No refactoring beyond that: the error `switch`, the channel type, `linkQUICListener`, the\n  dial path and the link framing are untouched.\n\n## Test\n\n`TestQUICListenerPeerWithoutStream` (`src/core/link_quic_test.go`):\n\n1. starts a real `linkQUIC` listener on `127.0.0.1:0` with a self-signed cert and the same\n   `quic.Config` as production (1m idle timeout, 20s keepalive);\n2. peer 1 completes the QUIC handshake and opens no stream, then the test waits 500ms so\n   the listener is parked waiting for that stream (`AcceptStream` does not return until the\n   peer sends something on a stream, which is exactly the blocking state);\n3. peer 2 completes the handshake, calls `OpenStreamSync` and writes `ping`, like a real\n   peer that starts its link handshake right away;\n4. the test requires `listener.Accept()` to return within 5s, then checks the accepted\n   connection reads `ping` and the peer reads back `pong`.\n\nOn the unpatched tree the test fails with:\n\n```\n--- FAIL: TestQUICListenerPeerWithoutStream (5.51s)\n    link_quic_test.go:145: listener did not accept the second peer while the first peer had no stream\n```\n\nWith the patch it passes in ~0.5s, including `-count=3 -race`.\n\n## How it was verified\n\n```\n$ cd /tmp/work/ygg-quic                      # v0.5.14 tree + patch\n$ GOFLAGS=-mod=mod GOPROXY=off go build ./...\n# exit 0\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -run TestQUICListenerPeerWithoutStream -count=1 -v\n--- PASS: TestQUICListenerPeerWithoutStream (0.51s)\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t0.510s\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -count=1\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t21.746s\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -run TestQUICListenerPeerWithoutStream -count=3 -race\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t2.570s\n\n$ go vet ./src/core/     # clean\n$ gofmt -l src/core/     # no output\n```\n\nThe same test on the unpatched tree fails as quoted above (checked by reverting only\n`link_quic.go` and re-running the test).\n\n## Compatibility\n\n- No wire-format change: `linkQUICStream`, the `ch` channel, the QUIC/TLS configura"
     },
     {
      "number": 1399,
@@ -142,17 +153,6 @@
      "user": "winchtester",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1397",
      "body": "# mobile: pass `GroupPassword`, `NodeInfo` and `NodeInfoPrivacy` to the core\n\nCloses #1392\n\n## What changes\n\n`contrib/mobile/mobile.go`:\n\n- The inline option list inside `StartJSON` is extracted into\n  `coreOptions(cfg *config.NodeConfig) []core.SetupOption`, a pure function of the config\n  (same shape as the option block in `cmd/yggdrasil/main.go`).\n- Three options that the mobile path never passed are now passed:\n  `core.NodeInfo(cfg.NodeInfo)`, `core.NodeInfoPrivacy(cfg.NodeInfoPrivacy)` and, guarded by\n  `if cfg.GroupPassword != \"\"`, `core.GroupPassword(cfg.GroupPassword)`.\n- `StartJSON` calls `core.New(m.config.Certificate, logger, coreOptions(m.config)...)`.\n  Nothing else in the function changes; `coreOptions` is unexported, so the gomobile API\n  surface is unchanged.\n\nNew test: `contrib/mobile/coreoptions_test.go`.\n\n## Why this way\n\n- The defect is an omission, not a design decision: the mobile path already maps peers,\n  interface peers, listen addresses and allowed public keys from the same `config.NodeConfig`\n  that the daemon uses. Adding the three missing mappings is the smallest change that makes\n  the two entry points agree.\n- Extracting the builder into a pure function is what makes the parity testable. Before, the\n  option list only existed inside `StartJSON`, together with multicast, TUN and admin setup,\n  and could only be observed by running a node on a device.\n- The parity guard parses `cmd/yggdrasil/main.go` and reports any `core.X(cfg.Field)` option\n  that mobile does not produce. That is deliberate: the real failure mode here is *future*\n  drift (a new option added to the daemon and forgotten on mobile), which no value-based\n  test can catch. If maintainers would rather not have a test that reads the daemon source,\n  the other three tests stand on their own and this one can be dropped.\n- No new dependencies, no changes to `core`, `config`, the config file format or the wire\n  format.\n\n## Test\n\n`contrib/mobile/coreoptions_test.go`, four tests, no mobile toolchain required:\n\n1. `TestCoreOptionsMatchDesktopFields` — for a fully populated config, pins the exact\n   ordered option set (`NodeInfo`, `NodeInfoPrivacy`, `PeerFilter`, `ListenAddress`, `Peer`,\n   `GroupPassword`, `Peer` for an interface peer, `AllowedPublicKey`) and checks every value,\n   including `PeerFilter` behaviour on `200::/7`.\n2. `TestCoreOptionsGroupPasswordOmittedWhenEmpty` — an empty group password must not produce\n   a `GroupPassword` option (same `if cfg.GroupPassword != \"\"` guard as the daemon), and a\n   zero config produces exactly `NodeInfo`, `NodeInfoPrivacy`, `PeerFilter`.\n3. `TestCoreOptionsCoverDaemonFields` — parses `../../cmd/yggdrasil/main.go`, collects every\n   core option built from a `cfg` field and requires the mobile path to produce it.\n4. `TestCoreOptionsAcceptedByCore` — starts a real core with the options built from\n   `config.GenerateConfig()` (group password, nodeinfo, privacy set) and checks that\n   `core.New` accepts the list and the node comes up.\n\nOn the unpatched option list (the three options removed, everything else identical) the tests\nfail as intended:\n\n```\n--- FAIL: TestCoreOptionsMatchDesktopFields (0.00s)\n    coreoptions_test.go:77: unexpected core option set\n         got: [core.PeerFilter core.ListenAddress core.Peer core.Peer core.AllowedPublicKey]\n         want: [core.NodeInfo core.NodeInfoPrivacy core.PeerFilter core.ListenAddress core.Peer core.GroupPassword core.Peer core.AllowedPublicKey]\n--- FAIL: TestCoreOptionsGroupPasswordOmittedWhenEmpty (0.00s)\n    coreoptions_test.go:185: unexpected minimal option set\n         got: [core.PeerFilter]\n         want: [core.NodeInfo core.NodeInfoPrivacy core.PeerFilter]\n--- FAIL: TestCoreOptionsCoverDaemonFields (0.00s)\n    coreoptions_test.go:202: desktop daemon passes core.NodeInfo(cfg....) but the mobile path does not; mobile nodes would ignore it\n    coreoptions_test.go:202: desktop daemon passes core.NodeInfoPrivacy(cfg....) but the mobile path does not; mo"
-    },
-    {
-     "number": 1396,
-     "title": "core: don't let a peer without a stream block the QUIC listener",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-22T07:29:26Z",
-     "updated_at": "2026-10-22T07:29:26Z",
-     "user": "winchtester",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1396",
-     "body": "# core: don't let a peer without a stream block the QUIC listener\n\nCloses #1391\n\n## What changes\n\n`src/core/link_quic.go`, accept loop only:\n\n- `AcceptStream` for an accepted QUIC connection is now awaited in a per-connection\n  goroutine instead of the listener goroutine, so `ql.Accept(ctx)` is called again\n  immediately.\n- That wait is bounded by `context.WithTimeout(ctx, quicStreamAcceptTimeout)`\n  (`quicStreamAcceptTimeout = 10 * time.Second`). If the peer does not open the link\n  stream in time, the connection is closed with `qc.CloseWithError(1, ...)`, as it\n  already was on a stream error.\n- The accepted `linkQUICStream` is handed to the listener channel from that goroutine\n  with a `select` on `ctx.Done()`, so the unbuffered `ch` (`link_quic.go:80`) cannot\n  stall the accept loop either.\n- The per-connection goroutines are cancelled when the accept loop exits (the loop\n  derives a cancellable child context and defers the cancel), so closing the listener\n  does not leave them waiting for the full timeout.\n\nNew test: `src/core/link_quic_test.go`.\n\n## Why this way\n\n- The defect is ordering, not a missing check: one connection in the wrong state consumed\n  the only goroutine that could accept the next one. Making the wait concurrent is the\n  smallest change that removes that coupling; it is also what the other link types already\n  do (`src/core/link.go:515` spawns a goroutine per accepted connection).\n- A deadline is needed on top of the goroutine, otherwise a silent peer keeps a\n  connection (and its goroutine) alive forever — the server's own `KeepAlivePeriod: 20s`\n  prevents `MaxIdleTimeout` from firing.\n- 10s is deliberately generous: a real peer opens the stream immediately after the\n  handshake (`linkQUIC.dial`, `link_quic.go:64`), so only peers that are not speaking the\n  link protocol hit the timeout.\n- No refactoring beyond that: the error `switch`, the channel type, `linkQUICListener`, the\n  dial path and the link framing are untouched.\n\n## Test\n\n`TestQUICListenerPeerWithoutStream` (`src/core/link_quic_test.go`):\n\n1. starts a real `linkQUIC` listener on `127.0.0.1:0` with a self-signed cert and the same\n   `quic.Config` as production (1m idle timeout, 20s keepalive);\n2. peer 1 completes the QUIC handshake and opens no stream, then the test waits 500ms so\n   the listener is parked waiting for that stream (`AcceptStream` does not return until the\n   peer sends something on a stream, which is exactly the blocking state);\n3. peer 2 completes the handshake, calls `OpenStreamSync` and writes `ping`, like a real\n   peer that starts its link handshake right away;\n4. the test requires `listener.Accept()` to return within 5s, then checks the accepted\n   connection reads `ping` and the peer reads back `pong`.\n\nOn the unpatched tree the test fails with:\n\n```\n--- FAIL: TestQUICListenerPeerWithoutStream (5.51s)\n    link_quic_test.go:145: listener did not accept the second peer while the first peer had no stream\n```\n\nWith the patch it passes in ~0.5s, including `-count=3 -race`.\n\n## How it was verified\n\n```\n$ cd /tmp/work/ygg-quic                      # v0.5.14 tree + patch\n$ GOFLAGS=-mod=mod GOPROXY=off go build ./...\n# exit 0\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -run TestQUICListenerPeerWithoutStream -count=1 -v\n--- PASS: TestQUICListenerPeerWithoutStream (0.51s)\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t0.510s\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -count=1\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t21.746s\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -run TestQUICListenerPeerWithoutStream -count=3 -race\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t2.570s\n\n$ go vet ./src/core/     # clean\n$ gofmt -l src/core/     # no output\n```\n\nThe same test on the unpatched tree fails as quoted above (checked by reverting only\n`link_quic.go` and re-running the test).\n\n## Compatibility\n\n- No wire-format change: `linkQUICStream`, the `ch` channel, the QUIC/TLS configura"
     },
     {
      "number": 1395,
@@ -210,10 +210,73 @@
      "body": "# A QUIC peer that completes the handshake but never opens a stream blocks all other QUIC peers\n\n## Version / commit\n\n- `yggdrasil-go` commit `422836ee` (tag `v0.5.14`), file `src/core/link_quic.go`.\n- Line numbers below are from that commit. `develop` still has the same file: blob\n  `ffe7a2c8b71198acaba831563bfac27010019f06` for `src/core/link_quic.go@develop` equals the\n  blob this patch changes, so the issue is not fixed on `develop` either (checked via the\n  GitHub API on 2026-10-22).\n- `github.com/quic-go/quic-go v0.60.0` (pinned in `go.mod`).\n\n## Steps to reproduce\n\n1. Start a node with a QUIC listener, e.g. `Listen: [\"quic://0.0.0.0:9001\"]`.\n2. From any host that can reach the port, complete the QUIC handshake and then do\n   **nothing** — do not open a stream (`quic.DialAddr` and return; no `OpenStream`).\n3. From a second host, connect normally (handshake + open the link stream immediately,\n   which is what `linkQUIC.dial` does at `src/core/link_quic.go:64`).\n\nMinimal client for step 2 (quic-go v0.60.0):\n\n```go\nconn, err := quic.DialAddr(ctx, \"node:9001\", tlsConf, &quic.Config{})\n// handshake done, deliberately no OpenStream\n_ = conn\n```\n\n## What happens\n\nThe second peer's handshake succeeds and its `OpenStreamSync` returns without error, so\nfrom the peer's point of view the connection is up. But the listener never hands that\nconnection to the links layer: `links.listen` (`src/core/link.go:446`, accept loop at `:503-511`) stays blocked in\n`li.listener.Accept()`, because the single accept goroutine is stuck one connection\nearlier. Nothing is logged, no error is returned to the peer — a silent blackhole. All\nQUIC peers on that listener are affected, including peers that were already configured.\n\nThe node also keeps the blocking connection alive indefinitely: the server-side\n`KeepAlivePeriod: 20s` (`src/core/link_quic.go:46`) makes the server itself send PINGs,\nwhich resets the idle timers on both ends, so `MaxIdleTimeout: 1m` never fires. With\n`KeepAlivePeriod` set to 0 the block would clear after roughly 60s; with the shipped\nconfiguration it does not clear at all.\n\nTCP, TLS and WS/WSS listeners are not affected — only `quic://`.\n\n## What was expected\n\nA connection is a peer only after it opens the link stream. A connection that never opens\none should be closed (or at least not block the listener), and other peers should be\naccepted as usual.\n\n## Why this is not by design\n\n`src/core/link_quic.go:85-106` (v0.5.14):\n\n```go\ngo func() {\n\tfor {\n\t\tqc, err := ql.Accept(ctx)      // :87\n\t\tswitch err {\n\t\t...\n\t\tcase nil:\n\t\t\tqs, err := qc.AcceptStream(ctx)   // :95  <- blocks here\n\t\t\tif err != nil {\n\t\t\t\t_ = qc.CloseWithError(1, ...)\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\tch <- &linkQUICStream{...}        // :100 <- unbuffered send\n\t\t}\n\t}\n}()\n```\n\n- The whole listener has exactly one goroutine, and `AcceptStream` is called from inside\n  it, so `ql.Accept` is not reached again until the current peer opens a stream.\n- There is no deadline on that wait: `ctx` is the listener context created in\n  `src/core/link.go:447` (`context.WithCancel(l.core.ctx)`), which is only cancelled when\n  the listener itself is closed. The per-link `SetDeadline` at `src/core/link.go:635`\n  never applies, because the connection has not been passed to the links layer yet.\n- The `ch` send on line 100 is on an unbuffered channel (`link_quic.go:80`), so even a\n  successful `AcceptStream` can stall the same loop while nothing is calling `Accept()`.\n- Other transports do not have this shape: `link_tcp`/`link_tls`/`link_ws` hand the\n  accepted connection to a fresh goroutine per connection (`src/core/link.go:515`), so a\n  stuck peer only costs its own goroutine.\n\nA single unauthenticated TCP connection to the QUIC port is enough; no valid certificate,\nkey or password is needed, because the handshake is completed before the link layer does\nany authentication.\n\n## Impact\n\n- Any node that exposes a QUIC listener: the first peer that connects and does not open a\n  stream (accidentally o"
     }
    ],
-   "comments": []
+   "comments": [
+    {
+     "id": 6350685863,
+     "issue": 1400,
+     "issue_title": "Add signing to the macOS workflow",
+     "created_at": "2026-10-22T20:32:51Z",
+     "user": "fulldecent",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400#issuecomment-6350685863",
+     "body": "Thank you, well noted that Apple signing is out of scope for this project. That means binaries will not work on macOS unless each person compiles it themself."
+    },
+    {
+     "id": 6347186591,
+     "issue": 1400,
+     "issue_title": "Add signing to the macOS workflow",
+     "created_at": "2026-10-22T17:37:19Z",
+     "user": "majestrate",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400#issuecomment-6347186591",
+     "body": "This requires a several hundred dollars a year signing key notorization from apple. Please consider using software that respects your freedom, or build from source."
+    }
+   ]
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2610,
+     "title": "fix Makefile.linux logic, improve readability",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-22T21:01:36Z",
+     "updated_at": "2026-10-22T21:17:12Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2610",
+     "body": ""
+    },
+    {
+     "number": 2609,
+     "title": "fix UPnP patch",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-22T18:30:34Z",
+     "updated_at": "2026-10-22T18:31:21Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2609",
+     "body": "Оно и с `@@ -31,7 +31,7 @@` работает\n\n\n"
+    },
+    {
+     "number": 2594,
+     "title": "fix Debian Bookworm build",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-13T12:57:47Z",
+     "updated_at": "2026-10-22T18:01:53Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2594",
+     "body": "libboost-*-dev (>= 1.83) for Debian Trixie. \r\nlibboost-*1.81-dev for Debian Bookworm, need to install the packages, this is not the default version.\r\n"
+    },
+    {
+     "number": 2597,
+     "title": "fix typos",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-15T19:43:42Z",
+     "updated_at": "2026-10-22T18:01:24Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2597",
+     "body": "fix typos\n"
+    },
     {
      "number": 2582,
      "title": "System clock sync reminder in i2pd/AEAD verification debug [feature request]",
@@ -268,28 +331,6 @@
      "user": "snaike00",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2069",
      "body": "После обновления i2pd до актуальной версии при запуске стал часто замечать такую ситуацию:\r\n\r\n![problem](https://github.com/PurpleI2P/i2pd/assets/132914245/dcf320b9-850a-4d4b-a60c-8c17b70a1736)\r\n\r\nОднако после последующего перезапуска i2pd ситуация меняется на:\r\n\r\n![good](https://github.com/PurpleI2P/i2pd/assets/132914245/ac06810c-7b37-4cba-96d3-0f699049789d)\r\n\r\ni2pd крутится за натом, а это значит что status \"Firewalled\" - нормальное поведение.\r\n\r\nДо обновления i2pd долгое время использовал старую версию (не помню точно какой билд), однако такого не замечал, даже webconsole не поднимал, так как все работало.\r\nНе понятно что делать, кроме как перезапускать i2pd вручную. Быть может есть какой ключ, что-то типа reconnect if failed to connect?"
-    },
-    {
-     "number": 2585,
-     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-06T03:37:09Z",
-     "updated_at": "2026-10-20T19:47:53Z",
-     "user": "CrisRed",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
-     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
-    },
-    {
-     "number": 2603,
-     "title": "Use proper HTTP status codes for proxy errors",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-20T01:26:54Z",
-     "updated_at": "2026-10-20T19:07:45Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2603",
-     "body": "SendProxyError always answered 500, so every proxy failure looked like an internal server error - including a malformed request from the client.\n\nMeasured on a lone router with the proxy up, before and after:\n\n| case | before | after |\n| --- | --- | --- |\n| host not in addressbook | 500 | 502 |\n| hostname 300 chars | 500 | 502 |\n| non-i2p address, no outproxy | 500 | 502 |\n| b32 of right length that does not exist | 500 | 504 |\n| malformed request line | 500 | 400 |\n\n400 for what the client got wrong (unparsable request, invalid URI, no destination host in request, hostname too long for upstream SOCKS), 502 for naming and upstream proxy failures, 504 when the destination could not be reached. Everything else keeps 500 by default.\n\nJava I2P uses 502 for the not-found case (zzzi2p in the issue).\n\nBuilds with no warnings, make -C tests passes.\n\nFix for #1987"
     }
    ],
    "comments": [
@@ -328,15 +369,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2601#issuecomment-6315368309",
      "body": "Если произвести захват всех пакетов на сокете сразу после старта i2pd, tshark справляется и работает без пропусков \n`tshark -n -f \"host _MY_IP_ and tcp port _MY_PORT_\"  -i ens3 -a duration:100`\nТакая интересная картина, это с отключенными  TCP_QUICKACK, здесь все пакеты без исключений:\n```\n 5574 90.675107428 130.51.206.12 -> _MY_IP_ TCP 66 54118 -> _MY_PORT_ [SYN] Seq=0 Win=64240 Len=0 MSS=1460 WS=256 SACK_PERM\n 5575 90.675192407 _MY_IP_ -> 130.51.206.12 TCP 66 _MY_PORT_ -> 54118 [SYN, ACK] Seq=0 Ack=1 Win=64240 Len=0 MSS=1460 SACK_PERM WS=128\n 5588 90.863712189 130.51.206.12 -> _MY_IP_ TCP 54 54118 -> _MY_PORT_ [ACK] Seq=1 Ack=1 Win=262656 Len=0\n 5589 90.863712369 130.51.206.12 -> _MY_IP_ TCP 188 54118 -> _MY_PORT_ [PSH, ACK] Seq=1 Ack=1 Win=262656 Len=134\n 5590 90.863789615 _MY_IP_ -> 130.51.206.12 TCP 54 _MY_PORT_ -> 54118 [ACK] Seq=1 Ack=135 Win=64128 Len=0\n 5591 90.865055687 _MY_IP_ -> 130.51.206.12 TCP 211 _MY_PORT_ -> 54118 [PSH, ACK] Seq=1 Ack=135 Win=64128 Len=157\n 5600 91.064282253 130.51.206.12 -> _MY_IP_ TCP 1091 54118 -> _MY_PORT_ [PSH, ACK] Seq=135 Ack=158 Win=262400 Len=1037\n 5601 91.066001678 _MY_IP_ -> 130.51.206.12 TCP 100 _MY_PORT_ -> 54118 [PSH, ACK] Seq=158 Ack=1172 Win=64128 Len=46\n 5602 91.066137917 _MY_IP_ -> 130.51.206.12 TCP 54 _MY_PORT_ -> 54118 [FIN, ACK] Seq=204 Ack=1172 Win=64128 Len=0\n 5603 91.066236209 130.51.206.12 -> _MY_IP_ TCP 1514 54118 -> _MY_PORT_ [ACK] Seq=1172 Ack=158 Win=262400 Len=1460\n 5604 91.066282466 _MY_IP_ -> 130.51.206.12 TCP 54 _MY_PORT_ -> 54118 [RST] Seq=158 Win=0 Len=0\n 5605 91.066459549 130.51.206.12 -> _MY_IP_ TCP 802 54118 -> _MY_PORT_ [PSH, ACK] Seq=2632 Ack=158 Win=262400 Len=748\n 5606 91.066490666 _MY_IP_ -> 130.51.206.12 TCP 54 _MY_PORT_ -> 54118 [RST] Seq=158 Win=0 Len=0\n 5620 91.269508693 130.51.206.12 -> _MY_IP_ TCP 54 54118 -> _MY_PORT_ [FIN, ACK] Seq=3380 Ack=204 Win=262400 Len=0\n 5621 91.269509038 130.51.206.12 -> _MY_IP_ TCP 54 54118 -> _MY_PORT_ [ACK] Seq=3381 Ack=205 Win=262400 Len=0\n 5622 91.269567180 _MY_IP_ -> 130.51.206.12 TCP 54 _MY_PORT_ -> 54118 [RST] Seq=204 Win=0 Len=0\n 5623 91.269594222 _MY_IP_ -> 130.51.206.12 TCP 54 _MY_PORT_ -> 54118 [RST] Seq=205 Win=0 Len=0\n```\n```\n19612 78.840406579 85.61.99.141 -> _MY_IP_ TCP 74 48286 -> _MY_PORT_ [SYN] Seq=0 Win=64240 Len=0 MSS=1460 SACK_PERM TSval=474868678 TSecr=0 WS=128\n19613 78.840472698 _MY_IP_ -> 85.61.99.141 TCP 74 _MY_PORT_ -> 48286 [SYN, ACK] Seq=0 Ack=1 Win=65160 Len=0 MSS=1460 SACK_PERM TSval=3372492908 TSecr=474868678 WS=128\n19628 78.921106276 85.61.99.141 -> _MY_IP_ TCP 66 48286 -> _MY_PORT_ [ACK] Seq=1 Ack=1 Win=64256 Len=0 TSval=474868759 TSecr=3372492908\n19629 78.922585411 85.61.99.141 -> _MY_IP_ TCP 304 48286 -> _MY_PORT_ [PSH, ACK] Seq=1 Ack=1 Win=64256 Len=238 TSval=474868760 TSecr=3372492908\n19630 78.922608459 _MY_IP_ -> 85.61.99.141 TCP 66 _MY_PORT_ -> 48286 [ACK] Seq=1 Ack=239 Win=65024 Len=0 TSval=3372492990 TSecr=474868760\n19631 78.923149707 _MY_IP_ -> 85.61.99.141 TCP 166 _MY_PORT_ -> 48286 [PSH, ACK] Seq=1 Ack=239 Win=65024 Len=100 TSval=3372492991 TSecr=474868760\n19638 79.006414424 85.61.99.141 -> _MY_IP_ TCP 66 48286 -> _MY_PORT_ [ACK] Seq=239 Ack=101 Win=64256 Len=0 TSval=474868842 TSecr=3372492991\n19639 79.006414551 85.61.99.141 -> _MY_IP_ TCP 855 48286 -> _MY_PORT_ [PSH, ACK] Seq=239 Ack=101 Win=64256 Len=789 TSval=474868843 TSecr=3372492991\n19640 79.007773470 _MY_IP_ -> 85.61.99.141 TCP 114 _MY_PORT_ -> 48286 [PSH, ACK] Seq=101 Ack=1028 Win=64256 Len=48 TSval=3372493076 TSecr=474868843\n19641 79.007846134 _MY_IP_ -> 85.61.99.141 TCP 66 _MY_PORT_ -> 48286 [FIN, ACK] Seq=149 Ack=1028 Win=64256 Len=0 TSval=3372493076 TSecr=474868843\n19659 79.090385358 85.61.99.141 -> _MY_IP_ TCP 177 48286 -> _MY_PORT_ [PSH, ACK] Seq=1028 Ack=149 Win=64256 Len=111 TSval=474868926 TSecr=3372493076\n19660 79.090385427 85.61.99.141 -> _MY_IP_ TCP 66 48286 -> _MY_PORT_ [FIN, ACK] Seq=1139 Ack=149 Win=64256 Len=0 TSval=474868927 TSecr=3372493076\n19661 79.090385487 85.61.99.141 -> _MY_IP_ TCP 66 48286 ->"
-    },
-    {
-     "id": 6299949876,
-     "issue": 2585,
-     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "created_at": "2026-10-20T19:47:53Z",
-     "user": "OlegGirko",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6299949876",
-     "body": "I can confirm that the crash still happens with `i2pd` 3.0.0 on Fedora 44.\nI have several hidden services configured, and any attempt to access any of them causes crash in `i2p::crypto::DSASigner::Sign()` function.\n\nHere is the stack trace:\n```\n#0  0x00007fa076895829 in DSA_SIG_get0 () from /lib64/libcrypto.so.3\n#1  0x0000556775ca5026 in i2p::crypto::DSASigner::Sign (this=<optimized out>, \n    buf=0x7fa028000d60 \"\\003$\\216w\\246\\017\\370\\275\\347$C\\350%q\\344\\266\\037N\\t\\344N\\2648\\n=\\212\\347\\343,\\035|\\241\\301\\3366\\211\\312f\\001\\023\\3702l\\247\\242\\362\\271r\\240J\\302\\023x?\\237r\\3720\\\\J$o\\f\\361\\206)\\223\\345@\\203\\233\\357\\334\\330\\025\\031),\\035\\374e\\243^\\232^6\\351\\333\\372\\336f\\225\\350\\315\\304\\351\\313K\\222U'\\334YMFy\\250\\227[L\\264D\\030\\223\\022`\\343R\\377'\\203\\365ۗZ@Ի\\025\\223\\372u\", len=512, \n    signature=0x7fa028000f60 \"\")\n    at /usr/src/debug/i2pd-3.0.0-1.fc44.1.x86_64/libi2pd/Signature.cpp:86\n#2  0x0000556775c3db25 in i2p::data::LocalLeaseSet2::LocalLeaseSet2 (\n    this=0x7fa0280011c0, storeType=3 '\\003', keys=..., \n    encryptionKeys=std::__cxx11::list = {...}, tunnels=..., \n    isPublic=<optimized out>, publishedTimestamp=1792524754, \n    isPublishedEncrypted=false)\n    at /usr/src/debug/i2pd-3.0.0-1.fc44.1.x86_64/libi2pd/LeaseSet.cpp:969\n#3  std::_Construct<i2p::data::LocalLeaseSet2, unsigned char const&, i2p::data::PrivateKeys&, std::__cxx11::list<std::shared_ptr<i2p::crypto::LocalEncryptionKey const>, std::allocator<std::shared_ptr<i2p::crypto::LocalEncryptionKey const> > >&, std::vector<std::shared_ptr<i2p::tunnel::InboundTunnel>, std::allocator<std::shared_ptr<i2p::tunnel::InboundTunnel> > > const&, bool, unsigned long&, bool&> (__p=0x7fa0280011c0) at /usr/include/c++/16/bits/stl_construct.h:133\n#4  std::allocator_traits<std::allocator<void> >::construct<i2p::data::LocalLeaseSet2, unsigned char const&, i2p::data::PrivateKeys&, std::__cxx11::list<std::sh--Type <RET> for more, q to quit, c to continue without paging--\nared_ptr<i2p::crypto::LocalEncryptionKey const>, std::allocator<std::shared_ptr<i2p::crypto::LocalEncryptionKey const> > >&, std::vector<std::shared_ptr<i2p::tunnel::InboundTunnel>, std::allocator<std::shared_ptr<i2p::tunnel::InboundTunnel> > > const&, bool, unsigned long&, bool&> (__p=0x7fa0280011c0)\n    at /usr/include/c++/16/bits/alloc_traits.h:845\n#5  std::_Sp_counted_ptr_inplace<i2p::data::LocalLeaseSet2, std::allocator<void>, (__gnu_cxx::_Lock_policy)2>::_Sp_counted_ptr_inplace<unsigned char const&, i2p::data::PrivateKeys&, std::__cxx11::list<std::shared_ptr<i2p::crypto::LocalEncryptionKey const>, std::allocator<std::shared_ptr<i2p::crypto::LocalEncryptionKey const> > >&, std::vector<std::shared_ptr<i2p::tunnel::InboundTunnel>, std::allocator<std::shared_ptr<i2p::tunnel::InboundTunnel> > > const&, bool, unsigned long&, bool&> (this=0x7fa0280011b0, __a=...)\n    at /usr/include/c++/16/bits/shared_ptr_base.h:671\n#6  std::__shared_count<(__gnu_cxx::_Lock_policy)2>::__shared_count<i2p::data::LocalLeaseSet2, std::allocator<void>, unsigned char const&, i2p::data::PrivateKeys&, std::__cxx11::list<std::shared_ptr<i2p::crypto::LocalEncryptionKey const>, std::allocator<std::shared_ptr<i2p::crypto::LocalEncryptionKey const> > >&, std::vector<std::shared_ptr<i2p::tunnel::InboundTunnel>, std::allocator<std::shared_ptr<i2p::tunnel::InboundTunnel> > > const&, bool, unsigned long&, bool&> (\n    __a=..., this=0x7fa04b7fd648, __p=@0x7fa04b7fd640: 0x0)\n    at /usr/include/c++/16/bits/shared_ptr_base.h:1037\n#7  std::__shared_ptr<i2p::data::LocalLeaseSet2, (__gnu_cxx::_Lock_policy)2>::__shared_ptr<std::allocator<void>, unsigned char const&, i2p::data::PrivateKeys&, --Type <RET> for more, q to quit, c to continue without paging--\nstd::__cxx11::list<std::shared_ptr<i2p::crypto::LocalEncryptionKey const>, std::allocator<std::shared_ptr<i2p::crypto::LocalEncryptionKey const> > >&, std::vector<std::shared_ptr<i2p::tunnel::InboundTunnel>, std::allocator<std::shared_ptr<i2p::tunnel::InboundTunnel> > > const&, bool, unsigned long&, bool&> (\n   "
     }
    ]
   },
@@ -346,6 +378,28 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7233,
+     "title": "Sniffer: Don't count reads without new data as attempts",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-22T19:43:49Z",
+     "updated_at": "2026-10-22T19:43:49Z",
+     "user": "fanymagnet",
+     "url": "https://github.com/XTLS/Xray-core/pull/7233",
+     "body": "## Problem\n\nTLS sniffing on a VLESS + Vision server almost always fails when the traffic comes through another Xray server with VLESS + Vision (a proxy chain). `routeOnly` gets no domain, and the connection is routed by IP only.\n\n```\nclient → server 1 → server 2 → internet\n```\n\nAll hops use VLESS + REALITY + `xtls-rprx-vision`. Server 2 has sniffing on the inbound and domain rules above an IP rule:\n\n```json\n\"sniffing\": { \"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"routeOnly\": true }\n```\n```json\n{ \"domain\": [\"geosite:habr\"], \"outboundTag\": \"direct-out\" },\n{ \"ip\": [\"geoip:ru\"], \"outboundTag\": \"block-out\" }\n```\n\nOpening https://habr.com in Chrome is blocked by the `geoip:ru` rule. The server 2 log has no `sniffed domain:` line for any `:443` connection, and the routing decision is made in under a millisecond, without waiting for the 200 ms sniffing deadline:\n\n```\nproxy/vless/inbound: firstLen = 1186\nproxy/vless/inbound: received request for tcp:178.248.237.68:443\nfrom 0.0.0.0:0 accepted tcp:178.248.237.68:443 [vless-tcp-reality-os-in -> block-out]\napp/dispatcher: taking detour [block-out] for [tcp:178.248.237.68:443]\n```\n\nWhen the client connects to server 2 directly, the domain is sniffed.\n\n## Root cause\n\n1. **TLS record size.** `crypto/tls`, uTLS and REALITY use dynamic record sizing: for the first 128 KB of a connection a record is limited to `tcpMSSEstimate = 1208` bytes. In TLS 1.3 that leaves 1208 − 5 (record header) − 16 (AEAD tag) − 1 (inner content type) = **1186 bytes** of plaintext per record, which is the `firstLen = 1186` above.\n2. **Client → server 1.** The client sends the whole ClientHello (~1.7–2 KB with `X25519MLKEM768`) as one Vision frame. The first record carries 44 bytes of VLESS request header, 21 bytes of Vision frame header and the first 1121 bytes of the ClientHello; the second record carries the rest of it plus padding. Server 1 reads the ClientHello as two chunks: 1121 bytes and the remainder.\n3. **Server 1 → server 2.** The VLESS outbound on server 1 writes each chunk as a separate Vision frame with its own padding. For the first frame, 44 + 21 + 1121 = 1186 bytes fill the first record exactly, so the frame's padding goes into a record of its own. With the default testseed `{900, 500, 900, 256}`, content of 900 bytes or more gets 0–255 bytes of padding, so this happens unless the padding is 0, i.e. in about 255 of 256 connections.\n4. **VisionReader on server 2.** For the padding-only record, [`VisionReader.ReadMultiBuffer`](https://github.com/XTLS/Xray-core/blob/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74/proxy/proxy.go#L235-L243) strips the padding and returns an empty `MultiBuffer` with a nil error.\n5. **Sniffer.** `cachedReader.Cache` gets no new data, but the [sniffing loop](https://github.com/XTLS/Xray-core/blob/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74/app/dispatcher/default.go#L392-L421) runs the sniffers again on the same 1121 bytes. `SniffTLS` returns `ErrNoClue` again, because the TLS record is still incomplete, and the second `ErrNoClue` ends sniffing with `errSniffingTimeout`. The rest of the ClientHello arrives with the next read, too late.\n\nWithout server 1 there is no padding-only record between the two parts of the ClientHello, so two reads are enough.\n\n## Reproduction\n\nThe chain was reproduced on one machine:\n\n- Everything runs in an unprivileged network namespace (`unshare -rn`) with loopback MTU 1500.\n- A local HTTPS server plays both `habr.com` and the REALITY target.\n- **Client:** SOCKS inbound with sniffing and `routeOnly`, VLESS + REALITY + Vision outbound to server 1, or directly to server 2.\n- **Server 1:** VLESS + REALITY + Vision inbound without sniffing, VLESS + REALITY + Vision outbound to server 2.\n- **Server 2:** VLESS + REALITY + Vision inbound with sniffing and `routeOnly`. `domain:habr.com` goes to `freedom`, redirected to the local server; `0.0.0.0/0` and `::/0` go to `blackhole`.\n- **ClientHello sources:**\n  - Headless Chrome 156 through `socks4://`, so t"
+    },
+    {
+     "number": 7232,
+     "title": "Fix linux IPv6 process routing",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-22T17:20:41Z",
+     "updated_at": "2026-10-22T17:20:41Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7232",
+     "body": "小端序处理的bug\nclose #7227"
+    },
     {
      "number": 7220,
      "title": "TLS handshake delays with fingerprint: chrome in Happ 4.5.4 (Xray-core 26.9.9, VLESS + XHTTP + REALITY)",
@@ -1137,17 +1191,6 @@
      "user": "kastov",
      "url": "https://github.com/XTLS/Xray-core/pull/6311",
      "body": "```json\r\n{\r\n  \"protocol\": \"vless\",\r\n  \"settings\": {\r\n    \"decryption\": \"none\",\r\n    \"flow\": \"xtls-rprx-vision\",\r\n    \"clients\": [\r\n      {\r\n        \"id\": \"27848739-7e62-4138-9fd3-098a63964b6b\",\r\n        \"email\": \"home@example.com\"\r\n      },\r\n      {\r\n        \"id\": \"ac04551d-6ebf-4685-86e2-17c12491f7f4\",\r\n        \"email\": \"roam@example.com\"\r\n      }\r\n    ],\r\n    \"reverses\": [\r\n      {\r\n        \"tag\": \"reverse-out\",\r\n        \"email\": [\r\n          \"home@example.com\",\r\n          \"roam@example.com\"\r\n        ]\r\n      }\r\n    ]\r\n  }\r\n}\r\n```"
-    },
-    {
-     "number": 7207,
-     "title": "docs(readme): add 3X-UI AUTO NGINX to One Click",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-20T12:08:24Z",
-     "updated_at": "2026-10-20T17:22:27Z",
-     "user": "xPROMSx",
-     "url": "https://github.com/XTLS/Xray-core/pull/7207",
-     "body": "\n## Summary\n\nAdd [3X-UI AUTO NGINX](https://github.com/xPROMSx/3x-ui-auto-nginx) to **Installation → One Click**.\n\nThis free, open-source installer helps users deploy the official **3X-UI/Xray** on a clean VPS without manually assembling the surrounding Nginx, TLS, networking, and client configuration.\n\n## Why this project\n\n- **Self-hosted REALITY and HTTPS:** Uses the user's own domain, a local HTTPS cover site, and Nginx SNI routing to share public TCP/443 between REALITY, the panel, and HTTPS transports. Hysteria2 uses UDP/443.\n- **Safer management exposure:** The panel and subscription backends bind to loopback and are accessed through Nginx over HTTPS, rather than exposing their internal ports publicly. Let's Encrypt certificates are issued and renewed automatically.\n- **Practical security measures:** Configures UFW with SSH-access safeguards; optionally adds Fail2ban, system security updates, and encrypted DNS.\n- **Ready to use, easier to recover:** Preconfigures REALITY, XHTTP, and Hysteria2; can generate an initial client and subscription link; includes a **manual** Backup/Restore utility. The repository has CI and real Xray/Nginx integration tests.\n\n**Requirements:** A clean VPS running Ubuntu 24.04/26.04 or Debian 13, two domains, and root access. **Fresh install/full reinstall only; this is not an in-place updater.**\n\n[English documentation](https://github.com/xPROMSx/3x-ui-auto-nginx/blob/main/README_EN.md)\n\n## Scope\n\nOne link added to `README.md`. No code changes.\n"
     }
    ],
    "comments": [
@@ -1933,20 +1976,22 @@
      "user": "thatssoheil",
      "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-6304310683",
      "body": "Reproduced at `92ccc939` (v26.10.17) with the configs and target from the report: local storage, 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30`, client `kill -9` 2 s in.\n\n```\nstore after kill+2s:  33,133,850 bytes    89 objects\n+8s:                 132,305,694 bytes   298 objects\n+16s:                242,290,542 bytes   576 objects\n+22s:                242,290,542 bytes   576 objects   (whole remaining body)\n```\n\nThe server logs nothing after the client is gone. Same shape as the report (246.9 MB / 607 objects), on this box with a local backend.\n\nMechanism at main, confirming the trace: `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`) and only the connection's `onClose` clears it (`:234`); `collect()` skips active sessions (`:267-269`), so nothing is collected while the server-side connection lives. That connection ends only when the inbound handler returns, and nothing tests peer liveness: `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing, `holeTimeout` needs a later segment to exist, EOF needs a `.end` object. On the write side there is no bound on unconsumed data: `walWriter.Write` buffers and `flushLocked` posts uploads (`wal.go:73-91`, `:127-156`); the semaphore in `upload` bounds concurrent `Put`s, not backlog.\n\nPlan (narrow, no protocol change - the peer already acks by deleting consumed segments):\n\n1. `walWriter` tracks which of its own segments the peer has not deleted yet. The check is a `List` of its own prefix, only while it has unconsumed segments and paced so a healthy reader costs no extra calls; it escalates to the poll interval once a cap is reached.\n2. `Write` blocks while more than N segments are unconsumed, so the inbound handler stops pulling from the target instead of filling storage (this is the missing backpressure).\n3. If the oldest unconsumed segment stays longer than `holeTimeout`, the connection closes with an error; `onClose` releases `active` and `collect()` drops the session.\n\nTests: writer-level (blocks at the cap, resumes when the fake peer deletes, errors when nothing is deleted), listener-level (active released, folder collected), plus the reproduction above as the acceptance leg (storage stops growing at the cap, connection closes, folder is collected).\n\nIf you would rather have an explicit heartbeat object per session, tell me and I will implement that shape instead. Branch: `fix/xdrive-unconsumed-backpressure`.\n"
-    },
-    {
-     "id": 6296872193,
-     "issue": 7207,
-     "issue_title": "docs(readme): add 3X-UI AUTO NGINX to One Click",
-     "created_at": "2026-10-20T17:22:27Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7207#issuecomment-6296872193",
-     "body": "1 watch 2 fork 37 star ("
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 2808,
+     "title": "Self-hosted: optional per-config update endpoint for in-app fleet failover/rotation",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-07-06T20:07:21Z",
+     "updated_at": "2026-10-22T17:58:18Z",
+     "user": "wintergenius",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2808",
+     "body": "## Summary\n\nAn optional, opt-in improvement for self-hosted users: let a `SelfHosted` config include the operator's own update endpoint together with a pinned public key, so the client can periodically pull a refreshed config from it. This gives self-hosters automatic failover / rotation across their own fleet of servers. It is purely additive and off by default.\n\n## Problem\n\nSelf-hosting is great, but a single server occasionally goes down — the hosting provider, a block, or just a crash. So people who self-host usually run a small fleet of servers rather than one. Today the app only understands static configs: when a server goes down, the user has to manually switch between separate configs. There is no way to do failover or rotation across your own infrastructure from inside the app.\n\n## Proposal\n\nAdd an optional field to a self-hosted config: the operator's update endpoint plus a pinned public key. When those fields are present, the client periodically fetches a refreshed config from that endpoint, verifies the response signature against the pinned key, and applies it (server list / active server / DNS, etc.). Properties:\n\n- **opt-in** — only active when the imported config includes these fields;\n- **scoped** — only for user-imported `SelfHosted` configs;\n- **verified** — the response must be signed by the key pinned at import time, so a config can only ever update itself from the operator who issued it.\n\nIn practice the operator (the self-hoster) runs a tiny endpoint that returns the current best config for their fleet, and the app follows it automatically instead of the user re-importing configs by hand.\n\n## It fits the existing code well\n\n*(paths/lines as of tag 4.8.19.0)*\n\n- The `SelfHosted` config type and a per-config `api_endpoint` field already exist — [apiDefs.h (ConfigType)](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/core/api/apiDefs.h#L8-L16) and [apiEndpoint key](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/core/api/apiDefs.h#L26).\n- The client already knows how to fetch a config from a remote source and apply it (containers / hostName / DNS) — [fillServerConfig()](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/ui/controllers/api/apiConfigsController.cpp#L159).\n- The request base URL for those fetches is a single settable value, not hardcoded at the call sites — [Settings::setGatewayEndpoint()](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/settings.cpp#L505) — so the same fetch machinery can target a per-config endpoint.\n- The architecture already supports third-party operators distributing configs through the app — the external-premium / external-trial service types in [apiUtils::getConfigType()](https://github.com/amnezia-vpn/amnezia-client/blob/4.8.19.0/client/core/api/apiUtils.cpp#L85-L124). A self-hoster with a fleet is the same shape: they would just point at their own control plane.\n\n## Result\n\nMulti-server self-hosting gets real, in-app failover and rotation across your own fleet, via a small, opt-in, signature-verified mechanism that reuses machinery already present in the client. Happy to help with a PR or a test config if the direction is interesting.\n\n---\n\n**Reference server implementation** (runnable, clean-room, MIT): **https://github.com/wintergenius/Fleetcore** — it speaks the exact wire format this proposal implies (`GET /v1/config` → an Ed25519-signed `vpn://…` config), so the whole loop can be run with `docker run`. Details in the comment below.\n"
+    },
     {
      "number": 3316,
      "title": "fix: server removal navigation and sheet reopen",
@@ -2115,6 +2160,15 @@
    ],
    "comments": [
     {
+     "id": 6347601131,
+     "issue": 2808,
+     "issue_title": "Self-hosted: optional per-config update endpoint for in-app fleet failover/rotation",
+     "created_at": "2026-10-22T17:58:18Z",
+     "user": "badm18",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2808#issuecomment-6347601131",
+     "body": "go go go +1"
+    },
+    {
      "id": 6326434386,
      "issue": 3263,
      "issue_title": "Windows 11 App-based split tunneling does not work; breaks connection state UI",
@@ -2167,15 +2221,6 @@
      "user": "Atossy",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3304#issuecomment-6303346002",
      "body": "I'm having the exact same problem. Android 17, One UI 9.0."
-    },
-    {
-     "id": 6297535484,
-     "issue": 3300,
-     "issue_title": "[Windows][Premium] Tunnel DNS rewrites chatgpt.com / api.openai.com to a proxy that drops ~70% of TLS handshakes (Codex fails with os error 10053)",
-     "created_at": "2026-10-20T17:56:24Z",
-     "user": "eshinsimon",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3300#issuecomment-6297535484",
-     "body": "We found a workaround on Windows 11 with Amnezia Premium 5.0.3.0.\nDisabling AmneziaDNS did not remove the DNS rewriting: OpenAI domains still resolved to **57.129.144.160.**\nWe configured Windows to use Cloudflare DNS-over-HTTPS specifically for chatgpt.com, openai.com, and their subdomains:\n\n- Resolvers: 1.1.1.1 and 1.0.0.1\n- DoH AutoUpgrade = true\n- AllowFallbackToUdp = false\n- Windows NRPT rules directing these domains to those resolvers\n\nAfter clearing the DNS cache and reconnecting the VPN, OpenAI domains resolved to their public Cloudflare addresses. ChatGPT’s [/cdn-cgi/trace](https://chatgpt.com/cdn-cgi/trace) showed **NL**, matching the selected VPN country, instead of **GB**.\n\nOver approximately 70 minutes, Codex logged 142 model requests with no TLS handshake failures. Two separate WebSocket resets occurred, but both recovered automatically.\nThis bypasses the problematic DNS redirection while keeping the connection through the VPN.\n\nPowerShell commands we used, run as Administrator:\n```\nSet-DnsClientDohServerAddress `\n  -ServerAddress '1.1.1.1','1.0.0.1' `\n  -AutoUpgrade $true `\n  -AllowFallbackToUdp $false\n\nAdd-DnsClientNrptRule `\n  -Namespace 'chatgpt.com','.chatgpt.com','openai.com','.openai.com' `\n  -NameServers '1.1.1.1','1.0.0.1' `\n  -Comment 'OpenAI via encrypted DNS'\n\nClear-DnsClientCache\n```"
     }
    ]
   },

@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-23T17:06:29Z",
- "since": "2026-10-21T17:06:29Z",
+ "generated_at": "2026-10-23T21:24:17Z",
+ "since": "2026-10-21T21:24:17Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -47,17 +47,6 @@
      "user": "JohnWatsoon",
      "url": "https://github.com/net4people/bbs/issues/676",
      "body": "Measurements from several Iran ⇄ Europe server pairs (datacenter, 2 vCPU each), October 2026.\n\n## What gets through\n\nSince early October 2026, on the routes we use, TCP, UDP, GRE, IPIP, SCTP and ESP from Iran to abroad are cut after a few packets. Only ICMP passes reliably. Base RTT is about 40 ms, and random loss is 0.2–2 %, with no relation to load.\n\n## Packet size\n\n- At first, ICMP echo payloads above about 640 bytes were dropped.\n- Since at least 2026-10-12, full 1500-byte ICMP packets pass again in both directions with DF set: 0–0.5 % loss from 640 to 1472 bytes, no fragmentation.\n- Some hosts still have a route `mtu lock 680`, so check `ip route get <peer>` first.\n\n## Packet-rate cap\n\n- Kharej → Iran delivers at most about 50–55k ICMP packets/s, shared by every ICMP type. That is about 33 MB/s at a 640 B payload.\n- Past about 45k pps a queue builds (p99 one-way delay +300 ms) and loss rises.\n- With 1400 B payloads the same path gave 27.5 MB/s down and 26 MB/s up, with 0.3–0.8 % retransmission (3–5 % at 640 B). The per-packet limit appears to bind, not bytes.\n\n## Volume-triggered reroute\n\n- Twice on 2026-10-12, total ICMP held above ~30 MB/s for a few seconds (34.5 and 41.5 MB/s).\n- 5–30 s later, the traffic was rerouted inside Iran (base RTT 40 → 76 ms) for several minutes.\n- On the new route, bulk transfers collapse to about 2 MB/s with 50–90 % loss, while light traffic is fine.\n- Runs at or below ~27 MB/s never triggered it.\n- This looks like a volume-based reaction, not a protocol classifier. Has anyone seen the same on other ASes?\n\n## One-way ICMP blocks\n\n- On some Iran IPs, echo requests from Iran to abroad are dropped (100 % loss), while pings from abroad to the same Iran IP work.\n- The block comes and goes from day to day.\n- Swapping direction works around it: Kharej sends the requests and Iran answers. Linux on the Iran side then also answers every request itself, so `OutEchoReps` = 2 × `InEchos` in `/proc/net/snmp` unless `icmp_ratemask` or `icmp_echo_ignore_all` is changed.\n- Non-echo ICMP types (timestamp 13/14, info 15/16, mask 17/18) pass on the routes we tried.\n\n## CDN\n\n- Iran → Cloudflare → Kharej over `wss`: every variant without ECH failed to connect. The block comes right after the TLS handshake, which points to SNI filtering.\n- With ECH it works: 44–48 MB/s down and up to 82 MB/s up with 4 sessions, RTT 109–116 ms (CDN base 86 ms).\n\n## Tooling\n\nThe measurements were taken with WatTunnel, an open-source (MIT) tunnel I maintain. Full tables and method are here: https://github.com/JohnWatsoon/WatTunnel/blob/main/docs/TECHNICAL.md#icmp-path-limits-and-pacing\n\nQuestions I'd like other data on:\n1. Is the ~30 MB/s reroute threshold per destination IP, per source AS, or global?\n2. Has anyone else seen the 640 B limit lifted on other routes?"
-    },
-    {
-     "number": 519,
-     "title": "Leak of Geedge Networks internal documents (100,000+ from Jira, Confluence, GitLab)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-09-09T16:07:38Z",
-     "updated_at": "2026-10-21T20:16:24Z",
-     "user": "wkrp",
-     "url": "https://github.com/net4people/bbs/issues/519",
-     "body": "We have discussed the Chinese company [Geedge Networks](https://www.geedgenetworks.com/) (积至). Last year, there was the news that [Geedge had provided equipment for VPN blocking in Myanmar](https://github.com/net4people/bbs/issues/369#issuecomment-2195258977). One of the founders of the company is [方滨兴 (Fang Binxing)](https://en.wikipedia.org/wiki/Fang_Binxing), the famous \"father of the Great Firewall\". Another Geedge principal, [郑超 (Zheng Chao)](https://github.com/net4people/bbs/issues/369#issuecomment-2195455424), is a coauthor of censorship-related research papers we have discussed: #275, #282, #444.\n\nToday, there are many news articles and reports about a leak of Geedge Networks internal documents, including from Jira (bug tracker), Confluence (wiki), and GitLab (source code). They say that several news organizations and technologists have worked together for a year to analyze the documents. This is the primary reporting from the people who worked directly with the documents, as best as I have been able to determine:\n\n* *The Globe and Mail*: [Leaked files show a Chinese company is exporting the Great Firewall's censorship technology](https://www.theglobeandmail.com/world/article-leaked-files-show-a-chinese-company-is-exporting-the-great-firewalls/) ([archive](https://web.archive.org/web/20250909115204/https://www.theglobeandmail.com/world/article-leaked-files-show-a-chinese-company-is-exporting-the-great-firewalls/))\n* *Der Standard*: [Wie China seine Totalüberwachung des Internets ins Ausland exportiert](https://www.derstandard.at/consent/tcf/story/3000000286721/wie-china-seine-great-firewall-ins-ausland-exportiert) ([archive](https://archive.is/dCXZQ))\n* *Follow the Money*: [China exports censorship tech to authoritarian regimes – aided by EU firms](https://www.ftm.eu/articles/how-china-is-exporting-its-censorship-technology) ([archive](https://archive.is/EIGSZ))\n* InterSecLab: [The Internet Coup](https://interseclab.org/research/the-internet-coup/) ([archive](https://web.archive.org/web/20250909115332/https://interseclab.org/research/the-internet-coup/)) [PDF 76 pages](https://interseclab.org/wp-content/uploads/2025/09/The-Internet-Coup_September2025.pdf) ([archive](https://web.archive.org/web/20250909115839/https://interseclab.org/wp-content/uploads/2025/09/The-Internet-Coup_September2025.pdf))\n* Amnesty International: [Shadows of Control: Censorship and mass surveillance in Pakistan](https://www.amnesty.org/en/documents/asa33/0206/2025/en/) ([archive](https://web.archive.org/web/20250909115219/https://www.amnesty.org/en/latest/news/2025/09/pakistan-mass-surveillance-and-censorship-machine-is-fueled-by-chinese-european-emirati-and-north-american-companies/)) [PDF 102 pages](https://www.amnesty.org/en/wp-content/uploads/2025/09/ASA3302062025ENGLISH.pdf) ([archive](https://web.archive.org/web/20250909115238/https://www.amnesty.org/en/wp-content/uploads/2025/09/ASA3302062025ENGLISH.pdf))\n* Justice for Myanmar: [Silk Road of Surveillance](https://www.justiceformyanmar.org/stories/silk-road-of-surveillance) ([archive](https://web.archive.org/web/20250909115436/https://www.justiceformyanmar.org/stories/silk-road-of-surveillance)) [PDF 47 pages](https://jfm-files.s3.us-east-2.amazonaws.com/public/Silk+Road+of+Surveillance+EN.pdf) ([archive](https://web.archive.org/web/20250909121539/https://jfm-files.s3.us-east-2.amazonaws.com/public/Silk+Road+of+Surveillance+EN.pdf))\n\nAs far as I can tell, the actual contents of the leak have not been made public. Even so, there is a lot of information across these public articles and reports. They include, at least, evidence of exports to other contries including Myanmar, Pakistan, Ethiopia, Kazakhstan, and at least one other unidentified country; operation in the Chinese provinces of Xinjiang, Jiangsu and Fujian; technical information about Geedge's products; and collaboration with [MESA](https://web.archive.org/web/20241202193832/https://mesalab.cn/), a research lab at the Chinese Academ"
     }
    ],
    "comments": [
@@ -96,20 +85,22 @@
      "user": "wkrp",
      "url": "https://github.com/net4people/bbs/issues/678#issuecomment-6329397459",
      "body": "I will close this because it looks like you are just promoting your service."
-    },
-    {
-     "id": 6325599213,
-     "issue": 519,
-     "issue_title": "Leak of Geedge Networks internal documents (100,000+ from Jira, Confluence, GitLab)",
-     "created_at": "2026-10-21T20:16:24Z",
-     "user": "wkrp",
-     "url": "https://github.com/net4people/bbs/issues/519#issuecomment-6325599213",
-     "body": "> 9\\. The reference to a \"High Entropy\" pseudo protocol is potentially interesting in light of [\"How the Great Firewall of China Detects and Blocks Fully Encrypted Traffic\"](https://gfw.report/publications/usenixsecurity23/en/).\n\nThere is analysis of an entropy-related function in QDPI / Qosmos ixEngine in #677. Long story short, it does not appear to apply the exact conditions as in \"How the Great Firewall of China Detects and Blocks Fully Encrypted Traffic\", but it is similar in its calculation of a population count of a memory buffer."
     }
    ]
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
+    {
+     "number": 1400,
+     "title": "Add signing to the macOS workflow",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-22T14:17:32Z",
+     "updated_at": "2026-10-23T19:09:36Z",
+     "user": "fulldecent",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400",
+     "body": "Please add binary signing to the continuous deployment workflow.\n\nThis will solve the problem that I can't open the binary.\n\n<img width=\"372\" height=\"428\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a462eccd-8e74-44c6-b056-e418449c22ca\" />\n\n> Apple could not verify “yggdrasil-0.5.14-macos-arm64.pkg” is free of malware that may harm your Mac or compromise your privacy.\n\n## Follow-on work\n\nWhile doing this, please also add attestations for the build process. Here is a simple example of a full CD process that also attaches GitHub build attestations to each automated releases.\n\nhttps://github.com/fulldecent/rust-template"
+    },
     {
      "number": 1401,
      "title": "debug_remoteGetPeers lets any node enumerate another node's direct peers",
@@ -120,17 +111,6 @@
      "user": "robertostrowskijagoda",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1401",
      "body": "   Any node on the network can call the debug handlers (debug_remoteGetSelf, debug_remoteGetPeers,\n   debug_remoteGetTree) of any other node through the protocol's proto handler, and the target\n   answers with the public keys of its direct peers. There is no way for an application that embeds\n   yggdrasil-go as a library (core.New + ipv6rwc, no admin socket) to turn these replies off.\n\n   For apps that run a node on a user's desktop and let the user's phones peer with it, this exposes\n   which devices are connected to whom (a social graph), to anyone on the mesh.\n\n   Suggestion: a core option (e.g. config `NodeInfoPrivacy`-like flag or a `DisableRemoteDebug`\n   setting / core.SetDebugHandlersEnabled(false)) that makes the node ignore remote debug requests,\n   ideally defaulting to off for embedded use. Reproduced with v0.5.14."
-    },
-    {
-     "number": 1400,
-     "title": "Add signing to the macOS workflow",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-22T14:17:32Z",
-     "updated_at": "2026-10-23T12:49:14Z",
-     "user": "fulldecent",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400",
-     "body": "Please add binary signing to the continuous deployment workflow.\n\nThis will solve the problem that I can't open the binary.\n\n<img width=\"372\" height=\"428\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a462eccd-8e74-44c6-b056-e418449c22ca\" />\n\n> Apple could not verify “yggdrasil-0.5.14-macos-arm64.pkg” is free of malware that may harm your Mac or compromise your privacy.\n\n## Follow-on work\n\nWhile doing this, please also add attestations for the build process. Here is a simple example of a full CD process that also attaches GitHub build attestations to each automated releases.\n\nhttps://github.com/fulldecent/rust-template"
     },
     {
      "number": 1396,
@@ -233,6 +213,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6372697293,
+     "issue": 1400,
+     "issue_title": "Add signing to the macOS workflow",
+     "created_at": "2026-10-23T19:09:36Z",
+     "user": "fulldecent",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400#issuecomment-6372697293",
+     "body": "lol, you overestimate my dad"
+    },
     {
      "id": 6367806849,
      "issue": 1401,
@@ -369,17 +358,6 @@
      "user": "pobregat0",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2606",
      "body": "DSASigner::Sign ignores the result of EVP_DigestSign. When the OpenSSL provider refuses DSA, the signature buffer is left unset, d2i_DSA_SIG returns NULL and DSA_SIG_get0 dereferences it - this is the crash from the backtrace in the issue. The non-EVP branch has the same problem with DSA_do_sign.\n\nBoth branches now check the result, log an error and leave the signature zeroed instead of passing stack garbage on.\n\nMeasured with a harness that takes the key away from the signer, which is the state the reporter's machine ends up in: without the change a segmentation fault, with it the call returns and the signature stays zero; with the key in place the signature is still produced in full. Build without warnings, unit tests pass.\n\nFix for #2585"
-    },
-    {
-     "number": 2415,
-     "title": "Add a \"Start graceful restart\" button at `127.0.0.1:7070/?page=commands`",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-06-19T07:13:47Z",
-     "updated_at": "2026-10-21T18:17:57Z",
-     "user": "pasabanov",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2415",
-     "body": "Currently only the \"Start graceful shutdown\" and \"Force shutdown\" buttons are present in the commands page.\n\nI propose adding a \"Start graceful restart\" button, like the one in the Java I2P webconsole.\n\nIt would be beneficial since it seems to me that the workarounds are not working properly or are inconvenient:\n- Currently you would either execute `service i2pd restart`, but in my experience it never performed *graceful* restart,\n- or manually press \"Start graceful shutdown\", wait 10 minutes and then manually start i2pd again, which is not very convenient.\n\nAdding this button would result in a convenient and *explicit* way to perform graceful restart."
     }
    ],
    "comments": [
@@ -411,15 +389,6 @@
      "body": "AEAD verification error is not caused by clock"
     },
     {
-     "id": 6323273261,
-     "issue": 2415,
-     "issue_title": "Add a \"Start graceful restart\" button at `127.0.0.1:7070/?page=commands`",
-     "created_at": "2026-10-21T18:17:56Z",
-     "user": "hizani",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2415#issuecomment-6323273261",
-     "body": "it is totally possible on all unix systems.\n\n> i2pd has no way to restart itself\n\nany process can fork a copy of itself. We can use it. \n\noriginal i2pd process:\n1. gracefully closes all jobs and connections\n2. creates its clone with fork()\n3. kills itself \n\nthe forked process:\n1. calls exec() on i2pd binary path taken from its own arguments to load relevant version in case of an update\n2. newly loaded binary will restart everything as usual"
-    },
-    {
      "id": 6315368309,
      "issue": 2601,
      "issue_title": "Network connection issues",
@@ -436,6 +405,17 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7244,
+     "title": "DNS: honor cancellation while waiting for a shared lookup",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-23T19:51:29Z",
+     "updated_at": "2026-10-23T20:50:06Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7244",
+     "body": "This fixes per-caller DNS timeouts and cancellation being ignored while waiting for another caller's in-flight lookup. In a normal JSON configuration with an HTTP inbound, the official Xray 26.10.21 executable delayed DNS fallback and HTTP request completion for about 4.8 seconds despite a 300 ms DNS timeout. With this change, the same operation completes in about 320 ms.\r\n\r\n### How this affects normal operation\r\n\r\nThe trigger is overlapping lookups for the same name and address families through the same nameserver, without a usable cached answer. They share one `singleflight` query. If the first lookup outlives a later caller's deadline or cancellation, that later caller currently remains blocked in `Group.Do` until the shared lookup finishes.\r\n\r\nWith a slow or unresponsive DNS server, this has concrete consequences:\r\n\r\n- **DNS-dependent connection setup can keep waiting beyond the caller's DNS budget.** A timeout does not promptly return control to the caller. In Xray's serial DNS mode, the next resolver is tried only after `client.QueryIP` returns, so a blocked lookup also delays that fallback attempt.\r\n- **Cancellation does not promptly release the waiting goroutine.** When a request is abandoned or its context is cancelled, its lookup still waits for the first caller's query to finish. Repeated cancellations can temporarily accumulate waiting goroutines and resources held by their callers; this is not a permanent leak once the shared query ends.\r\n- **A timed-out lookup can report a late success.** If the shared query eventually succeeds, the caller receives that answer instead of the timeout that expired while it was waiting.\r\n\r\nThese effects require the shared query to outlive the waiting caller; ordinary coalesced lookups that complete within their deadlines and usable cache hits are unaffected. The configuration-only reproduction below demonstrates the fallback and HTTP request delays; the separate API reproduction demonstrates a missed deadline and late success.\r\n\r\n### Change\r\n\r\nUse `DoChan` and select between the shared result and the caller's cancellation. An already-cancelled caller returns before joining or starting work. The query key, upstream request, cache publication and first caller's ownership of the shared query remain unchanged. Cancelling a waiter does not forget the key, duplicate the lookup or cancel another caller's query. This does not introduce an independent shared-query lifetime policy.\r\n\r\n### Configuration-only reproduction: delayed fallback and HTTP connection setup\r\n\r\nAlso reproduced using the **official Xray 26.10.21 Windows release binary**,\r\nlaunched with `xray.exe run -config config.json`, and ordinary HTTP GETs through\r\nits HTTP proxy. No embedded caller, Xray API/RPC, Lua script or application\r\nextension is involved. Two loopback DNS-over-TCP peers and a loopback HTTP\r\norigin make resolver behavior and timings repeatable.\r\n\r\nThe relevant normal configuration is:\r\n\r\n```json\r\n{\r\n  \"dns\": {\r\n    \"queryStrategy\": \"UseIPv4\",\r\n    \"enableParallelQuery\": false,\r\n    \"servers\": [\r\n      {\"address\": \"tcp+local://127.0.0.1:15353\", \"timeoutMs\": 300,\r\n       \"serveStale\": true, \"serveExpiredTTL\": 1},\r\n      {\"address\": \"tcp+local://127.0.0.1:15354\", \"timeoutMs\": 300,\r\n       \"disableCache\": true}\r\n    ]\r\n  },\r\n  \"inbounds\": [\r\n    {\"listen\": \"127.0.0.1\", \"port\": 18080, \"protocol\": \"http\", \"settings\": {}}\r\n  ],\r\n  \"outbounds\": [\r\n    {\"protocol\": \"freedom\", \"settings\": {},\r\n     \"streamSettings\": {\"sockopt\": {\"domainStrategy\": \"UseIPv4\"}}}\r\n  ]\r\n}\r\n```\r\n\r\n1. The primary initially answers the HTTP destination's A query with the local\r\n   origin's IP and TTL 1; the first HTTP request succeeds.\r\n2. After 1.15 seconds, another HTTP request uses that stale answer and starts\r\n   Xray's built-in eight-second background refresh. The primary now delays its\r\n   response by six seconds and returns SERVFAIL; the fallback stays healthy.\r\n3. After another 1.2 seconds, the stale answer is no longer eligible to be\r\n "
+    },
     {
      "number": 7243,
      "title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
@@ -754,28 +734,6 @@
      "user": "hmdsefi",
      "url": "https://github.com/XTLS/Xray-core/pull/7223",
      "body": "`inbound.Manager.AddHandler` first puts the handler into `taggedHandlers` (or `untaggedHandlers`) and, when the manager is already running, then calls `handler.Start()` and returns its error. Nothing is undone when `Start` fails.\n\nThis is the path of `HandlerService.AddInbound` (`xray api adi`). If the new inbound cannot start, for example because one of its ports is already in use, the API returns the error but the handler stays in the manager. Adding it again with the same tag fails with `existing tag found` until it is removed by hand, and the workers that did start (the ports before the busy one in a port range) keep listening.\n\nNow a handler that fails to start is taken out of the manager again and closed, so the ports it opened are released and the tag can be used again. Startup is not affected: handlers from the config are only started later by `Manager.Start`.\n\nVerified with the new `TestAddHandlerFailedStart`, which adds a tagged and an untagged handler whose `Start` fails to a running manager, and then adds the tag again. On main it fails with:\n\n    handler \"in\" was not closed after failing to start\n    handler \"in\" is still registered after failing to start (1 handlers)\n\nWith this change it passes. I also checked it end to end with a dokodemo-door inbound on two ports where the second one was busy: on main the first port stayed bound after the failed add, and adding the inbound again after freeing the port failed with `existing tag found: in`. With the change the first port is free again and the second add works.\n\nAlso ran `go test ./app/proxyman/inbound/...` (also with `-race`), `go test ./testing/scenarios -run TestCommander`, `go vet ./app/proxyman/inbound/...`, gofmt and `go run ./infra/vformat/main.go -mode check -pwd ./`.\n"
-    },
-    {
-     "number": 7135,
-     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T01:29:50Z",
-     "updated_at": "2026-10-21T21:21:46Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135",
-     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
-    },
-    {
-     "number": 7221,
-     "title": "main: add check command for outbound health via burstObservatory",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T18:22:53Z",
-     "updated_at": "2026-10-21T18:26:40Z",
-     "user": "WhiteCyril",
-     "url": "https://github.com/XTLS/Xray-core/pull/7221",
-     "body": "Claude-Session: https://claude.ai/code/session_011EEvXGTJWNKRWRvWj1WMSD"
     }
    ],
    "comments": [
@@ -1165,47 +1123,44 @@
      "user": "eliotcougar",
      "url": "https://github.com/XTLS/Xray-core/pull/7212#issuecomment-6327675289",
      "body": "So, the private key was \"4\"… That's it… OMFG…\r\nThe world haven't been PWNd only because no-one cared to do that…"
-    },
-    {
-     "id": 6326836381,
-     "issue": 7135,
-     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "created_at": "2026-10-21T21:21:46Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6326836381",
-     "body": "Rebased onto latest main (v26.10.21); conflicts were only in `go.mod`/`go.sum`, resolved keeping the `ff1b50f` pin."
-    },
-    {
-     "id": 6324760723,
-     "issue": 7198,
-     "issue_title": "Fix fragmented TLS sniffing and add opt-in timeout rejection",
-     "created_at": "2026-10-21T19:32:53Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7198#issuecomment-6324760723",
-     "body": "是的我很久以前就知道这个问题了 但是提供配置项无法治本 只是延长而已 xray最终还是要创建出站连接的 而且我没有发现提供配置项对实际的连接有哪些好处 只有故意delay才能遇到这个问题 但是故意delay的人很明显可以选择delay更久 很多TLS服务器对此相当宽松"
-    },
-    {
-     "id": 6323463568,
-     "issue": 7198,
-     "issue_title": "Fix fragmented TLS sniffing and add opt-in timeout rejection",
-     "created_at": "2026-10-21T18:27:34Z",
-     "user": "hagz0r",
-     "url": "https://github.com/XTLS/Xray-core/pull/7198#issuecomment-6323463568",
-     "body": "To clarify the delayed-first-byte case: in a loopback reproduction using unmodified Xray and our tunnel's TCP/SOCKS code, a complete 517-byte TLS ClientHello with SNI `www.youtube.com`, sent 350 ms after SOCKS success, takes the direct outbound. Xray selects that fallback at around 200 ms, before the TLS data arrives. Sending the same ClientHello immediately selects the outbound specified by the domain rule. No fragmentation is needed to reproduce this.\n\nWould you be open to a separate, smaller PR addressing only this delayed-first-byte case, without the TLS reassembly changes?"
-    },
-    {
-     "id": 6322205110,
-     "issue": 7212,
-     "issue_title": "TLS client: Update built-in RootCAs to remove newly low-credit certs",
-     "created_at": "2026-10-21T17:24:19Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7212#issuecomment-6322205110",
-     "body": "`useSystemCA` 改为 `trustSystemCA` 默认 false\r\nos 校验完 bundle ca 再来一次取交集\r\n会不会更好？\r\n\r\n再极端点可以 core 启动几分钟后随机时间定时走路由模块拉 [mozilla certdata.txt](https://hg.mozilla.org/projects/nss/file/tip/lib/ckfw/builtins/certdata.txt) core 自己缓存起来在资产目录用来和 bundle ca 做交集替代吊销检查\r\n防止一些操作系统把自动更新关掉\r\n\r\n主要是除了 linux 没办法轻松的枚举系统当前有哪些 ca"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3321,
+     "title": "fix: allocate WireGuard client IP independently of peer order",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-23T20:17:27Z",
+     "updated_at": "2026-10-23T20:17:27Z",
+     "user": "wBaob",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3321",
+     "body": "Fixes #3261.\n\nSelect the numerically highest peer IPv4 address instead of the last entry to prevent duplicate IP allocation when peers are reordered.\n\nValidation: standalone Qt 6 harness, 1010 checks. Previous logic: 972 failures. Patched logic: 0 failures. git diff --check passed.\n\nFull application build and live VPN validation were not run."
+    },
+    {
+     "number": 3130,
+     "title": "[macOS 26.6.2] System-wide network deadlock in tun2socks/utun path triggered by Docker Desktop",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-05T11:50:44Z",
+     "updated_at": "2026-10-23T19:14:13Z",
+     "user": "sergiusd",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3130",
+     "body": "# [macOS 26.6.2] System-wide network deadlock in tun2socks/utun path triggered by Docker Desktop\n\n## Summary\n\nmacOS became completely unresponsive while AmneziaVPN was connected. The Apple-generated stackshot identified an explicit kernel lock cycle involving Docker Desktop and the input thread of the tunnel interface used by AmneziaVPN:\n\n```text\nDeadlock: com.docker.backend (Docker) [81977] thread 0x9c5f82\n  -> kernel_task [0] thread 0x91c3f9 \"dlil_input_utun22\"\n  -> com.docker.backend (Docker) [81977] thread 0x9c5f82\n\nBlocked by Deadlock: 58 tasks\n```\n\nThe deadlock blocked `WindowServer`, Finder, Dock, `runningboardd`, `powerd`, `mDNSResponder`, AmneziaVPN, `tun2socks`, Docker Desktop, browsers, terminals, and IDEs. Normal Force Quit and shutdown were impossible, so the Mac had to be powered off by holding the power button.\n\nThis appears related to #2933 and possibly #2897, but the trigger and final lock graph are different. In this case, the lock cycle formed immediately after Docker Desktop started and opened many outbound connections through Amnezia's `utun22` interface.\n\n## Environment\n\n- Hardware: MacBookPro18,2, Apple Silicon, 32 GB RAM\n- macOS: 26.6.2, build 25G83, arm64\n- AmneziaVPN: 5.0.1.5; bundle version `5.0.1 (5)`\n- Tunnel process: `/Applications/AmneziaVPN.app/Contents/MacOS/tun2socks`\n- Tunnel interface: `utun22`\n- Protocol path: most likely XRay/VLESS or another Amnezia mode using the external `tun2socks` process\n- Docker Desktop: 4.66.1, build 222799\n- Docker networking: gVisor; `UseVpnkit` enabled\n- LuLu 4.5.1 network extension was also active\n- ProtonVPN was installed but disconnected\n\n## Expected behavior\n\nStarting or using Docker Desktop while AmneziaVPN is connected should not deadlock the macOS networking stack. A failed socket or tunnel operation should return an error or time out without blocking unrelated applications, `WindowServer`, or system shutdown.\n\n## Actual behavior\n\nApplications progressively stopped responding, followed by Finder, Dock, `WindowServer`, and essential system services. Keyboard shortcuts, Force Quit, terminal access, and normal shutdown stopped working. A forced power-off was required.\n\nmacOS recorded the reset as:\n\n```text\nBoot failure count: 1\nBoot faults: btn_rst,finger_reset force_off\n```\n"
+    },
+    {
+     "number": 3320,
+     "title": "fix:  request local proxy location",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-23T17:09:42Z",
+     "updated_at": "2026-10-23T17:09:42Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3320",
+     "body": "add request for update config location"
+    },
     {
      "number": 3284,
      "title": "Xray: DNS Amnezia (172.29.172.254) блокируется на сервере новым Xray-core, клиент «подключён», но сайты не открываются",
@@ -1414,31 +1369,18 @@
      "user": "vkamn",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3299",
      "body": ""
-    },
-    {
-     "number": 3263,
-     "title": "Windows 11 App-based split tunneling does not work; breaks connection state UI",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-06T17:49:45Z",
-     "updated_at": "2026-10-21T20:59:53Z",
-     "user": "whizzed",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3263",
-     "body": "**Describe the bug**\nApps added to the 'App-based split tunneling' exclusion list still go through the tunnel.  The 'connect' button incorrectly shows disconnected state.\n\n\nSteps to reproduce the behavior:\n1. Add an application to the App split tunneling list\n2. Enable App split tunneling\n3. Press Connect (protocol doesn't matter)\n\nThe connect UI element 'spins' once and the ring stays white, with 'connect' text displayed. In this state the tunnel is actually connected and all apps listed in the app-based split tunneling exclusion list are routed through the tunnel.\n\n\n**Desktop (please complete the following information):**\n - OS: Windows 11\n - Version 26300.9550\n\nAmnezia client 5.0.3.0 Sep 18 2026\n\n*Additional context**\nThis issue started with the first client update following your big 'ddos' outage in summer, so client version 4.8.19-ish\n\n[AmneziaVPN.log](https://github.com/user-attachments/files/33118579/AmneziaVPN.log)\n[AmneziaVPN-service.log](https://github.com/user-attachments/files/33118578/AmneziaVPN-service.log)\n"
-    },
-    {
-     "number": 3304,
-     "title": "Android: auto-reconnect when the AmneziaWG tunnel stalls after idle (connection watchdog)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-19T19:55:05Z",
-     "updated_at": "2026-10-21T19:11:36Z",
-     "user": "Dragonsdeath",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3304",
-     "body": "AmneziaVPN 5.0.3.1 (AWG 3.1), Android 16, OnePlus 15.\nSelf-hosted AmneziaWG, mobile network (Russia), battery set\nto \"Unrestricted\" for AmneziaVPN.\n\nProblem\nAfter the phone has been idle with the screen off, the tunnel\nsometimes stalls: nothing works (Telegram, browser) until I\nmanually disconnect and reconnect in AmneziaVPN. It happens\nseveral times a day. A manual reconnect always fixes it\nimmediately.\n\nWhat we see on the server side\nWe captured traffic on our server during these episodes. While\nthe tunnel is stalled, no packets from the phone reach the server\nat all — no handshake initiation, nothing, for 4–44 minutes.\nOther devices on the same server work normally at the same time.\nTypical sequence: the phone wakes up, sends a few data packets\nwith the old session from a new NAT port (the mobile operator\nchanged it during sleep), the server drops them (keys older than\n180 s), and then the phone never sends a new handshake. A manual\nreconnect opens a new socket, the handshake completes in ~0.1 s,\nand traffic flows right away.\n\nFeature request: connection watchdog\nAn option to detect a stalled tunnel and restart it automatically,\nfor example:\n- if the latest handshake is older than ~140 s\n  (REKEY_AFTER_TIME + KEEPALIVE_TIMEOUT + REKEY_TIMEOUT, as in\n  wireguard-tools reresolve-dns) while the app has traffic to send,\n  or\n- if a periodic check through the tunnel (ping/HTTP) fails\n  N times in a row,\nthen recreate the socket and re-handshake — the same as a manual\nreconnect. Configurable interval and on/off switch.\n\nSimilar features exist in other clients: WG Tunnel (\"Restart\ntunnel on ping failure\"), mihomo-based clients (fallback groups\nwith health checks).\n\nServer-side keepalive does not help here: we tried\nPersistentKeepalive 25 on the server for this peer — the server\ncannot reach the phone after the operator's NAT mapping changes,\nonly the phone can recover by sending first.\n\nThank you for AmneziaVPN!"
     }
    ],
    "comments": [
+    {
+     "id": 6372778268,
+     "issue": 3130,
+     "issue_title": "[macOS 26.6.2] System-wide network deadlock in tun2socks/utun path triggered by Docker Desktop",
+     "created_at": "2026-10-23T19:14:12Z",
+     "user": "stone-w4tch3r",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3130#issuecomment-6372778268",
+     "body": "I encountered repeated macos crashed with amnezia ON and docker ON. Reproduced it multiuple times, for me having both ON resulkts in crash in about 1h\n\nThis started only today, strange\n\nI researched issue together with codex and asked it to upload info to github. Hope to help fixing it\n\nALL BELLOW THE LINE IS GENERATED BY CODEX GPT-6.1-SOL MEDIUM\n\n---\n\n## Additional occurrence: the same Docker/kernel lock cycle also occurs with AmneziaWG\n\nThis appears to match this issue's lock-cycle signature. The additional finding is that the later incident used `amneziawg-go`, not `tun2socks`. The observations below were extracted from local Apple diagnostic reports, running-process snapshots, PF rules, and Docker's installer log. They do not establish which component introduces the locking bug.\n\nAll incident times below are **October 23, 2026, UTC+05:00**. The preface above describes the user's experience that day; this comment is being posted on October 24.\n\n## Environment\n\n- Apple Silicon Mac, model identifier `Mac17,9`, 48 GB RAM.\n- macOS **26.7.1**, build **25G241**.\n- AmneziaVPN **5.0.3 (0)**; installer version **5.0.3.0**.\n- Docker Desktop **4.96.0 (243774)** in the earlier hang report and **4.96.3 (244472)** in the later report.\n- Docker's **Use kernel networking for UDP** setting was checked in the UI by the user and was **off**. This did not prevent recurrence.\n- The later working connection was managed by the root `AmneziaVPN-service`, with its child `amneziawg-go`, using `utun6` with MTU 1376.\n\nOther networking/security components were present and have not been isolated as variables:\n\n- Cisco AnyConnect Socket Filter Extension **4.10.02086**, active.\n- Amiconnect tunnel extension **1.15.2573/1**, active; its VPN reported connected.\n- Kaspersky system extension **12.2.0.32**, active.\n- VMware Fusion networking services and virtual bridges were present.\n\nThis is not a clean-room reproduction. These components are disclosed as possible confounders, not identified causes.\n\n## Recorded incidents\n\n### 1. First watchdog panic at 20:52\n\n`configd-2026-10-23-204953.ips` identifies its unresponsive queue as `IPConfigurationAgentQueue` and records the following wait chain:\n\n```text\nconfigd thread 1553334:\n  kernel mutex 0xfffffe000c2b1be0 owned by thread 21088\n\ncom.docker.backend [3742], thread 21088:\n  krwlock 0xfffffe000c2e4848 for reading owned by thread 1494558\n\nkernel_task [0], thread 1494558, \"dlil_input_utun22\":\n  kernel mutex 0x6ecd4ee646c791cd owned by thread 21088\n```\n\nThe final two threads form a cycle. `panic-full-2026-10-23-205224.0002.panic` then records:\n\n```text\nuserspace watchdog timeout: no successful checkins from configd (1 induced crashes) in 180 seconds\n```\n\n### 2. Further hangs at 21:12 and 21:13\n\nAfter the first reboot, two AmneziaVPN hang reports explicitly identify:\n\n```text\nDeadlock: com.docker.backend (Docker) [13485] thread 0xdb33 -> kernel_task [0] thread 0xb9ed \"dlil_input_utun22\" -> com.docker.backend (Docker) [13485] thread 0xdb33\n```\n\nThe reports list 35 and 37 tasks blocked by the deadlock. `tun2socks` and `AmneziaVPN-service` are among the blocked tasks. A shutdown-stall report was also generated before another reboot.\n\n### 3. Recurrence with AmneziaWG at 23:16; watchdog panic at 23:31\n\nAfter uninstalling and reinstalling AmneziaVPN, the user connected using AmneziaWG. Process snapshots verified `amneziawg-go` as the tunnel worker. The later AmneziaVPN hang report explicitly identifies:\n\n```text\nDeadlock: com.docker.backend (Docker) [31595] thread 0x26382 -> kernel_task [0] thread 0x388f0 \"dlil_input_utun6\" -> com.docker.backend (Docker) [31595] thread 0x26382\n```\n\nThe report lists **36 blocked tasks**, including `amneziawg-go [48098]`.\n\nDocker thread `0x26382` is in `close()` and eventually waits in `IORWLockRead` on a read lock owned by kernel thread `0x388f0`. The kernel tunnel input thread waits back on that Docker thread. The unsymbolicated intermediate kernel frames prevent attributing this to a sp"
+    },
     {
      "id": 6369175849,
      "issue": 3023,
@@ -1510,33 +1452,6 @@
      "user": "badm18",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2808#issuecomment-6347601131",
      "body": "go go go +1"
-    },
-    {
-     "id": 6326434386,
-     "issue": 3263,
-     "issue_title": "Windows 11 App-based split tunneling does not work; breaks connection state UI",
-     "created_at": "2026-10-21T20:59:53Z",
-     "user": "whizzed",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3263#issuecomment-6326434386",
-     "body": "Перезагрузка не помогала конечно. Помог совет от поддержки: Удаление с выносом ключей из реестра и перезагрузкой. До того как открывать репорт, видимо я пропустил один из них.\nНаверное надо закрывать вот с таким решением:\n\nWindows Registry Editor Version 5.00\n\n; AmneziaVPN cleanup\n; Рекомендуется: перед применением экспортировать ключи (RegEdit -> Export) или создать точку восстановления.\n\n; User settings\n[-HKEY_CURRENT_USER\\SOFTWARE\\AmneziaVPN.ORG]\n\n; Machine-wide settings (если были)\n[-HKEY_LOCAL_MACHINE\\SOFTWARE\\AmneziaVPN.ORG]\n[-HKEY_LOCAL_MACHINE\\SOFTWARE\\WOW6432Node\\AmneziaVPN.ORG]\n\n; Services / drivers\n[-HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\AmneziaVPN-service]\n[-HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Services\\AmneziaVPNSplitTunnel]"
-    },
-    {
-     "id": 6324329907,
-     "issue": 3304,
-     "issue_title": "Android: auto-reconnect when the AmneziaWG tunnel stalls after idle (connection watchdog)",
-     "created_at": "2026-10-21T19:11:36Z",
-     "user": "real-master",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3304#issuecomment-6324329907",
-     "body": "Exact the same problem! Foco F5 Xiaomi HyperOS 3.0.2.0"
-    },
-    {
-     "id": 6323721110,
-     "issue": 3263,
-     "issue_title": "Windows 11 App-based split tunneling does not work; breaks connection state UI",
-     "created_at": "2026-10-21T18:40:47Z",
-     "user": "lunardunno",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3263#issuecomment-6323721110",
-     "body": "Попробуйте сначала перезагрузить ПК, чтобы сервис AmneziaVPN пришёл в корректное состояние и кнопка стала вести себя корректно."
     }
    ]
   },

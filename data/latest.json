@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-24T20:49:03Z",
- "since": "2026-10-22T20:49:03Z",
+ "generated_at": "2026-10-24T23:13:59Z",
+ "since": "2026-10-22T23:13:59Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -182,6 +182,94 @@
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
+    {
+     "number": 1403,
+     "title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-24T20:53:36Z",
+     "updated_at": "2026-10-24T23:00:14Z",
+     "user": "winchtester",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403",
+     "body": "## Summary\n\n`getPeers` exposes `latency` per peer. Operators read it as link latency; it is an EWMA of **router\nsignature-response** times refreshed every **4 minutes** (`ironwood/network/router.go:53`,\n`network/config.go:26`, published in `src/admin/getpeers.go`). There is no link-level RTT, loss or\nqueue signal anywhere in the admin surface — per-peer **throughput** is covered since 0.5.15\n(`rate_recvd`/`rate_sent`), latency is not.\n\nConsequence: any adaptive decision (operator tooling, or the daemon itself) is made on data that is\nminutes old and answers a different question than the one being asked.\n\n## Measurements behind this (v0.5.15, real path)\n\n| Measurement | Result |\n|---|---|\n| Overlay vs raw TCP over the same path | 87.2 vs 85.7 Mbit/s (noise) |\n| Overlay RTT | 55.8 ms, same as the tunnel |\n| Protocol overhead | 2.6% |\n| TUN MTU 1420 instead of 65535 | −25% |\n| 4 streams vs 1 | no gain (path-bound) |\n| CPU at 87 Mbit/s | 16% of one core on the VPS |\n\nThe overlay is close to free; what is missing is per-peer degradation signal.\n\n## Proposal (stage 1, additive and wire-compatible)\n\n1. New link packet pair `wirePing`/`wirePong` (type byte + 8-byte nonce), every 10 s per peer with\n   ±20% jitter, answered immediately; sent **only** when both sides advertise the new minor version.\n2. Per-peer state: RTT (EWMA α=1/8), jitter, loss counters (sent/answered, monotonic), queue bytes.\n   `pDelay` (`network/peers.go:123`) is declared but never updated — a natural home for this.\n3. Additive `getPeers` fields: `link_rtt_ms`, `link_rtt_jitter_ms`, `link_loss_ppm`,\n   `link_ping_age_s`, `queue_bytes`, and `latency_source: \"router_ewma\"` so the existing value stops\n   being misread. Missing measurement is `null`, never zero.\n\nCost: 9 bytes per peer per 10 s each way, one timer per peer.\n\n## Stage 2 (separate review)\n\nOptional operator-visible scoring with hysteresis/dwell, and an off-by-default parent preference that\ncan only reorder existing valid candidates. No tree changes, no invented paths.\n\n## Compatibility\n\nOld peers never receive the new packet type; old consumers ignore additive JSON fields; routing and\nconfig are unchanged in stage 1. A mixed-version pair exchanges traffic with zero pings.\n\n## Acceptance criteria\n\n1. `link_rtt` within ±2 ms of external ICMP p50 on the same path.\n2. ≤2% throughput regression at 500 Mbit/s with 50 peers.\n3. 5% `netem` loss shows `link_loss_ppm` within ±1%.\n4. Mixed-version interop: zero ping packets, zero errors.\n5. No timer/goroutine leak on disconnect.\n\n## Out of scope\n\nPadding, fixed cells and mixing delays — they change the wire format and the latency contract and\ndeserve their own RFC. This one is their prerequisite.\n\nFull document (problem, alternatives, effort, reproduction steps): happy to attach or paste it here\non request. Stage 1 is ~300 lines plus tests; I can open it as a PR if this direction is acceptable.\n"
+    },
+    {
+     "number": 1220,
+     "title": "Fix yggdrasil-default-config group",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2024-12-20T13:41:31Z",
+     "updated_at": "2026-10-24T21:33:49Z",
+     "user": "ProMix0",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1220",
+     "body": "Yes, current version leaves `root` group"
+    },
+    {
+     "number": 1384,
+     "title": "deb: keep configuration backups private",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-17T04:34:27Z",
+     "updated_at": "2026-10-24T21:23:41Z",
+     "user": "omrzk",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1384",
+     "body": "## Summary\n\nOn Debian package upgrades, `postinst` backs up the existing configuration under `/var/backups`. Older configurations can be mode 0644, so a plain copy leaves the backup containing the private key readable by other users. Create the backup through a mode 0600 temporary file and replace any existing dated backup atomically. The backup date is now determined when the package is installed.\n\nThis addresses the backup path described in #697. Permissions on the active configuration were fixed separately.\n\n## Verification\n\n- [x] `sh -n contrib/deb/generate.sh` and `sh -n contrib/deb/test-postinst-backup.sh`\n- [x] `sh contrib/deb/test-postinst-backup.sh` (regression fails on the previous backup implementation and passes with this change, including replacement of a mode 0644 backup)\n- [x] `git diff --check`\n\nA full Debian package install was not run locally.\n"
+    },
+    {
+     "number": 1049,
+     "title": "fixup! Creating Dockerfile to /",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2023-08-03T09:11:35Z",
+     "updated_at": "2026-10-24T21:23:16Z",
+     "user": "fauust",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1049",
+     "body": "The symlink permits do build container directly from / Same as what cjdns does (that was probably updated).\r\n\r\nBefore:\r\n```console\r\n~/gh/yggdrasil-go develop\r\n❯ podman build .\r\nError: no FROM statement found\r\n```\r\n\r\nAfter:\r\n```console\r\n~/gh/yggdrasil-go dockerfile-symlink\r\n❯ podman build .\r\n[1/2] STEP 1/5: FROM docker.io/golang:alpine AS builder\r\n[1/2] STEP 2/5: COPY . /src\r\n--> 3806ec0449ca\r\n[1/2] STEP 3/5: WORKDIR /src\r\n[...]\r\n```"
+    },
+    {
+     "number": 1223,
+     "title": "Introduce VSOCK link type",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2025-01-03T13:43:25Z",
+     "updated_at": "2026-10-24T21:22:14Z",
+     "user": "nagy",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1223",
+     "body": "This address family is used in communication between virtual machines and their hosts. Advantages include that no virtual ethernet adapter and their respective address configuration and routing need to be setup. Rather, with this new link type, only a single yggdrasil interface can exist inside of the virtual machine.\r\n\r\nIt can also be used inside of containers. There, the advantage over existing link types like unix sockets include, that no mount point need to be shared with the host and container. This provides more isolation.\r\n\r\nMore information:\r\n\r\nhttps://man7.org/linux/man-pages/man7/vsock.7.html\r\n\r\nhttps://gist.github.com/nrdmn/7971be650919b112343b1cb2757a3fe6\r\n"
+    },
+    {
+     "number": 1276,
+     "title": "WebUI, NodeInfo between peers and DevContainers",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2025-08-15T19:30:54Z",
+     "updated_at": "2026-10-24T21:21:31Z",
+     "user": "andyoknen",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1276",
+     "body": "### Added\n\n* Web UI interface for managing Yggdrasil nodes through a browser\n  * Built-in configuration editor with JSON support\n  * Peer management and monitoring\n  * Multilingual support (English and Russian)\n  * Authentication system with brute force protection\n  * Theme toggle functionality\n  * Mobile-responsive design\n* NodeInfo exchange during peer handshakes for better peer identification\n  * Peer names are now displayed in CLI and admin responses\n  * NodeInfo data is exchanged and stored during connection establishment\n  * Enhanced peer display with names alongside IP addresses\n* Development environment improvements\n  * Docker and VS Code Dev Container support for easier development setup\n  * Enhanced development container configuration with Oh My Zsh\n  * Improved development workflow and environment consistency"
+    },
+    {
+     "number": 1362,
+     "title": "Add experimental Plan 9 / 9front support",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-07-30T08:26:52Z",
+     "updated_at": "2026-10-24T21:20:16Z",
+     "user": "kiljoy001",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1362",
+     "body": "## Summary\n\nAdds the platform-specific layers to run yggdrasil as a **full node on Plan 9 (9front)**: a TUN adapter, link-local multicast peer discovery, and platform defaults. No changes to the supported-platform code paths — the shared multicast logic (`_announce`/`listen`/`_stop`) is byte-for-byte unchanged.\n\n## What was verified\n\n- **Builds**: `plan9/amd64`, `plan9/386`, `linux`, `darwin`, `freebsd`, `openbsd` all `go build` clean; `go vet` clean on plan9; `go test ./src/...` passes on linux (no regression).\n- **Runtime on a real 9front grid**: the cross-compiled binary runs as a node — the `pkt` TUN interface comes up with the `0200::/7` address (MTU clamped to the medium's 4096), multicast beacons are sent and received via `/net/udp`, and peers connect **both inbound and outbound**. Graceful shutdown on the `interrupt` note unbinds the interface cleanly.\n\n## Design\n\n**TUN** (`src/tun/tun_plan9.go`): Plan 9 has no in-kernel TUN device. The equivalent is a `pkt` packet interface (`ipifc`) per `ip(3)` — `bind pkt`, `add` the `0200::/7` address, and read/write raw IPv6 through `/net/ipifc/N/data`. This is the same primitive `6in4(8)`/`ppp(8)` use. Implemented as a `wgtun.Device` so the existing TUN read/write goroutines work unchanged. On startup it reclaims any stale ipifc still carrying our address (Plan 9 doesn't reap a `pkt` ipifc when its owner is hard-killed, unlike a Linux tun).\n\n**Multicast** (`src/multicast/multicast_plan9.go`): `golang.org/x/net/ipv6` is stubbed on Plan 9, so the beacon socket is driven natively through `/net/udp` in \"headers\" mode (`announce *!port`, `addmulti` to join `ff02::114`, 52-byte `Udphdr` with big-endian ports). To avoid touching the shared multicast code, `plan9Sock` mirrors the exact subset of `*ipv6.PacketConn` method signatures that `multicast.go` calls (`JoinGroup`/`WriteTo`/`ReadFrom`/`Close`); `ReadFrom` returns an `*ipv6.ControlMessage{Dst:…}` so the shared `listen()`'s existing `rcm.Dst` checks work as-is. Only the `Multicast` struct + `_start` (socket creation) are per-platform — the non-Plan-9 versions are moved **verbatim** to `multicast_sock.go`. Reclaims stale UDP convs on startup + retries `announce` to handle a port freed mid-shutdown.\n\n## Caveats / notes\n\n- **Admin socket**: listens on TCP loopback (`tcp://localhost:9001`) and requires a configured loopback interface (`ipconfig loopback /dev/null 127.1 /128`). The admin socket has no auth and relies on loopback binding for security, so it intentionally does not fall back to a wildcard bind. Documented in the README.\n- **Hard shutdown**: a `slay`/crash leaves the `pkt` ipifc and `0200::/7` route behind; the next start reclaims them. A clean `interrupt`-note shutdown unbinds normally.\n- `contrib/ansible/genkeys.go` is excluded from plan9 builds (the `cheggaaa/pb` `termutil.TerminalSize` symbol has no plan9 definition — appears to be an upstream `pb` bug worth filing separately).\n- CI adds plan9/amd64 + plan9/386 **cross-compile** jobs (no plan9 test runner; tests can't run, only build-verified).\n- Runtime-verified on 9front **amd64**; the 386 target compiles but wasn't run.\n\nThis is experimental and Plan 9 is a niche target that the maintainers can't easily test, so I'm happy to maintain this going forward and to open a tracking issue if useful. Feedback welcome — in particular on whether the `multicast_sock.go` split (moving the struct + `_start` out of `multicast.go`) is an acceptable way to branch the plan9 execution, or if you'd prefer a different structure.\n"
+    },
+    {
+     "number": 1404,
+     "title": "Design discussion: privacy and adaptive routing as the network grows",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-24T21:04:44Z",
+     "updated_at": "2026-10-24T21:14:21Z",
+     "user": "winchtester",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1404",
+     "body": "# Design discussion: privacy and adaptive routing as the network grows\n\nStatus: proposal for discussion · Date: 2026-10-25 · Companion to #1403\n\n## 1. Premise\n\nYggdrasil is pleasant at 10³ nodes and will be asked to behave at 10⁵–10⁶. At that size two\nproperties stop being “nice to have”:\n\n1. **Operators cannot see link quality** (one 4-minute router EWMA, no RTT/loss/queue), so every\n   routing decision — human or automatic — is blind.\n2. **Traffic metadata is fully visible to forwarding nodes** (`source`/`dest` public keys in the\n   `traffic` struct), so “private network” means private from the outside, not from the path.\n\nThis document proposes a staged, opt-in answer to both, with costs measured on a real path\n(v0.5.15, home host ↔ Hetzner VPS, 2026-10-24): overlay ≈ raw TCP (87.2 vs 85.7 Mbit/s), RTT\n55.8 ms both, protocol overhead 2.6%, `IfMTU 1420` costs **−25%**, four parallel streams give no\ngain (path-bound), CPU 16% of one core at 87 Mbit/s.\n\n## 2. Part A — adaptive routing (measured, not guessed)\n\n| Stage | Content | Risk |\n|---|---|---|\n| A1 | Link telemetry: per-peer RTT/jitter/loss/age, additive admin fields (#1403, code linked there) | low: off by default, no routing change |\n| A2 | Peer scoring with **dwell (30 s)** and **hysteresis (20%)**, plus a disjoint-secondary rule; only reorders existing valid candidates | medium: behaviour, needs policy agreement |\n| A3 | Optional multipath for bulk flows (reordering buffer, latency cost) | high: only if A1/A2 prove value |\n\nNon-goals: replacing tree routing; per-packet re-routing in ironwood; promising bandwidth. At\n10⁶ nodes the bottleneck for an individual is still their last mile — our four-stream test shows\nrouting cannot add capacity, only avoid a bad peer.\n\n## 3. Part B — privacy (opt-in, priced)\n\nThreat model first: hide *content and size/timing* from a path observer and from the last mile;\n**not** hide that two nodes talk from a global observer, and not defend against an endpoint that\nis compromised.\n\n| Stage | Content | Cost (measured/modeled) |\n|---|---|---|\n| B1 | Posture and cost accounting in the console (`privacy`), disabled by default | zero |\n| B2 | Fixed-size cells + Poisson release jitter for opted-in flows | +10–60% bandwidth depending on chunk size; +20–75 ms p95 |\n| B3 | Cover traffic with a hard share budget (AGC-style), only with an economic story | ~82 kbit/s per node at 1 cell / 200 ms |\n| B4 | Mixnet transport (external, e.g. Nym-style) for those who need unobservability | latency measured in hundreds of ms |\n\nKey findings that shape the design:\n\n- **Cell size is the expensive decision, not cryptography.** Overhead is set by the chunk\n  distribution: with 2 KiB cells, 1280-byte writes cost +60%, aligned writes ~0. A single\n  “typical” number would be dishonest, so the console computes it from a measured chunk size.\n- **Smaller cells are not automatically cheaper**; fragmentation can beat padding (our calibration\n  picks the cheapest cell within a budget, tie-broken towards fewer packets).\n- **Anonymity is a crowd problem.** Below a minimum observed participant count the strongest\n  profile is refused; the count is a local observation, labelled as such.\n- **Privacy must not write logs.** An enabled posture cannot combine with per-flow logging; this\n  is enforced in code, not documentation.\n- **Padding must not break the path.** Forcing small MTU already costs 25%; profiles therefore pad\n  logical cells, not the TUN MTU, and `bulk` keeps jumbo frames.\n\n## 4. How A and B interact\n\n- Path diversity helps both: fewer nodes see a full flow, and one bad peer cannot carry everything.\n- Padding and jitter cost the same resources routing wants (bandwidth, latency), so both are\n  opt-in and priced before enabling.\n- If privacy is on and the path degrades, the *honest* behaviour is to say so, not to silently\n  disable privacy to keep a number green.\n\n## 5. Compatibility and rollout\n\n- A1/B1 are additive and off by default; A2/B2 need explicit opt-in and"
+    },
     {
      "number": 1296,
      "title": "Isolated network via shared key",
@@ -427,6 +515,105 @@
    ],
    "comments": [
     {
+     "id": 6390624537,
+     "issue": 1403,
+     "issue_title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "created_at": "2026-10-24T23:00:14Z",
+     "user": "majestrate",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6390624537",
+     "body": "please try to be understanding, human beings have to consume AND comprehend these walls of text. more is not better, it's actually worse at this stage."
+    },
+    {
+     "id": 6389808990,
+     "issue": 1220,
+     "issue_title": "Fix yggdrasil-default-config group",
+     "created_at": "2026-10-24T21:33:49Z",
+     "user": "ProMix0",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1220#issuecomment-6389808990",
+     "body": "Any meaningful comment?"
+    },
+    {
+     "id": 6389709937,
+     "issue": 1384,
+     "issue_title": "deb: keep configuration backups private",
+     "created_at": "2026-10-24T21:23:41Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1384#issuecomment-6389709937",
+     "body": "Should have been addressed for future installs by 8d7e95bd3834934ca9b08ee01fdf49150040a168 and 7399ace5f2b5bc6773b352ec80ca38d54b578375."
+    },
+    {
+     "id": 6389695476,
+     "issue": 1223,
+     "issue_title": "Introduce VSOCK link type",
+     "created_at": "2026-10-24T21:22:14Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1223#issuecomment-6389695476",
+     "body": "Going to close this for now, I don't think we want to add any more link types."
+    },
+    {
+     "id": 6389676175,
+     "issue": 1362,
+     "issue_title": "Add experimental Plan 9 / 9front support",
+     "created_at": "2026-10-24T21:20:16Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1362#issuecomment-6389676175",
+     "body": "This looks interesting, but I'm not sure that it's a port we'll plan to merge into the main repository. None of the team know anything about maintaining code on plan9 and this is not an insignificant amount of code.\r\n\r\nHowever, maintaining a fork should be easy, you don't actually need to duplicate anything in `src/core` for example (or most of what's in `src/` for that matter), you can just link in our module in your `go.mod` and layer your own TUN and multicast modules on top of our core, read `cmd/yggdrasil/main.go` for an example of how that works."
+    },
+    {
+     "id": 6389617709,
+     "issue": 1404,
+     "issue_title": "Design discussion: privacy and adaptive routing as the network grows",
+     "created_at": "2026-10-24T21:14:21Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1404#issuecomment-6389617709",
+     "body": "Think this is departing a lot from what we're trying to do here."
+    },
+    {
+     "id": 6389611600,
+     "issue": 1403,
+     "issue_title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "created_at": "2026-10-24T21:13:46Z",
+     "user": "winchtester",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6389611600",
+     "body": "> 5\\. I realise I'm talking to a robot here, but there's no need for code at this stage. A lot is going to change in the ironwood core between now and v0.6, and we're aware of the problem, so any draft contributions will rot quickly.\n\nnot robot really, human wishing support to your network with a robot help xD"
+    },
+    {
+     "id": 6389594177,
+     "issue": 1403,
+     "issue_title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "created_at": "2026-10-24T21:12:30Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6389594177",
+     "body": "I realise I'm talking to a robot here, but there's no need for code at this stage. A lot is going to change in the ironwood core between now and v0.6, and we're aware of the problem, so any draft contributions will rot quickly."
+    },
+    {
+     "id": 6389528237,
+     "issue": 1403,
+     "issue_title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "created_at": "2026-10-24T21:05:53Z",
+     "user": "winchtester",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6389528237",
+     "body": "Thanks — that matches what we found, and \"dedicated wire types in v0.6\" is exactly the shape of the\nbranch above (`wirePing`/`wirePong`, appended so existing type values are unchanged).\n\nTwo practical questions so the work is useful rather than parallel:\n\n1. **Where should the probe live?** We put it in ironwood's peer monitor (closest to the keepalive\n   logic and where `pDelay` already sits). If you would rather keep ironwood-free and measure in\n   `yggdrasil-go` above it, say so and we will move it.\n2. **Gating.** Our draft keeps `PeerPing` off because an old peer answers an unknown packet type\n   with `ErrUnrecognizedMessage` and drops the link. Preferred: carry the remote minor version from\n   the link handshake into the peer and probe only peers that advertise support. If you have a\n   different convention for capability advertisement in mind for v0.6, we will follow it.\n\nHappy to rebase onto whatever base you pick for v0.6 when that work starts, or to leave the branches\nas reference until then — no action needed from you now.\n"
+    },
+    {
+     "id": 6389514068,
+     "issue": 1403,
+     "issue_title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "created_at": "2026-10-24T21:04:27Z",
+     "user": "winchtester",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6389514068",
+     "body": "Code for stage 1 is written and pushed, so this can be reviewed as a diff rather than prose.\n\n**Network layer** (ironwood): `wirePing`/`wirePong` (appended to the packet-type list, existing\nvalues unchanged), an opt-in per-peer probe loop driven by `WithPeerPing`, and a plain\n`pingStats` value (EWMA α=1/8 for RTT, EWMA of |Δ| for jitter, sent/answered counters for loss in\nppm, last-pong age). `DebugPeerInfo` gains `LinkRTT`/`LinkJitter`/`LinkLossPPM`/`LinkPingAge`.\nBranch: `github.com/winchtester/ironwood` → `link-ping-telemetry` (`02cc0bf`).\nThat repository restricts issues and PRs to prior contributors, so I could not open a PR there;\nthe branch and its four unit tests are public.\n\n**This repository**: `PeerInfo` and `getPeers` expose `link_rtt_ms`, `link_rtt_jitter_ms`,\n`link_loss_ppm`, `link_ping_age_s`; `PeerPing` config switch (off by default); `go.mod` pins the\nironwood fork with a `replace` so both halves can be reviewed together. Branch:\n`github.com/winchtester/yggdrasil-go` → `link-quality-telemetry` (`751d670`).\n`go build ./...` and `go test ./src/core ./src/admin ./src/config` pass; ironwood passes\n`go test ./...` (network suite 19 s).\n\nTwo honest caveats:\n\n1. **Capability gating is missing.** Probing a peer that does not know the packet type makes it\n   return `ErrUnrecognizedMessage` and drop the link, so `PeerPing` must stay off until the gate\n   exists. My preference: carry the remote minor version from the link handshake into the peer and\n   only probe peers that advertise it. Alternative: in-band hello.\n2. PR creation from my fork is currently rejected by GitHub\n   (`CreatePullRequest` permission error), so the branches are linked here. Happy to open proper\n   draft PRs if that is a repository setting on your side.\n\nQuestions unchanged: (a) two-repo split or all in this repo; (b) gating: handshake version or\nin-band hello; (c) loss as ppm or as sent/answered counters.\n"
+    },
+    {
+     "id": 6389491096,
+     "issue": 1403,
+     "issue_title": "Link-quality telemetry: link RTT, loss and queue in getPeers (design proposal)",
+     "created_at": "2026-10-24T21:02:09Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6389491096",
+     "body": "We're aware of the limitations in using the signature response times, it was the easiest way to add in a rough latency metric without breaking the protocol. We'll likely address this in v0.6 with dedicated wire types, but we won't do so in v0.5."
+    },
+    {
      "id": 6384951626,
      "issue": 1353,
      "issue_title": "TestConfigReadFromEmpty: Fails with a runtime error",
@@ -508,10 +695,10 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-24T20:09:11Z",
-     "updated_at": "2026-10-24T20:30:28Z",
+     "updated_at": "2026-10-24T22:30:19Z",
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2612",
-     "body": "There was Linux build like this: \r\n`g++ -DUSE_UPNP -DGITVER=3.0.0-18-ga646ac2c -Wl,-z,relro -Wl,-z,now  -o i2pd obj/daemon/Daemon.o obj/daemon/HaikuDaemon.o obj/daemon/HTTPServer.o obj/daemon/I2PControl.o obj/daemon/I2PControlHandlers.o obj/daemon/i2pd.o obj/daemon/UnixDaemon.o obj/daemon/UPnP.o libi2pd.a libi2pdclient.a libi2pdlang.a -lboost_json -lboost_url -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -lminiupnpc`\r\n\r\nНа Haiku не проверял.\r\n"
+     "body": "Debian 13, there was Linux build like this: \r\n`g++ -DUSE_UPNP -DGITVER=3.0.0-18-ga646ac2c -Wl,-z,relro -Wl,-z,now  -o i2pd obj/daemon/Daemon.o obj/daemon/HaikuDaemon.o obj/daemon/HTTPServer.o obj/daemon/I2PControl.o obj/daemon/I2PControlHandlers.o obj/daemon/i2pd.o obj/daemon/UnixDaemon.o obj/daemon/UPnP.o libi2pd.a libi2pdclient.a libi2pdlang.a -lboost_json -lboost_url -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -lminiupnpc`\r\n\r\nНа Haiku не проверял.\r\n"
     },
     {
      "number": 2440,
@@ -743,28 +930,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2601",
      "body": "The host with running i2pd is responding to most (or many) SYN TCP packets by sending a large number of RST TCP packets. CPU usage is less than 200% on a dual-core processor, and there is some free memory and swap and file descriptors (`ss -s` is about 6000, LimitNOFILE=20000 in i2pd.service). Enabled NTCP2 and SSU2 IPv4 only.\n~~Possible DDoS attack?~~\nHow to discover:\n`# tshark -n -f \"(tcp[tcpflags] == tcp-syn and dst host $IP and dst port $PORT)  or  (tcp[tcpflags] & tcp-rst != 0 and src host $IP and src port $PORT)\"  -i $IFACE -a duration:$DUR`\nSubstitute your own IP, PORT, IFACE, DUR in seconds.\n\nVDS with real IP, Debian 12 64 bit\ni2pd version 2.61.0-813-g7f04a350 (0.9.70)\nNetwork status: OK, Router Caps:XfR, NTCP2 transports 5000\nTransit 30-35 Mbit/s\n"
-    },
-    {
-     "number": 2609,
-     "title": "fix UPnP patch",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T18:30:34Z",
-     "updated_at": "2026-10-22T22:52:28Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2609",
-     "body": "Оно и с `@@ -31,7 +31,7 @@` работает\n\n\n"
-    },
-    {
-     "number": 2610,
-     "title": "fix Makefile.linux logic, improve readability",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T21:01:36Z",
-     "updated_at": "2026-10-22T22:51:54Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2610",
-     "body": ""
     }
    ],
    "comments": [
@@ -794,6 +959,39 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7250,
+     "title": "Fix config loading through Windows directory junctions",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T21:39:54Z",
+     "updated_at": "2026-10-24T23:13:45Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7250",
+     "body": "Fixes #7239.\n\nOn Windows, `xray run -c config.json` can fail when its working directory contains a directory junction: opening the file succeeds, but `filepath.EvalSymlinks` returns \"The system cannot find the path specified.\" Reproduced with the official v26.10.21 Windows release and Go 1.27.3 on Windows 11 (build 26100).\n\nResolve the final Windows path from the already opened file handle with `GetFinalPathNameByHandle`, keeping the allowed-extension check on the resolved target. Resolver errors remain fatal. Other platforms retain the existing absolute-path and symlink resolution. The command and regular-file gates are unchanged.\n\nRegression tests use a real directory junction and a child process whose working directory is the junction, covering relative and absolute config paths. Tests also cover UTF-16 buffer growth, closed handles, the extension allowlist, pipe/other-command behavior, and symlink target extensions.\n\nValidation on the submitted commit:\n- Both native Windows junction cases fail on the original implementation and pass with this change. The freshly built CLI reports `Configuration OK` for the physical path and both junction cases.\n- `go test -count=1 ./main/confloader/... ./main/commands/base` and affected `go vet` pass on Windows (Go 1.27.3). The affected suite also passes with `-race` on Linux (Go 1.27.1).\n- Two Windows file-symlink cases skip with error 1314 (symlink privilege unavailable); both target-extension cases run and pass on Linux.\n- Native Windows CLI build, repository format check on the committed LF source bytes, and `git diff --check` pass.\n- The full application suite and macOS runtime tests were not run locally.\n\nAI assistance (OpenAI Codex) was used for implementation, tests, and review; the validation commands above were run locally.\n"
+    },
+    {
+     "number": 7248,
+     "title": "XHTTP: Add configurable error responses",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-24T15:24:38Z",
+     "updated_at": "2026-10-24T21:50:07Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248",
+     "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
+     "number": 7247,
+     "title": "XHTTP: Add configurable response headers",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-24T14:37:17Z",
+     "updated_at": "2026-10-24T21:49:34Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7247",
+     "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
     {
      "number": 7249,
      "title": "Geodata: Update built-in private IP ranges",
@@ -837,28 +1035,6 @@
      "user": "ariansharifi",
      "url": "https://github.com/XTLS/Xray-core/pull/7246",
      "body": "RemoveUser only dropped the user from the validator, so connections that had already authenticated kept relaying until idle timeout, and Mux sub-connections reused them indefinitely. A panel enforcing a traffic or expiry limit through the API therefore had to restart the whole core to actually stop the user.\n\nThe inbound now tracks each authenticated connection under its exact MemoryUser and RemoveUser closes them; other users and a re-added user with the same email are unaffected. A connection that authenticates while the user is being removed re-checks the validator after registering, so it cannot slip past closeAll."
-    },
-    {
-     "number": 7247,
-     "title": "XHTTP: Add configurable response headers",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T14:37:17Z",
-     "updated_at": "2026-10-24T18:18:19Z",
-     "user": "hxehex",
-     "url": "https://github.com/XTLS/Xray-core/pull/7247",
-     "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
-    },
-    {
-     "number": 7248,
-     "title": "XHTTP: Add configurable error responses",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T15:24:38Z",
-     "updated_at": "2026-10-24T18:17:36Z",
-     "user": "hxehex",
-     "url": "https://github.com/XTLS/Xray-core/pull/7248",
-     "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
     },
     {
      "number": 7244,
@@ -1038,6 +1214,33 @@
     }
    ],
    "comments": [
+    {
+     "id": 6390748340,
+     "issue": 7250,
+     "issue_title": "Fix config loading through Windows directory junctions",
+     "created_at": "2026-10-24T23:13:45Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7250#issuecomment-6390748340",
+     "body": "不要抽 helper\r\n直接内联写即可"
+    },
+    {
+     "id": 6389964771,
+     "issue": 7248,
+     "issue_title": "XHTTP: Add configurable error responses",
+     "created_at": "2026-10-24T21:50:07Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248#issuecomment-6389964771",
+     "body": "@RPRX "
+    },
+    {
+     "id": 6389959772,
+     "issue": 7247,
+     "issue_title": "XHTTP: Add configurable response headers",
+     "created_at": "2026-10-24T21:49:34Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7247#issuecomment-6389959772",
+     "body": "@RPRX "
+    },
     {
      "id": 6388862979,
      "issue": 7249,
@@ -1424,15 +1627,6 @@
      "user": "bin-ran",
      "url": "https://github.com/XTLS/Xray-core/issues/7239#issuecomment-6356122816",
      "body": "Related reports:\n- Go standard library behavior (filepath.EvalSymlinks on Windows junctions): https://github.com/golang/go/issues/82447\n- Affected client (v2rayN, installed via Scoop): https://github.com/2dust/v2rayN/issues/10446"
-    },
-    {
-     "id": 6353389899,
-     "issue": 7235,
-     "issue_title": "Withdrawn",
-     "created_at": "2026-10-22T23:13:45Z",
-     "user": "thatssoheil",
-     "url": "https://github.com/XTLS/Xray-core/issues/7235#issuecomment-6353389899",
-     "body": "Reproduced on current main (`1b1647c`, linux/amd64; the configs and scripts from the report used verbatim).\n\n**Repro, base build, 20 sequential fetches with `GOMAXPROCS=1`:**\n- VLESS over ws: 19 of 20 short (run 1: 14 x 0 bytes, 3 x 8171, 2 x 32749, 1 complete; run 2: 11 x 0, 3 x 8171, 1 x 32749, 1 x 49133, 1 x 57325, 1 x 8173, 2 complete), and all 20 connections log `websocket: close 1000 (normal)`.\n- Control raw TCP, same build and scripts: 20/20 complete at 65536 bytes, zero close-error lines.\n\n**Trace agrees with the report:** in `transport/internet/websocket/connection.go`, `Read` -> `getReader` -> `c.conn.NextReader()` returns gorilla's `*websocket.CloseError` for close frames 1000/1005, while a byte-stream reader expects `io.EOF` there. `app/proxyman/outbound.Handler.Dispatch` then treats it as a failure and calls `common.Interrupt`, which releases the data still buffered in the pipe before the inbound has taken it - the truncated tail.\n\n**Plan:** map `websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseNoStatusReceived)` to `io.EOF` in `connection.Read`; other close codes (1001, 1006, ...) stay errors. Regression test at the connection level (close 1000 and 1005 -> `io.EOF`; 1001/1006 still errors) plus the end-to-end repro above and the raw/VMess controls. Happy to go a different way if you would rather handle this in the Dispatch/pipe layer instead.\n"
     }
    ]
   },
@@ -1811,17 +2005,6 @@
      "user": "pty819",
      "url": "https://github.com/HyNetworks/hysteria/issues/606",
      "body": "### Details\r\n\r\n1.3.4版本服务端，不能正常解析dns\r\n![image](https://user-images.githubusercontent.com/14341805/236655889-e4787c88-0ed3-4527-b854-9be347bc64bf.png)\r\n1.3.2版本服务端，可以正常解析dns\r\n![image](https://user-images.githubusercontent.com/14341805/236655934-dceaf48c-c7b2-4c80-88b9-50813516825c.png)\r\n\r\n\r\n### Hysteria server information\r\n\r\nhysteria version v1.3.4 2023-03-15 02:49:14 b94f8a1eaf939a1f3efb469cbca1c3442db78dbc\r\n\r\n### VPS information\r\n\r\nRacknerd，San Jose，2G Ram， 2Core， x86\r\n\r\n### Server config\r\n\r\n{\r\n  \"listen\": \":443\",\r\n  \"alpn\":\"h3\",\r\n  \"cert\": \"保密\",\r\n  \"key\": \"保密\",\r\n  \"up_mbps\": 400,\r\n  \"down_mbps\": 400,\r\n  \"resolver\": \"quic://dns.adguard-dns.com:853\",\r\n  \"resolve_preference\": \"64\"\r\n}\r\n\r\n\r\n### Server logs\r\n\r\n新班本：\r\nServer configuration loaded\r\n2023-05-07T03:16:47Z [WARN] Neither authentication nor obfuscation is turned on. Your server could be used by anyone! Are you sure this is what you want?\r\n2023-05-07T03:16:47Z [INFO] [addr::443] Server up and running\r\n2023-05-07T03:17:11Z [INFO] [src:27.38.192.250:24467] Client connected\r\n2023-05-07T03:17:11Z [INFO] [src:27.38.192.250:24467] [dst:github.githubassets.com:443] [error:lookup github.githubassets.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:11Z [INFO] [src:27.38.192.250:24467] [dst:github.com:443] [error:lookup github.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:12Z [INFO] [src:116.24.66.51:46658] Client connected\r\n2023-05-07T03:17:12Z [INFO] [src:27.38.192.250:24467] [dst:github.githubassets.com:443] [error:lookup github.githubassets.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:12Z [INFO] [src:27.38.192.250:24467] [dst:github.com:443] [error:lookup github.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:12Z [INFO] [src:116.24.66.51:46658] [dst:vscode-sync.trafficmanager.net:443] [error:lookup vscode-sync.trafficmanager.net on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:13Z [INFO] [src:27.38.192.250:24467] [dst:www.youtube.com:443] [error:lookup www.youtube.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:13Z [INFO] [src:27.38.192.250:24467] [dst:www.youtube.com:443] [error:lookup www.youtube.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:13Z [INFO] [src:27.38.192.250:24467] [dst:www.youtube.com:443] [error:lookup www.youtube.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:13Z [INFO] [src:27.38.192.250:24467] [dst:github.com:443] [error:lookup github.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:13Z [INFO] [src:27.38.192.250:24467] [dst:github.githubassets.com:443] [error:lookup github.githubassets.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:13Z [INFO] [src:27.38.192.250:24467] [dst:www.youtube.com:443] [error:lookup www.youtube.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:14Z [INFO] [src:27.38.192.250:24467] [dst:github.com:443] [error:lookup github.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:14Z [INFO] [src:27.38.192.250:24467] [dst:github.githubassets.com:443] [error:lookup github.githubassets.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:15Z [INFO] [src:27.38.192.250:24467] [dst:www.bing.com:443] [error:lookup www.bing.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:15Z [INFO] [src:27.38.192.250:24467] [dst:www.bing.com:443] [error:lookup www.bing.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:16Z [INFO] [src:27.38.192.250:24467] [dst:google.com:80] [error:lookup google.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:17:16Z [INFO] [src:27.38.192.250:24467] [dst:google.com:80] [error:lookup google.com on 8.8.4.4:53: dns: overflow unpacking uint16] TCP error\r\n2023-05-07T03:1"
-    },
-    {
-     "number": 1711,
-     "title": "fix(tproxy): send UDP packets that race the pair socket via the existing session",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-22T21:36:34Z",
-     "updated_at": "2026-10-22T21:36:34Z",
-     "user": "QChiba",
-     "url": "https://github.com/HyNetworks/hysteria/pull/1711",
-     "body": "## Problem\n\nWith `udpTProxy`, QUIC to proxied destinations often never completes. Clients that use a post-quantum key share (X25519MLKEM768, the default in current Chrome/Firefox, curl + OpenSSL 3.5) send a ClientHello that spans **two datagrams**, back-to-back.\n\n`ListenAndServe` only expects the first packet of a src/dst pair. `newPair` then dials a transparent socket that takes over the pair through `-m socket --transparent`. The second datagram arrives before that socket exists, so it also lands on the listener and `newPair` opens a **second** hysteria UDP session for the same pair. The server receives the two ClientHello halves from two different source addresses and the handshake stalls.\n\n## Fix\n\nThe listener tracks active pairs (`sync.Map`, src/dst key). Packets for a pair that already exists go through that pair's session instead of creating a new one. `HyUDPConn.Send` is documented as not thread-safe, so sends are serialized per pair: the listener and the pair's forwarding goroutine can now both send. The entry is removed when forwarding ends, with `CompareAndDelete` so a newer pair isn't removed by mistake.\n\n## Testing\n\nTested on Linux arm64 router, standard TPROXY rules (`-m socket --transparent` mark, TPROXY to the listener). Client: curl 8.14.1 / OpenSSL 3.5, `--http3-only https://quic.nginx.org/`:\n\n| ClientHello | before | after |\n|---|---|---|\n| `--curves X25519` (1 datagram) | 200 h3, 1 session | 200 h3, 1 session |\n| `--curves X25519MLKEM768` (2 datagrams) | timeout, 2 `UDP transparent proxy connect` for the same pair | 200 h3 in ~0.15 s, 1 session (3/3 runs) |\n\nReal browsing (YouTube, Google, Facebook over HTTP/3) also works now through TPROXY. `go vet ./app/internal/tproxy/` is clean."
     }
    ],
    "comments": []

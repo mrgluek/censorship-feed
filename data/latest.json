@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-24T10:59:04Z",
- "since": "2026-10-22T10:59:04Z",
+ "generated_at": "2026-10-24T15:56:32Z",
+ "since": "2026-10-22T15:56:32Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -117,6 +117,28 @@
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
+    {
+     "number": 1296,
+     "title": "Isolated network via shared key",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2025-12-05T15:29:23Z",
+     "updated_at": "2026-10-24T13:44:53Z",
+     "user": "Shurik1236",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1296",
+     "body": "Есть в Warpinator \"пароли\", которые позволяют связываться только с устройствами с таким же паролем.\nВозможно ли добавить похожий функционал в yggdrasil, чтобы можно было указать один пароль для узла и тот мог передавать данные только узлам с таким же паролем, чтобы сеть была закрытой, но не потеряла свою расширяемость?\n\n---Google Translate---\nWarpinator has \"passwords\" that allow communication only with devices with the same password.\nIs it possible to add similar functionality to yggdrasil, so that a single password can be specified for a node, and it can only transmit data to nodes with the same password, keeping the network closed but still scalable?"
+    },
+    {
+     "number": 1353,
+     "title": "TestConfigReadFromEmpty: Fails with a runtime error",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-06-20T15:18:40Z",
+     "updated_at": "2026-10-24T13:44:17Z",
+     "user": "artyom-poptsov",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1353",
+     "body": "Hello.\n\nI'm trying to update Yggdrasil from the version 0.5.13 to the version 0.5.14 in GNU Guix and found out that `TestConfigReadFromEmpty` fails with the following error:\n\n```\n=== RUN   TestConfigReadFromEmpty\n=== RUN   TestConfigReadFromEmpty/empty\n    config_test.go:22: ReadFrom must not panic on short input, got: runtime error: slice bounds out of range [:32] with capacity 0\n=== RUN   TestConfigReadFromEmpty/single_byte\n--- FAIL: TestConfigReadFromEmpty (0.00s)\n    --- FAIL: TestConfigReadFromEmpty/empty (0.00s)\n    --- PASS: TestConfigReadFromEmpty/single_byte (0.00s)\n=== RUN   TestConfig_Keys\n--- PASS: TestConfig_Keys (0.00s)\n```\n\nNot sure if the problem lies in the environment, or in the test itself.  I tried to use Go 1.25 explicitly for the build but that didn't help unfortunately."
+    },
     {
      "number": 1395,
      "title": "admin: `addPeer` can dial any unix socket and report the result in `last_error`",
@@ -340,6 +362,15 @@
    ],
    "comments": [
     {
+     "id": 6384951626,
+     "issue": 1353,
+     "issue_title": "TestConfigReadFromEmpty: Fails with a runtime error",
+     "created_at": "2026-10-24T13:44:17Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1353#issuecomment-6384951626",
+     "body": "Fixed by 06675c2c2540652011610ee87c640d91d9139578."
+    },
+    {
      "id": 6382506359,
      "issue": 1395,
      "issue_title": "admin: `addPeer` can dial any unix socket and report the result in `last_error`",
@@ -519,15 +550,70 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7248,
+     "title": "XHTTP: Add configurable error responses",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T15:24:38Z",
+     "updated_at": "2026-10-24T15:24:38Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248",
+     "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
      "number": 7185,
      "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-10-24T10:09:14Z",
+     "updated_at": "2026-10-24T15:18:21Z",
      "user": "KobeArthurScofield",
      "url": "https://github.com/XTLS/Xray-core/pull/7185",
      "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
+    },
+    {
+     "number": 7244,
+     "title": "DNS: honor nameserver timeouts for coalesced lookups",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-23T19:51:29Z",
+     "updated_at": "2026-10-24T15:12:50Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7244",
+     "body": "**Revised implementation:** [6ecd2853](https://github.com/eliotcougar/Xray-core/commit/6ecd2853f4af823312461b673ac733df21ad9754) · [complete focused diff against v26.10.21](https://github.com/eliotcougar/Xray-core/compare/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74...6ecd2853f4af823312461b673ac733df21ad9754).\n\nThis PR was closed before the revised commits were pushed. Its Files changed view still shows the original head; the comparison above contains the implementation described here.\n\n### Problem and practical effect\n\nA foreground lookup can wait beyond its configured nameserver timeout when it joins an existing lookup for the same name and address family. In particular, an optimistic-cache refresh has an eight-second lifetime, while a foreground lookup may have a much shorter timeout. Blocking in `singleflight.Group.Do` delays returning to resolver selection and trying a healthy fallback.\n\nThe fix gives each waiter its own waiting lifetime and separates that from ownership of the shared operation. A short-lived waiter can leave promptly, while work needed by another waiter continues. It also prevents an earlier request's timeout from cancelling a shared query needed by a later request whose budget remains.\n\nThis is a nameserver-timeout correctness fix. The stable `LookupIP` interface remains context-free: closing an application connection does not automatically cancel its native DNS lookup. System-resolver cancellation is unchanged. No bulk-throughput or CPU improvement is claimed.\n\n### Implementation\n\n- Share queries per nameserver, domain and address family, with independent waiter contexts.\n- Give the shared operation a bounded lifetime independent of the first waiter's deadline: eight seconds, extended for an explicitly longer nameserver timeout. Preserve routing context values.\n- Cancel the operation when its last waiter leaves or DNS closes. A background refresh remains a waiter, retaining its existing eight-second policy.\n- Handle A and AAAA independently, retaining a completed family when the other times out.\n- Interrupt an owned TCP DNS connection on cancellation.\n- Preserve single-family response TTLs and existing dual-stack TTL aggregation. Public interfaces and JSON configuration stay unchanged.\n\n### Normal-configuration reproduction\n\nUse an ordinary HTTP inbound and a freedom outbound with `streamSettings.sockopt.domainStrategy: \"UseIPv4\"`. The relevant DNS settings are:\n\n```json\n{\n  \"dns\": {\n    \"queryStrategy\": \"UseIPv4\",\n    \"enableParallelQuery\": false,\n    \"servers\": [\n      {\n        \"address\": \"tcp+local://127.0.0.1:15353\",\n        \"timeoutMs\": 300,\n        \"serveStale\": true,\n        \"serveExpiredTTL\": 1\n      },\n      {\n        \"address\": \"tcp+local://127.0.0.1:15354\",\n        \"timeoutMs\": 300,\n        \"disableCache\": true\n      }\n    ]\n  }\n}\n```\n\nTwo controlled loopback DNS-over-TCP peers and a loopback HTTP origin make the sequence repeatable:\n\n1. The primary returns the origin's IP with TTL 1, priming the cache.\n2. After 1.15 seconds, an HTTP request receives the stale answer and starts a refresh. The primary delays this refresh by six seconds, then returns SERVFAIL; the fallback remains healthy.\n3. After another 1.2 seconds, the stale answer is no longer eligible. A new request joins the refresh, despite having only a 300 ms nameserver budget.\n\nFresh Windows amd64 builds from the unmodified v26.10.21 base and the revised head produced these foreground completion times:\n\n| Native configuration path | Unmodified | Revised |\n| --- | ---: | ---: |\n| Serial DNS, HTTP request | 4,804 ms | 328 ms |\n| Parallel DNS, HTTP request | 4,813 ms | 326 ms |\n| Serial DNS, UDP DNS outbound request | 4,805 ms | 304 ms |\n| Parallel DNS, UDP DNS outbound request | 4,800 ms | 301 ms |\n\nThe parallel cases use distinct primary/fallback policy tags. All original refreshes completed; the primary received only priming plus refresh. These are controlled reproduction timings, not general network-performance estimates. No custom ca"
+    },
+    {
+     "number": 7247,
+     "title": "XHTTP: Add configurable response headers",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T14:37:17Z",
+     "updated_at": "2026-10-24T14:37:17Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7247",
+     "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
+     "number": 7246,
+     "title": "VLESS inbound: Close a removed user's live connections",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T12:27:51Z",
+     "updated_at": "2026-10-24T13:04:07Z",
+     "user": "ariansharifi",
+     "url": "https://github.com/XTLS/Xray-core/pull/7246",
+     "body": "RemoveUser only dropped the user from the validator, so connections that had already authenticated kept relaying until idle timeout, and Mux sub-connections reused them indefinitely. A panel enforcing a traffic or expiry limit through the API therefore had to restart the whole core to actually stop the user.\n\nThe inbound now tracks each authenticated connection under its exact MemoryUser and RemoveUser closes them; other users and a re-added user with the same email are unaffected. A connection that authenticates while the user is being removed re-checks the validator after registering, so it cannot slip past closeAll."
+    },
+    {
+     "number": 6495,
+     "title": "[Feature request] Per-Session Round Robin Load Balancing (Session Affinity)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-07-14T10:21:27Z",
+     "updated_at": "2026-10-24T12:47:35Z",
+     "user": "Ahmad-2213",
+     "url": "https://github.com/XTLS/Xray-core/issues/6495",
+     "body": "### Problem\n\nCurrently, the `roundRobin` balancer appears to select an outbound for each request independently. This works well for general traffic but can cause problems for applications that expect all traffic within the same logical session to use the same outbound.\n\nOne example is HTTP adaptive streaming (HLS/DASH) used by services such as Aparat and Telewebion. A single video playback consists of many requests (playlist, manifests, media segments, etc.). If these requests are distributed across different outbounds, some streaming services may fail to load or interrupt playback, even when all outbounds share the same public IP.\n\n### Proposed Feature\n\nAdd a new balancing strategy that performs **round robin per session** instead of per request.\n\nExample behavior:\n\n- New session 1 → Outbound A\n- New session 2 → Outbound B\n- New session 3 → Outbound C\n- New session 4 → Outbound A\n\nOnce a session is assigned to an outbound, all subsequent traffic belonging to that session should continue using the same outbound until the session expires or closes.\n\n```json\n{\n  \"routing\": {\n    \"balancers\": [\n      {\n        \"tag\": \"proxy-balancer\",\n        \"selector\": [\"proxy-\"],\n        \"strategy\": {\n          \"type\": \"roundRobin\",\n          \"mode\": \"session\"\n        }\n      }\n    ]\n  }\n}\n```\nor Alternatively:\n\n```json \n{\n  \"routing\": {\n    \"balancers\": [\n      {\n        \"tag\": \"proxy-balancer\",\n        \"selector\": [\"proxy-\"],\n        \"strategy\": {\n          \"type\": \"sessionRoundRobin\"\n        }\n      }\n    ]\n  }\n}\n```\n\nRelated Issue: https://github.com/XTLS/Xray-core/issues/6438"
     },
     {
      "number": 7231,
@@ -550,17 +636,6 @@
      "user": "FunLay123",
      "url": "https://github.com/XTLS/Xray-core/issues/7131",
      "body": "Xray-core main pins utls aa6edf4, so `fingerprint: \"chrome\"` (also the default and ECH) sends Chrome 133.\nuTLS 6ebdceb (2026-10-06) adds HelloChrome_155 (verified against branded Chrome) and makes it HelloChrome_Auto.\n\nCaptured ClientHellos (JA4):\n- Xray 26.10.10 `chrome`:       t13d1516h2_8daaf6152771_d8a2da3f94cd\n- Xray + utls 6ebdceb:          t13d1517h2_8daaf6152771_cb7bf5808d99\n- Google Chrome 155 (Linux):    t13d1517h2_8daaf6152771_cb7bf5808d99\nAfter the bump, only randomized values differ (GREASE, keys, ECH payload, extension order).\n\nIn Russia the current `chrome` fingerprint appears to be detected and blocked by TSPU.\n\nProposal: bump utls to >= 6ebdceb and add \"hellochrome_155\" to the fingerprint map."
-    },
-    {
-     "number": 7244,
-     "title": "DNS: honor cancellation while waiting for a shared lookup",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-23T19:51:29Z",
-     "updated_at": "2026-10-24T09:27:45Z",
-     "user": "eliotcougar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7244",
-     "body": "This fixes per-caller DNS timeouts and cancellation being ignored while waiting for another caller's in-flight lookup. In a normal JSON configuration with an HTTP inbound, the official Xray 26.10.21 executable delayed DNS fallback and HTTP request completion for about 4.8 seconds despite a 300 ms DNS timeout. With this change, the same operation completes in about 320 ms.\r\n\r\n### How this affects normal operation\r\n\r\nThe trigger is overlapping lookups for the same name and address families through the same nameserver, without a usable cached answer. They share one `singleflight` query. If the first lookup outlives a later caller's deadline or cancellation, that later caller currently remains blocked in `Group.Do` until the shared lookup finishes.\r\n\r\nWith a slow or unresponsive DNS server, this has concrete consequences:\r\n\r\n- **DNS-dependent connection setup can keep waiting beyond the caller's DNS budget.** A timeout does not promptly return control to the caller. In Xray's serial DNS mode, the next resolver is tried only after `client.QueryIP` returns, so a blocked lookup also delays that fallback attempt.\r\n- **Cancellation does not promptly release the waiting goroutine.** When a request is abandoned or its context is cancelled, its lookup still waits for the first caller's query to finish. Repeated cancellations can temporarily accumulate waiting goroutines and resources held by their callers; this is not a permanent leak once the shared query ends.\r\n- **A timed-out lookup can report a late success.** If the shared query eventually succeeds, the caller receives that answer instead of the timeout that expired while it was waiting.\r\n\r\nThese effects require the shared query to outlive the waiting caller; ordinary coalesced lookups that complete within their deadlines and usable cache hits are unaffected. The configuration-only reproduction below demonstrates the fallback and HTTP request delays; the separate API reproduction demonstrates a missed deadline and late success.\r\n\r\n### Change\r\n\r\nUse `DoChan` and select between the shared result and the caller's cancellation. An already-cancelled caller returns before joining or starting work. The query key, upstream request, cache publication and first caller's ownership of the shared query remain unchanged. Cancelling a waiter does not forget the key, duplicate the lookup or cancel another caller's query. This does not introduce an independent shared-query lifetime policy.\r\n\r\n### Configuration-only reproduction: delayed fallback and HTTP connection setup\r\n\r\nAlso reproduced using the **official Xray 26.10.21 Windows release binary**,\r\nlaunched with `xray.exe run -config config.json`, and ordinary HTTP GETs through\r\nits HTTP proxy. No embedded caller, Xray API/RPC, Lua script or application\r\nextension is involved. Two loopback DNS-over-TCP peers and a loopback HTTP\r\norigin make resolver behavior and timings repeatable.\r\n\r\nThe relevant normal configuration is:\r\n\r\n```json\r\n{\r\n  \"dns\": {\r\n    \"queryStrategy\": \"UseIPv4\",\r\n    \"enableParallelQuery\": false,\r\n    \"servers\": [\r\n      {\"address\": \"tcp+local://127.0.0.1:15353\", \"timeoutMs\": 300,\r\n       \"serveStale\": true, \"serveExpiredTTL\": 1},\r\n      {\"address\": \"tcp+local://127.0.0.1:15354\", \"timeoutMs\": 300,\r\n       \"disableCache\": true}\r\n    ]\r\n  },\r\n  \"inbounds\": [\r\n    {\"listen\": \"127.0.0.1\", \"port\": 18080, \"protocol\": \"http\", \"settings\": {}}\r\n  ],\r\n  \"outbounds\": [\r\n    {\"protocol\": \"freedom\", \"settings\": {},\r\n     \"streamSettings\": {\"sockopt\": {\"domainStrategy\": \"UseIPv4\"}}}\r\n  ]\r\n}\r\n```\r\n\r\n1. The primary initially answers the HTTP destination's A query with the local\r\n   origin's IP and TTL 1; the first HTTP request succeeds.\r\n2. After 1.15 seconds, another HTTP request uses that stale answer and starts\r\n   Xray's built-in eight-second background refresh. The primary now delays its\r\n   response by six seconds and returns SERVFAIL; the fallback stays healthy.\r\n3. After another 1.2 seconds, the stale answer is no longer eligible to be\r\n "
     },
     {
      "number": 7243,
@@ -726,64 +801,72 @@
      "user": "ZizionarD",
      "url": "https://github.com/XTLS/Xray-core/issues/7220",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n### Environment\n\n- Client application: Happ 4.5.4\n- Client Xray-core: 26.9.9\n- Server Xray-core: 26.7.28\n- Server management: Remnawave / Remnanode\n- Protocol: VLESS\n- Transport: XHTTP\n- Security: REALITY\n- Client TLS fingerprint: `chrome`\n\n### Actual behavior\n\nWhen using `fingerprint: \"chrome\"` with VLESS + XHTTP + REALITY, connection establishment is intermittently delayed by approximately 1–3 minutes.\n\nDuring the failure:\n\n- The VPN client appears enabled, but internet access is unavailable.\n- Happ reports TLS handshake errors during connection checks.\n- The connection may eventually become operational without changing the configuration.\n- The issue was observed on different network connections.\n\nPacket capture analysis on the server showed that many failed connection attempts delivered only approximately 1,288 bytes of the initial TLS ClientHello data. The remaining handshake data did not arrive promptly.\n\nThis observation suggests a possible issue in TLS ClientHello transmission or an interaction between the Chrome fingerprint implementation and XHTTP/REALITY. The exact cause has not been established.\n\n### Expected behavior\n\nThe client should establish a working VLESS + XHTTP + REALITY connection promptly and consistently when using the supported Chrome TLS fingerprint.\n\n### Workaround\n\nChanging only the client TLS fingerprint from `chrome` to `firefox` resolved the observed connection establishment delays during testing.\n\nThe connection then established almost immediately, using both an IP address and a domain name as the server address.\n\n### Scope\n\nThis issue was observed with Happ 4.5.4 and its bundled Xray-core 26.9.9. It has not yet been independently reproduced using a standalone Xray-core client or across multiple Xray-core releases.\n\nI am reporting this behavior for investigation and would appreciate guidance on whether the issue is related to Xray-core, uTLS, XHTTP, or Happ's integration.\n\n### Additional diagnostic information\n\nI have collected client-side Xray debug logs, server-side Xray logs, and TCP packet captures during the investigation.\n\nThe client logs confirm that Xray-core 26.9.9 starts successfully and attempts to establish XHTTP connections using HTTP/2 and `stream-one` mode.\n\nThe server logs contain VLESS inbound activity, XHTTP connection events, and XMUX activity.\n\nDuring the network investigation, some TCP connections appeared to stall while transmitting TLS handshake data. However, I have not conclusively identified whether the incomplete transmission was caused by Xray-core, the client integration, or an intermediary network device.\n\nThe main reproducible observation in my environment was:\n\n- With `fingerprint: \"chrome\"`, connection establishment intermittently took approximately 1–3 minutes.\n- Changing only the client fingerprint to `firefox` eliminated the observed startup delays during testing.\n- Other VLESS, XHTTP, and REALITY settings were left unchanged.\n\nThe attached logs cover different diagnostic sessions and should not all be interpreted as simultaneous records of a single failed connection.\n\nI would appreciate guidance on which additional traces would help identify whether this behavior is related to the Chrome uTLS fingerprint implementation or XHTTP/REALITY interaction.\n\n### Reproduction Method\n\n1. Configure an Xray-core 26.7.28 server with a VLESS + XHTTP + REALITY inbound.\n2. Configure Happ 4.5.4 using Xra"
-    },
-    {
-     "number": 7106,
-     "title": "UDP inbound silently drops bursts: per-session pipe hardcoded to 16 KiB with DiscardOverflow (WireGuard over tunnel/dokodemo collapses to ~1 Mbps)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-08T07:28:50Z",
-     "updated_at": "2026-10-22T13:59:38Z",
-     "user": "dkrhodes",
-     "url": "https://github.com/XTLS/Xray-core/issues/7106",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [ ] The problem can be successfully reproduced in the latest Release\n\n> Reproduced on v26.7.28. The code involved is identical in v26.9.30 and on `main` (8989adf, 2026-10-08), but I have not rerun the test on v26.9.30 itself.\n\n### Description\n\nEvery UDP session on a port-listening UDP inbound (`tunnel` / `dokodemo-door` with `network: udp`) is given a pipe of only **16 KiB** with `DiscardOverflow()`:\n\n```go\n// app/proxyman/inbound/worker.go (udpWorker.getConnection)\npReader, pWriter := pipe.New(pipe.DiscardOverflow(), pipe.WithSizeLimit(16*1024))\n```\n\n16 KiB holds about 12 full-size WireGuard packets. Any burst bigger than that, arriving faster than the outbound drains it, is thrown away. This happens whenever the outbound stalls briefly, for example while the outer TCP connection waits one RTT for a retransmit. Nothing logs or counts the drop, and the kernel UDP counters (`UdpRcvbufErrors`) stay at 0 because the packet was already read from the socket.\n\nThe UDP hub has a second silent drop point: a 256-entry channel with a `select { default: }` drop (`transport/internet/udp/hub.go`).\n\nThe common setup this breaks is kernel WireGuard → `tunnel` UDP inbound → VLESS/REALITY. The inner TCP sees about 1% loss even when the link is idle. Loss-based congestion control (CUBIC, which is also what macOS uses) collapses at long RTTs:\n\n| Upload, 1 TCP stream, RTT ≈ 200 ms, line ≈ 47 Mbps | Throughput |\n| --- | ---: |\n| Raw internet, no proxy | 48.4 Mbps |\n| Same path through VLESS + REALITY (TCP via socks inbound) | 45.3 Mbps |\n| WireGuard → `tunnel` UDP inbound → same VLESS + REALITY, inner CUBIC | **1.3–2.0 Mbps** |\n| Same, inner sender paced (`iperf3 --fq-rate 40M`) | 34.7 Mbps |\n| Same, inner BBR (ignores loss; 2976 retransmits in 15 s) | 40.5 Mbps |\n| **Same, pipe raised to 1 MiB (patched build)** | **12.7 Mbps from a Wi-Fi macOS client; 0 drops** |\n\nLocating the loss: in a 10 s test, comparing WireGuard peer counters (`wg show dump`) on both ends showed **1.36%** of bytes sent by the client never reached the server. No socket on any hop (client, relay, server) reported `RcvbufErrors`. A patched build with the pipe raised to 1 MiB eliminated the loss and its drop counter stays at 0. I have not yet captured the counter at the stock 16 KiB size; I can add that run if useful.\n\nThings already ruled out in that setup: UDP socket buffers (`rmem_default/max` = 32 MiB), outer congestion control (BBR on every hop), MTU/PMTU (frag-needed works and MSS is clamped), CPU, routing.\n\n### Suggested fix\n\nMake the size configurable, and preferably raise the default. Options, in order of preference:\n\n1. Use the existing buffer policy (`policy.levels.N.bufferSize`, `xray.ray.buffer.size`) for the UDP inbound pipe instead of a hardcoded 16 KiB, while keeping `DiscardOverflow` so a stuck outbound can't use unbounded memory.\n2. Or add an env flag in the same style as `xray.ray.buffer.size` (e.g. `xray.udp.inbound.buffer.size`) and a larger default (e.g. 512 KiB, matching the default per-connection buffer on amd64).\n3. Either way, count dropped packets (stats counter or a debug log) so this isn't invisible.\n\nThe patch I tested (about 30 lines: env-configurable pipe size and hub capacity, plus drop counters) is ready to send as a PR if the approach is acceptable.\n\n### Reproduction Method\n\nTwo hosts A (client) and B (server), kernel WireGuard on both, Xray between them. Add latency/loss on the path between A and B, e.g. `tc qdisc add dev eth0 root netem delay 40ms loss "
-    },
-    {
-     "number": 7222,
-     "title": "HTTP outbound: Keep the shared HTTP/2 connection when a CONNECT fails",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T22:25:12Z",
-     "updated_at": "2026-10-22T12:28:05Z",
-     "user": "hmdsefi",
-     "url": "https://github.com/XTLS/Xray-core/pull/7222",
-     "body": "`setUpHTTPTunnel` caches the HTTP/2 connection to the proxy server in `cachedH2Conns` and opens later tunnels to the same server as new streams on it. But `connectHTTP2` called `rawConn.Close()` whenever a CONNECT failed: on a `RoundTrip` error, when writing the first payload failed, and on a non-200 status. When the connection came from the cache, this closed it under every other tunnel that was using it.\n\nSo with an HTTP/2 proxy, one refused CONNECT (for example a 403 for one blocked target, or the proxy resetting the stream) drops all other connections that are going through the same HTTP outbound at that moment.\n\nNow `connectHTTP2` closes only its own stream (the response body) and leaves the shared connection alone. A newly dialed connection is still closed by the caller when its first CONNECT fails, as before. If the shared connection itself is broken, `CanTakeNewRequest` reports that and the next attempt dials a new one, which is what already happens for a closed connection.\n\nVerified with the new `TestHTTP2RefusedConnectKeepsSharedConnection`. It runs a local TLS HTTP/2 proxy that accepts CONNECT to one host, and answers 403 or resets the stream for the others. The test opens a working tunnel, makes a refused CONNECT over the same cached connection, and checks that the first tunnel still echoes data. On main it fails with:\n\n    denied.test:443: refused CONNECT broke the other tunnel on the same HTTP/2 connection: io: read/write on closed pipe\n\nand the reset case alone fails the same way. With this change it passes.\n\nAlso ran `go test ./proxy/http/...` (also with `-race`, and the new test with `-count=20`), `go test ./testing/scenarios -run 'TestHttp|TestHTTP'`, `go vet ./proxy/http/...`, gofmt and `go run ./infra/vformat/main.go -mode check -pwd ./`.\n"
-    },
-    {
-     "number": 7224,
-     "title": "DNS: Read TCP and QUIC responses larger than 8 KiB",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T22:25:36Z",
-     "updated_at": "2026-10-22T12:26:59Z",
-     "user": "hmdsefi",
-     "url": "https://github.com/XTLS/Xray-core/pull/7224",
-     "body": "`TCPNameServer.sendQuery` and `QUICNameServer.sendQuery` read the 2-byte length of the response and then read the message into `respBuf`, which comes from `buf.New()` and holds 8192 bytes. DNS over TCP and DNS over QUIC messages can be up to 65535 bytes, and for anything above 8 KiB `respBuf.ReadFullFrom` returns `common/buf: out of bound` without reading anything.\n\nSo a `tcp://`, `tcp+local://` or `quic+local://` DNS server fails every lookup whose answer is larger than 8 KiB, even though the server sent a valid answer. The log shows `failed to read response length > common/buf: out of bound: N` and the query ends with `record not found`.\n\nNow, when the length is larger than the buffer, the buffer is released and replaced by `buf.NewWithSize(length)`. The deferred release goes through a closure so it frees whichever buffer is in use at the end. Responses up to 8 KiB take the same path as before.\n\nVerified with the new `TestTCPLocalNameServerLargeResponse`, which runs a local DNS over TCP server that answers with 1000 A records (about 16 KB). On main it fails with `app/dns: record not found` after logging `common/buf: out of bound: 16029`. With this change it gets all 1000 addresses. The QUIC code is the same and gets the same change. It has no local test because the QUIC name server always verifies the server certificate against the built-in roots.\n\nAlso ran `go test ./app/dns/...` (also with `-race`), `go vet ./app/dns/...`, gofmt and `go run ./infra/vformat/main.go -mode check -pwd ./`. The only failure there is `TestDNSScriptGeoIPFallback`, which needs `resources/geoip.dat` and fails the same way on main when that file is missing.\n"
-    },
-    {
-     "number": 7225,
-     "title": "DNS outbound: Keep hijacked A/AAAA replies within the buffer",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-21T22:58:24Z",
-     "updated_at": "2026-10-22T12:26:30Z",
-     "user": "Shilmoon",
-     "url": "https://github.com/XTLS/Xray-core/pull/7225",
-     "body": "`handleIPQuery` builds the A/AAAA reply into an 8 KB buffer but doesn't limit the answer count. When a lookup returns more addresses than fit (about 495 A or 282 AAAA), the builder grows into a new slice and `b.Resize` panics, which stops the process. UDP, TCP and QUIC name servers can't return that much; DoH and `localhost` can.\n\nFix: keep at most 256 answers. The worst case (AAAA, longest name) is 7439 bytes.\n\nTest: `TestHandleIPQueryManyIPs` fails on main with `slice bounds out of range [:16271] with capacity 8192`.\n"
-    },
-    {
-     "number": 7226,
-     "title": "TLS sniffer: Wait for the rest of a split ClientHello record",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T23:18:04Z",
-     "updated_at": "2026-10-22T12:03:41Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/pull/7226",
-     "body": "## Problem\n\nDomain-based routing silently stops working for TLS on a server in a proxy chain:\n\n```\nclient → server 1 → server 2 (VLESS + REALITY + Vision) → internet\n```\n\nServer 2 has sniffing enabled on the inbound and domain rules placed above an IP rule:\n\n```json\n\"sniffing\": { \"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"routeOnly\": true }\n```\n```json\n{ \"domain\": [\"geosite:habr\"], \"outboundTag\": \"direct-out\" },\n{ \"ip\": [\"geoip:ru\"], \"outboundTag\": \"block-out\" }\n```\n\nOpening https://habr.com in Chrome is blocked by the `geoip:ru` rule. On server 2 there is no `sniffed domain:` line for any `:443` connection, so the domain rules are never matched. Plain HTTP on `:80` is sniffed fine. The routing decision is made in under 1 ms, so sniffing does not even wait for its 200 ms deadline:\n\n```\nproxy/vless/inbound: firstLen = 1186\nproxy/vless/inbound: received request for tcp:178.248.237.68:443\nfrom 0.0.0.0:0 accepted tcp:178.248.237.68:443 [vless-tcp-reality-os-in -> block-out]\napp/dispatcher: taking detour [block-out] for [tcp:178.248.237.68:443]\n```\n\n## Cause\n\nA ClientHello with `X25519MLKEM768` (Chrome, Go) is about 1.5–2 KB. On server 2 it reaches the sniffer in three or more reads; the first one above is 1186 bytes, VLESS header included.\n\n`SniffTLS` returns `common.ErrNoClue` when the TLS record is not complete yet (`5+headerLen > len(b)`). The sniffing loop in `app/dispatcher/default.go` counts every `ErrNoClue` as a failed attempt and returns `errSniffingTimeout` after two. So a ClientHello is sniffed only if it arrives in at most two pieces; otherwise the connection is routed by IP alone.\n\n## Fix\n\nReturn `protocol.ErrProtoNeedMoreData` for an incomplete record. The record header already shows it is a TLS handshake, and `ErrProtoNeedMoreData` does not count as an attempt, so the loop keeps reading until the whole ClientHello arrives or the 200 ms deadline expires. `ErrProtoNeedMoreData` and the 200 ms deadline were added in #4642 for a ClientHello split across QUIC packets; the TCP TLS sniffer kept returning `ErrNoClue` since v1.0.0.\n\nA unit test for an incomplete record is added.\n\n"
     }
    ],
    "comments": [
+    {
+     "id": 6385915967,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-24T15:18:21Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6385915967",
+     "body": "支持砍掉，不背历史债\r\n而且他们这块处理的比较随意，本来约定的还算清楚\r\n\r\n比如 apple 默认就在国外\r\napple@cn 属于特例\r\n\r\n在构建 geosite:cn 的时候遍历，把 @cn 的都拉进来，称之为 `cn`、`-cn`\r\n而 apple-cn 就明显破坏约定了\r\n\r\n---\r\n\r\n话说回来，他们现在搞的从 cn 中剔除 @!cn 我只赞同一半\r\n因为有点太粗暴了，比如建行国际，你可能仍然想用中国 ip 访问\r\n他们本意是为了解决 tiktok 归抖音，最终归 cn 的问题，然而 tk 本就不该归抖音，强行关联没有意义\r\n\r\n现在粗暴地砍掉，也没弄出来新的 cn-oversea 之类的分类\r\n也没办法 geosite:cn@!cn 走 direct\r\n最终结果就是用户还是没法一键控制\r\n\r\n---\r\n\r\n在我看来纯靠 site 分流，只能用黑名单走代理，其它全直连策略\r\n而做那种直连白名单，其它走代理是不靠谱的，不可能穷尽，每天都在冒出新域名\r\n每天都有新的白名单中域名被 block\r\n\r\n最后的结果就是上游维护负担越来越重，越来越不准\r\n\r\nsite 必须结合 dns 实时解析结果，这样此时的 site 用途就变成了特殊目的分流比如解锁流媒体啥的\r\n只要黑名单足够准确，保证解析不泄露给 isp 就行了"
+    },
+    {
+     "id": 6385858531,
+     "issue": 7244,
+     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
+     "created_at": "2026-10-24T15:12:50Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6385858531",
+     "body": "> 我个人意见是算了吧，接收它的缺陷，等我重写 现在这样弄变得更复杂了没法 review 屎山代码最好就是不要碰，除非问题非常大\r\n\r\nAlright, I'll keep it local to my app (still in development) for now. I wanted to avoid modification of bundled xray core, but I guess It's not a crime if I do...\r\nThe necessity for this fix appeared as a result of implementing the ability to run a separate core for Windows ICS routing independently of the main routing. It required a shared LocalDNS and FakeDNS service. That's where this DNS request stalling was encountered.\r\n\r\nI have an almost working Shared FakeDNS implementation in the works: https://github.com/eliotcougar/Xray-core/tree/feature/fakedns-mapping-api"
+    },
+    {
+     "id": 6385576317,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-24T14:45:44Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6385576317",
+     "body": "> build 的时候拉入 domain-list-community 做并集容易实现吗\r\n\r\n可以做，虽然我一般倾向于不动原来的数据\r\n\r\n> 个人建议不要兼容 apple-cn google-cn 这种写法\r\n\r\n刚刚清点了一下，我认为应该把这两个引进来的表砍了\r\n虽然上游也有几个非分类下的 -cn 但是不得不说这和茴字有几种写法一样"
+    },
+    {
+     "id": 6385078995,
+     "issue": 7244,
+     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
+     "created_at": "2026-10-24T13:57:06Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6385078995",
+     "body": "我个人意见是算了吧，接收它的缺陷，等我重写\r\n现在这样弄变得更复杂了没法 review\r\n屎山代码最好就是不要碰，除非问题非常大"
+    },
+    {
+     "id": 6385068660,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-24T13:56:06Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6385068660",
+     "body": "个人建议不要兼容 apple-cn google-cn 这种写法\r\n会导致用户不得不这样写 `domain: google@cn, google-cn` `domain: google, google-cn`\r\nbuild 的时候拉入 domain-list-community 做并集容易实现吗"
+    },
+    {
+     "id": 6384390019,
+     "issue": 6495,
+     "issue_title": "[Feature request] Per-Session Round Robin Load Balancing (Session Affinity)",
+     "created_at": "2026-10-24T12:46:58Z",
+     "user": "Ahmad-2213",
+     "url": "https://github.com/XTLS/Xray-core/issues/6495#issuecomment-6384390019",
+     "body": "Greetings @Fangliding \nhttps://github.com/Ahmad-2213/Xray-core/commit/aee443bf571e75eb438663f6d55fa8c94bcefdd4\n\nis this approach acceptable for you or it's not planned at all?\nThanks in advance."
+    },
+    {
+     "id": 6384149447,
+     "issue": 7244,
+     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
+     "created_at": "2026-10-24T12:21:53Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6384149447",
+     "body": "Hi @Meo597, I’m Codex, the AI coding agent working with Eliot. Thank you for raising the context-ownership and native DNS-path concerns.\n\nRechecking the original approach exposed a real ownership problem: releasing an individual waiter was insufficient while the first caller still owned the shared upstream request. The revised implementation now gives the shared operation an independent, bounded lifetime, keeps each waiter's deadline separate, and cancels shared work when its last waiter leaves or DNS closes. A/AAAA work is shared separately, and the stale-refresh, parallel-query and DNS-outbound paths were checked independently of adjacent application changes. A single-family TTL regression found during that review has also been fixed.\n\nYour point about `LookupIP` lacking caller context remains valid. The revised description now limits the claim to respecting internal nameserver timeouts and preserving other waiters. In a normal JSON-configured stale-refresh reproduction, HTTP and UDP DNS-outbound requests completed in approximately 301–328 ms with a 300 ms timeout, versus about 4.8 seconds on the unmodified base. The HTTP/2 checks reused one connection; this is a waiting-lifetime issue rather than a connection-pooling performance claim.\n\nWould you be willing to review the [revised focused diff](https://github.com/eliotcougar/Xray-core/compare/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74...6ecd2853f4af823312461b673ac733df21ad9754), particularly the lifetime policy and its interaction with those native DNS paths?\n\nI’ve updated the title and description and left the PR closed following your decision. GitHub’s closed-PR diff still shows the earlier head, so the link above points directly to the tested revision, `6ecd2853`. If the revised approach is worth pursuing, please let us know whether you would prefer this PR reopened for review."
+    },
     {
      "id": 6382932060,
      "issue": 7185,
@@ -796,7 +879,7 @@
     {
      "id": 6382547545,
      "issue": 7244,
-     "issue_title": "DNS: honor cancellation while waiting for a shared lookup",
+     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
      "created_at": "2026-10-24T09:27:44Z",
      "user": "eliotcougar",
      "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6382547545",
@@ -850,7 +933,7 @@
     {
      "id": 6377311822,
      "issue": 7244,
-     "issue_title": "DNS: honor cancellation while waiting for a shared lookup",
+     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
      "created_at": "2026-10-24T00:10:22Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6377311822",
@@ -1080,92 +1163,55 @@
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/issues/7220#issuecomment-6346002196",
      "body": "无法复现 不处理使用第三方程序时的问题"
-    },
-    {
-     "id": 6344534556,
-     "issue": 7212,
-     "issue_title": "TLS client: Update built-in RootCAs to remove newly low-credit certs",
-     "created_at": "2026-10-22T15:27:52Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7212#issuecomment-6344534556",
-     "body": "> 顺便反正这家CA估计也开不下去了\r\n\r\n结果自愿退出 SSL/TLS 行业了"
-    },
-    {
-     "id": 6342613102,
-     "issue": 7106,
-     "issue_title": "UDP inbound silently drops bursts: per-session pipe hardcoded to 16 KiB with DiscardOverflow (WireGuard over tunnel/dokodemo collapses to ~1 Mbps)",
-     "created_at": "2026-10-22T13:59:37Z",
-     "user": "dkrhodes",
-     "url": "https://github.com/XTLS/Xray-core/issues/7106#issuecomment-6342613102",
-     "body": "Thanks for the independent measurement. It fills two gaps in my report: a before/after at the stock 16 KiB, and the confirmation that `XRAY_RAY_BUFFER_SIZE` doesn't reach this code path.\n\nTo follow up on that, I reran it as a controlled A/B that also reproduces the ~1 Mbps figure.\n\n**Setup:** v26.10.21 with drop counters added (no other change), in Docker on an arm64 host. The path matches my real one: kernel WG (MTU 1280) → `tunnel` UDP inbound → VLESS + REALITY + Vision → freedom → WG → iperf3. The WAN between the two containers is netem with 100 ms each way and 50 Mbit. Both sides have `rmem_default/max` = 32 MiB, as on my production hosts. The inner sender is CUBIC, doing 15 s uploads. Pipe size and hub capacity are set through env overrides, so the arm64 policy default doesn't come into it.\n\n| WAN loss | pipe / hub cap | Mbps | pipe drops | hub drops | kernel `RcvbufErrors` |\n|---|---|---:|---:|---:|---:|\n| 0 | 16 KiB / 256 (stock) | 1.5, 1.3 | 40, 90 | 0 | 0 |\n| 0 | 1 MiB / 1024 | 39.3, 39.8 | 302, 1101 ¹ | 0 | 0 |\n| 0.1% | 16 KiB / 256 (stock) | 1.0, 1.0, 1.5 | 36, 42, 40 | 0 | 0 |\n| 0.1% | 512 KiB / 256 | 12.4, 17.0, 16.7 | 0, 325, 866 | 0, 0, 537 | 0 |\n| 0.1% | 1 MiB / 256 | 17.3, 14.6, 16.8 | 4, 0, 0 | 173, 0, 265 | 0 |\n| 0.1% | 1 MiB / 1024 | 5.7, 12.0, 8.0 ² | 0 | 0 | 0 |\n\n¹ This run saturates the 50 Mbit line. These drops are the normal congestion signal at the bottleneck. At 16 KiB, drops start far below line rate.\n² The spread in the 0.1% rows comes from the outer connection. The container kernel has no BBR, so the outer TCP runs CUBIC over a lossy 200 ms path. Production uses BBR there.\n\nWhat it shows:\n\n- **The two drop points account for all the loss.** In every run, the inner TCP retransmits equal pipe drops + hub drops (e.g. 1403 = 866 + 537, 177 = 4 + 173). WG byte counters on both ends agree to the packet.\n- **WAN loss isn't needed to trigger it.** With a clean WAN, stock 16 KiB holds a single CUBIC flow at ~1.3 Mbps. That's the same as my real path (1.3–2.0 Mbps), so the ~1 Mbps figure comes from the inner TCP reacting to these drops, not from anything else on the path.\n- **The hub queue is the next bottleneck.** After the pipe is raised, the loss moves to the hub's 256-entry queue. Only raising both brings it to zero, so I think a fix needs to cover `hub.go:37` as well, not just `worker.go`.\n- **The kernel socket buffer is a third drop point, but it's visible.** With the default `rmem` (~224 KiB), raising the pipe moves the loss into the kernel socket buffer (`RcvbufErrors`). That one at least shows up in a counter. It's why my production hosts showed 0 there.\n\nI'm the reporter, not a maintainer, so whether a PR is accepted is up to the maintainers. On the design, I agree with all three of your points:\n\n1. **Floor.** Something like `max(policy, 16 KiB)`, so arm64/arm/mips never end up worse than today.\n2. **Ceiling.** `0` means unlimited, so clamp it. In the runs above, 512 KiB–1 MiB was the useful range.\n3. **Keep `DiscardOverflow`.** Agreed. Backpressure in the shared `handlePackets` goroutine would stall every session on the inbound.\n\nI'd add two things. The hub capacity should get a matching change, since it's per inbound rather than per session, so a larger fixed value or one scaled from the same policy seems fine. And the drops should be counted somehow (a stats counter, or at least a rate-limited debug log), in both places. Being invisible is what made this so hard to find.\n\nOn who writes the PR: my local patch (env-configurable pipe size and hub capacity, plus drop counters) was for debugging, and your policy-based approach with a floor and ceiling fits upstream better. If you want to send it, go ahead. I'm happy to run it through this setup and post the same table. If you'd rather not, I can send one based on your design. Either way, I'll wait for a maintainer to say which knob they prefer. I can also share the compose files if that would help with review.\n"
-    },
-    {
-     "id": 6340734457,
-     "issue": 7222,
-     "issue_title": "HTTP outbound: Keep the shared HTTP/2 connection when a CONNECT fails",
-     "created_at": "2026-10-22T12:28:05Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7222#issuecomment-6340734457",
-     "body": "这个功能算legacy了 估计都没人用"
-    },
-    {
-     "id": 6340712991,
-     "issue": 7224,
-     "issue_title": "DNS: Read TCP and QUIC responses larger than 8 KiB",
-     "created_at": "2026-10-22T12:26:59Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7224#issuecomment-6340712991",
-     "body": "应该没必要 毕竟xray只有A/AAAA而已"
-    },
-    {
-     "id": 6340703554,
-     "issue": 7225,
-     "issue_title": "DNS outbound: Keep hijacked A/AAAA replies within the buffer",
-     "created_at": "2026-10-22T12:26:30Z",
-     "user": "therealtunge",
-     "url": "https://github.com/XTLS/Xray-core/pull/7225#issuecomment-6340703554",
-     "body": "claude..., claude everywhere..."
-    },
-    {
-     "id": 6340687216,
-     "issue": 7224,
-     "issue_title": "DNS: Read TCP and QUIC responses larger than 8 KiB",
-     "created_at": "2026-10-22T12:25:40Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7224#issuecomment-6340687216",
-     "body": "除非能在真实世界证明，而且这个写法也太丑了"
-    },
-    {
-     "id": 6340350701,
-     "issue": 6482,
-     "issue_title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
-     "created_at": "2026-10-22T12:08:02Z",
-     "user": "Raymond520888",
-     "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6340350701",
-     "body": "@aardenye "
-    },
-    {
-     "id": 6340242945,
-     "issue": 7226,
-     "issue_title": "TLS sniffer: Wait for the rest of a split ClientHello record",
-     "created_at": "2026-10-22T12:02:13Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7226#issuecomment-6340242945",
-     "body": "NeedMoreData会阻塞住这个请求 这点header还不足以判定 ErrNoClue 是对的 除非能验证浏览器的tls头需要多达三次读取"
-    },
-    {
-     "id": 6340125332,
-     "issue": 6482,
-     "issue_title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
-     "created_at": "2026-10-22T11:55:44Z",
-     "user": "aardenye",
-     "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6340125332",
-     "body": "### New follow-up: Shadowrocket 2.2.92 still fails with server v26.10.21; core-only rollback restores traffic\n\nFollowing my earlier report in this thread, a similar user-visible failure recurred on 2026-10-22. This is a new compatibility observation; I am **not asserting the same root cause as the v26.7.11 minClientVer change**.\n\n- Server: Debian 12, linux/amd64; 3x-ui v3.10.2.\n- Actual tested client: Shadowrocket v2.2.92 on macOS/Apple Silicon.\n- Protocol: VLESS + TCP/RAW + REALITY + xtls-rprx-vision.\n- REALITY minClientVer/maxClientVer were empty/unset.\n- Official server Xray-core v26.10.21: service and listener healthy, but Shadowrocket CONNECT test times out and Google/X traffic fails. Reboot did not help.\n- A separate known-working node passes the CONNECT test in the same Shadowrocket instance.\n- Selecting and saving **Chrome140 in the affected node's own TLS settings** (advertised as X25519MLKEM768-capable) did not restore connectivity. It was not merely a global-default change.\n- Replacing **only the server core binary** with official v26.5.9, while retaining the new panel/database/inbound/credentials, immediately restores CONNECT tests to about 193-198 ms.\n- Restoring the client's original Chrome fingerprint still works with v26.5.9. Actual requests through Shadowrocket's local proxy return Google 200, gstatic generate_204 204, and X 200; Google/X each take about 1.1 seconds. The expected VPS exit was independently verified without disclosing it.\n\nFor contrast, a separate local Xray v26.5.9 client could pass traffic through the v26.10.21 server while Shadowrocket failed. That control was not sufficient to certify Shadowrocket compatibility.\n\nThis is a production A/B observation, not a minimal isolated reproduction. No ClientHello packet capture was retained, and the precise failing handshake check has not been established. The iPhone client was not independently retested in this run. An older core is a temporary operational workaround, not a claim that it is the best current security choice.\n\nCould you clarify the intended third-party client requirements for v26.10.21 and which narrowly scoped, sanitized diagnostics would distinguish an unsupported ClientHello from a core regression? In particular, should the per-node Chrome140 selection above be sufficient, or is additional client behavior required?\n\nFull related panel follow-up:\nhttps://github.com/MHSanaei/3x-ui/issues/6596#issuecomment-6340115620\n\nNo server IP/domain, UUID, keys, short IDs, subscription links or raw configs are published."
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3322,
+     "title": "ошибка 1100 у российского пользователя",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-24T13:59:34Z",
+     "updated_at": "2026-10-24T13:59:34Z",
+     "user": "dvorfvoldatran-wq",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3322",
+     "body": "**Describe the bug**\nI’m a user from Russia and I wanted to use Amnezia Free, but no matter how many times I try, I get error 1100. I can’t log in to Telegram as the instructions suggest.\n\n**To Reproduce**\nSteps to reproduce the behavior:\nI click on the Amnezia VPN, then I click on Amnezia Free Russia, then I click “Continue,” and immediately error 1100 appears.\n\n**Expected behavior**\nIt should work, but it doesn’t.\n\n**Log files**\nI don’t know where the logs are.\n\n**Screenshots**\n<img width=\"374\" height=\"712\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/379d08b0-675c-4e71-9af6-a6c51c856de7\" />\n\n**Desktop (please complete the following information):**\n - OS: [e.g. Windows 10]\n - Version 5.0.4.2 , I tried 5.0.3.0, and it’s the same thing.\n\n"
+    },
+    {
+     "number": 2704,
+     "title": "[Android / XRay Reality] Connected but no traffic with fingerprint=chrome; changing to firefox fixes it",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-06-06T00:04:08Z",
+     "updated_at": "2026-10-24T12:48:08Z",
+     "user": "ValitovTimur",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2704",
+     "body": "## Update: root trigger identified and workaround confirmed\n\n**Confirmed workaround:** changing the XRay Reality fingerprint from `chrome` to `firefox` immediately restores traffic.\n\nBroken configuration:\n\n```json\n\"realitySettings\": {\n  \"fingerprint\": \"chrome\"\n}\n```\n\nWorking configuration:\n\n```json\n\"realitySettings\": {\n  \"fingerprint\": \"firefox\"\n}\n```\n\nNo server-side changes were required.\n\nThis workaround has now been confirmed on my OPPO CPH2701 as well. Other users in this issue have reported the same general failure on Samsung, Redmi, and Infinix devices.\n\nImportant control result:\n\n* The original configuration with `fingerprint: chrome` still works correctly using standalone Xray-core 26.3.27 in Termux on the same phone.\n* The same configuration does not pass traffic through AmneziaVPN.\n* Changing only the fingerprint to `firefox` makes AmneziaVPN work immediately.\n\nTherefore, the issue appears to be related specifically to the handling or implementation of the `chrome` Reality/uTLS fingerprint in the XRay version bundled with AmneziaVPN, rather than to the server, routing, DNS, or Android VPNService in general.\n\nThis is a workaround, not a complete fix: existing profiles using `fingerprint: chrome` can still silently fail while AmneziaVPN reports `Connected`.\n\n\n\n**Describe the bug**\n\nAmneziaVPN on Android shows `Connected` for a self-hosted XRay/VLESS/Reality profile, but the VPN tunnel is not actually usable.\n\nThe Android VPN interface is created, routes are installed, and Amnezia starts `tun2Socks` and `XRay`. However, real application traffic is blackholed: TCP connect succeeds, but HTTP/TLS payload does not receive any response.\n\nThe same XRay/VLESS/Reality configuration works correctly when launched manually with standalone `xray-core` inside Termux on the same phone. A different commercial VPN application also works correctly as a full-system VPN on the same device.\n\nSo this does not look like a server/config/network problem. It looks like an issue in AmneziaVPN Android's XRay/tun2socks/VPNService data-plane on this OPPO / Android 16 device.\n\nThe issue started suddenly on two identical OPPO phones on the same day.\n\n---\n\n**To Reproduce**\n\nSteps to reproduce the behavior:\n\n1. Install AmneziaVPN on OPPO CPH2701 / Android 16.\n2. Add a self-hosted XRay / VLESS / Reality profile.\n3. Disable app split tunneling.\n4. Disable site/IP split tunneling.\n5. Disable Android Private DNS.\n6. Make sure Always-on VPN / kill switch is disabled.\n7. Connect to the XRay server.\n8. AmneziaVPN UI shows `Connected`.\n9. Run diagnostics from Termux.\n\nTCP connect succeeds:\n\n```bash\nnc -vz -w5 1.1.1.1 80\nnc -vz -w5 1.1.1.1 443\nnc -vz -w5 8.8.8.8 443\n```\n\nExample result:\n\n```text\nConnection to 1.1.1.1 80 port [tcp/http] succeeded!\nConnection to 1.1.1.1 443 port [tcp/https] succeeded!\nConnection to 8.8.8.8 443 port [tcp/https] succeeded!\n```\n\nBut HTTP/TLS payload does not work:\n\n```bash\ncurl -4 -v --connect-timeout 10 --max-time 20 http://1.1.1.1\n```\n\nResult:\n\n```text\n* Trying 1.1.1.1:80...\n* Established connection to 1.1.1.1 from 10.0.42.2\n> GET / HTTP/1.1\n> Host: 1.1.1.1\n> User-Agent: curl/...\n> Accept: */*\n* Request completely sent off\n* Operation timed out after 15003 milliseconds with 0 bytes received\n```\n\nHTTPS also fails:\n\n```bash\ncurl -4 -k -v --connect-timeout 10 --max-time 20 https://1.1.1.1/cdn-cgi/trace\n```\n\nResult:\n\n```text\n* Trying 1.1.1.1:443...\n* TLSv1.3 (OUT), TLS handshake, Client hello (1)\n* Connection timed out after 10004 milliseconds\n```\n\nRaw HTTP over netcat shows the same behavior:\n\n```bash\nprintf 'GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n' | nc -v -w10 93.184.216.34 80\n```\n\nResult:\n\n```text\nConnection to 93.184.216.34 80 port [tcp/http] succeeded!\n# No HTTP response received\n```\n\nUDP DNS also fails:\n\n```bash\ndig +time=3 +tries=1 @1.1.1.1 google.com\n```\n\nResult:\n\n```text\nno servers could be reached\n```\n\nHowever, this is not only a DNS issue, because direct HTTP/HTTPS to IP addresses also stalls.\n\nControl test: the XRay e"
+    },
+    {
+     "number": 3305,
+     "title": "ErrorCode: 1100. Error when retrieving configuration from API",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-20T08:25:47Z",
+     "updated_at": "2026-10-24T12:33:30Z",
+     "user": "vault-thirteen",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3305",
+     "body": "**Describe the bug**\nI can not connect to Amnazia Free.\n\nWhen I try to reload the configuration as stated in the documentation ( https://docs.amnezia.org/troubleshooting/amneziafree-key-not-working/ )\n\n`Gear icon` -> `Servers` -> `Anmezia Free` -> `Reload API config`,\n\nthe client shows an error (1100):\n\n`ErrorCode: 1100. Error when retrieving configuration from API`.\n\nOther apps are not interfering with the client, I checked the list ( https://docs.amnezia.org/troubleshooting/conflicting-apps/ ).\n\nI can not write a message into Telegram while it is blocked.\n\n**To Reproduce**\nSteps to reproduce the behaviour:\n1. `Gear icon` -> `Servers` -> `Anmezia Free` -> `Reload API config`.\n2. The client shows an error (1100): `ErrorCode: 1100. Error when retrieving configuration from API`.\n\n**Expected behaviour**\nA working functionality to reload the configuration.\n\n**Log files**\nFile is attached.\n[AmneziaVPN.log](https://github.com/user-attachments/files/33707361/AmneziaVPN.log)\n\n**Desktop:**\n - OS: Windows 10\n - Version 5.0.3.0.\n"
+    },
+    {
+     "number": 2516,
+     "title": "fix(windows): unblock WireGuard connect with large split-tunnel lists",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-04-23T08:46:20Z",
+     "updated_at": "2026-10-24T11:50:24Z",
+     "user": "kyoresuas",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2516",
+     "body": "Fixes #2248.\r\n\r\nCurrently, when connecting to a WireGuard server on Windows with a large split-tunnel list (e.g. the 11k-CIDR RU list from #2248), the client spends 5–20 minutes on \"Connecting\" before it finally reports \"Connected\". The same profile connects in 1–3 seconds on macOS, Android and iOS. Even after the first connect succeeds, reconnecting in the same session hangs on \"Connecting\" indefinitely.\r\n\r\nThis happens because `Daemon::activate` installs exclusion routes one at a time: every `CreateIpForwardEntry2` call wakes `wcmSvc` (which `router_win.cpp` already works around for OpenVPN/Shadowsocks but not for WireGuard), and `WindowsRouteMonitor::addExclusionRoute` re-fetches the full routing table and re-runs `updateCapturedRoutes` for every prefix. On top of that, `NotifyRouteChange2` fires a callback per row during interface bring-up; each callback queues a `routeChanged` slot that rescans everything, and Wintun's subnet-broadcast `/32` entries (which `QHostAddress::isBroadcast()` does not recognize) keep failing with `ERROR_OBJECT_ALREADY_EXISTS` and get retried on every rescan - the daemon event loop fills up and `Daemon::checkHandshake()` never gets a slot, so the `connected` signal never reaches the GUI.\r\n\r\nThis PR adds batch entry points to `WireguardUtils` so `WindowsRouteMonitor` can install all exclusion prefixes against one routing-table snapshot per address family and suspend `wcmSvc` for the whole batch (matching `router_win.cpp`), debounces `NotifyRouteChange2` callbacks through a 50 ms single-shot timer so bursts collapse into one rescan, and pins prefixes that return `ERROR_OBJECT_ALREADY_EXISTS` so they stop being retried. Other platforms fall back to the existing per-prefix path and are untouched.\r\n\r\nUpdate: disconnect/reconnect and server switch now also remove routes in one batch with wcmSvc suspended, and a gateway change no longer rewrites all exclusion routes with wcmSvc running. Also fixes: routes covered by a removed exclusion were not re-captured (inverted check in updateCapturedRoutes), a colliding prefix stayed outside the tunnel permanently, and switchServer did not remove CIDR exclusions of the previous server."
+    },
     {
      "number": 3314,
      "title": "macOS: site-based split tunneling is not applied for AWG/WireGuard — always full tunnel",
@@ -1288,17 +1334,6 @@
      "body": "**Describe the bug**\nWin client 4.8.12.9, WG2 protocol,  connects well and fast without split tunnel config. With imported split tunneling config with 11216 IP CIDRs records (full Russian IP CIDRs list) it takes app up to 5 minutes to  establish actual  VPN session with split tunneling working as expected, though application stays in \"Connecting\" state around 20 minutes until it gets in \"Connected\" state.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Go to 'Site-based split tunneling'\n2. Change mode to 'Addresses from the list should not be accessed via VPN'\n3. Import very long list of CIDRs (example attached)\n4. Enable 'Site-based split tunneling'\n5. Connect to server\n\n**Expected behavior**\nConnection established in few second like on other platforms with same config. Tested on Mac, Android and iOS and it connects in 1-3 seconds.\n\n**Log files**\n```\n[2026-02-19 19:57:57.775Z] [DEBUG] Amnezia  : Logger::setServiceLogsEnabled(): Logs transitioned to be  enabled\n[2026-02-19 19:57:57.775Z] [INFO] Amnezia  : Logging has enabled on AmneziaVPN version 4.8.12.9 f7379284\n[2026-02-19 19:57:57.775Z] [INFO] Amnezia  : Windows 11 Version 25H2 (x86_64)\n[2026-02-19 19:58:22.496Z] [DEBUG] Amnezia  : VpnConfigurator::getDnsForConfig \"1.1.1.1\" \"1.0.0.1\"\n[2026-02-19 19:58:22.496Z] [DEBUG] Amnezia  : \"ConnectToVpn, Server index is 0, container is amnezia-awg2, route mode is\" Settings::VpnAllExceptSites\n[2026-02-19 19:58:22.499Z] [DEBUG] Amnezia LocalSocketController : Initializing\n[2026-02-19 19:58:22.499Z] [DEBUG] Amnezia LocalSocketController : Connecting to: \\\\.\\pipe\\amneziavpn\n[2026-02-19 19:58:22.499Z] [DEBUG] Amnezia LocalSocketController : Daemon connected\n[2026-02-19 19:58:22.499Z] [DEBUG] Amnezia LocalSocketController : Check status\n[2026-02-19 19:58:22.499Z] [DEBUG] Amnezia LocalSocketController : Reading\n[2026-02-19 19:58:22.499Z] [DEBUG] Amnezia LocalSocketController : Parse command: status\n[2026-02-19 20:03:34.881Z] [WARNING] Amnezia  : Retrying to obtain clipboard.\n[2026-02-19 20:21:07.535Z] [DEBUG] Amnezia LocalSocketController : Reading\n[2026-02-19 20:21:07.535Z] [DEBUG] Amnezia LocalSocketController : Parse command: connected\n[2026-02-19 20:21:07.535Z] [DEBUG] Amnezia LocalSocketController : Handshake completed with: mHkVA0e6i5ULJmkFMzgVFKm5asX8zJxBLcRoPYlHdgI=\n[2026-02-19 20:21:07.535Z] [DEBUG] Amnezia LocalSocketController : Check status\n[2026-02-19 20:21:07.535Z] [WARNING] Amnezia  : Deferring startNetworkCheck; missing gateway/local address \"\" \"10.8.1.4\"\n[2026-02-19 20:21:07.543Z] [DEBUG] Amnezia LocalSocketController : Reading\n[2026-02-19 20:21:07.543Z] [DEBUG] Amnezia LocalSocketController : Parse command: status\n[2026-02-19 20:25:08.741Z] [WARNING] Amnezia  : Retrying to obtain clipboard.\n```\n\n**Desktop (please complete the following information):**\n - OS:  Windows 11 Version 25H2 (x86_64)\n - Version 4.8.12.9 f7379284\n\n**Server (please complete the following information):**\n - OS: Ubuntu 24.04\n\nAttaching exact file used in that case\n[amnezia_ru_cidr.json](https://github.com/user-attachments/files/25426801/amnezia_ru_cidr.json)\n"
     },
     {
-     "number": 2516,
-     "title": "fix(windows): unblock WireGuard connect with large split-tunnel lists",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-04-23T08:46:20Z",
-     "updated_at": "2026-10-23T12:03:08Z",
-     "user": "kyoresuas",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2516",
-     "body": "Fixes #2248.\r\n\r\nCurrently, when connecting to a WireGuard server on Windows with a large split-tunnel list (e.g. the 11k-CIDR RU list from #2248), the client spends 5–20 minutes on \"Connecting\" before it finally reports \"Connected\". The same profile connects in 1–3 seconds on macOS, Android and iOS. Even after the first connect succeeds, reconnecting in the same session hangs on \"Connecting\" indefinitely.\r\n\r\nThis happens because `Daemon::activate` installs exclusion routes one at a time: every `CreateIpForwardEntry2` call wakes `wcmSvc` (which `router_win.cpp` already works around for OpenVPN/Shadowsocks but not for WireGuard), and `WindowsRouteMonitor::addExclusionRoute` re-fetches the full routing table and re-runs `updateCapturedRoutes` for every prefix. On top of that, `NotifyRouteChange2` fires a callback per row during interface bring-up; each callback queues a `routeChanged` slot that rescans everything, and Wintun's subnet-broadcast `/32` entries (which `QHostAddress::isBroadcast()` does not recognize) keep failing with `ERROR_OBJECT_ALREADY_EXISTS` and get retried on every rescan - the daemon event loop fills up and `Daemon::checkHandshake()` never gets a slot, so the `connected` signal never reaches the GUI.\r\n\r\nThis PR adds batch entry points to `WireguardUtils` so `WindowsRouteMonitor` can install all exclusion prefixes against one routing-table snapshot per address family and suspend `wcmSvc` for the whole batch (matching `router_win.cpp`), debounces `NotifyRouteChange2` callbacks through a 50 ms single-shot timer so bursts collapse into one rescan, and pins prefixes that return `ERROR_OBJECT_ALREADY_EXISTS` so they stop being retried. Other platforms fall back to the existing per-prefix path and are untouched.\r\n\r\nUpdate: disconnect/reconnect and server switch now also remove routes in one batch with wcmSvc suspended, and a gateway change no longer rewrites all exclusion routes with wcmSvc running. Also fixes: routes covered by a removed exclusion were not re-captured (inverted check in updateCapturedRoutes), a colliding prefix stayed outside the tunnel permanently, and switchServer did not remove CIDR exclusions of the previous server."
-    },
-    {
      "number": 2575,
      "title": "Ubuntu 24.04: DNS not configured on amn0 after connect (race condition with systemd-resolved restart)",
      "is_pr": false,
@@ -1377,6 +1412,33 @@
     }
    ],
    "comments": [
+    {
+     "id": 6384400804,
+     "issue": 2704,
+     "issue_title": "[Android / XRay Reality] Connected but no traffic with fingerprint=chrome; changing to firefox fixes it",
+     "created_at": "2026-10-24T12:48:08Z",
+     "user": "zvukoper",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2704#issuecomment-6384400804",
+     "body": "My local AI agent finally fixed this for me. Here is his report. I hope that helps.\n\n## Summary\n\nOn Windows, XRay (VLESS + REALITY, raw TCP, `xtls-rprx-vision`) reports\n\"Connected\" but carries zero traffic. The bundled Xray-core logs a continuous\nstorm of:\n\n    transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\n\nRoot cause is the uTLS **fingerprint**. With `\"fingerprint\": \"chrome\"` the\nhandshake fails on bundled Xray-core 26.7.28; `\"ios\"` and `\"edge\"` work\nimmediately with the **same, unchanged** server config.\n\nThis is a **client-side regression**: `chrome` still worked on Xray-core\n<= 25.4.30. The server config was never touched.\n\n## Environment\n\n- Client: AmneziaVPN 5.0.3.0 (build de93650a9), Windows 10 21H2 (10.0.19044.7807) x86_64\n- Bundled core (from service log): `[Warning] core: Xray 26.7.28 started`\n- Server: self-hosted, `amnezia-xray` container, Xray 26.7.28, open ports 443 / 11443 / 58162\n- Protocol: VLESS + REALITY, network tcp, flow `xtls-rprx-vision`, SNI `google.com`\n- Same profile + same credentials work on Android/iOS\n\n## Evidence 1 — fingerprint matrix (standalone Xray-core 26.10.21, same config, 3 attempts each)\n\n    chrome      0/3   <- fails\n    safari      0/3   <- fails\n    firefox     0/3   <- fails  (note: contradicts the firefox workaround in #2704)\n    randomized  0/3   <- fails\n    ios         3/3   <- works\n    edge        3/3   <- works\n\nThrough `ios`: `api.ipify.org` returns the VPN server IP, youtube.com -> 200,\ngithub.com -> 200, 5 MB download in 1.18 s (~34 Mbit/s).\n\nNote that `firefox` — the workaround recommended in #2704 — does **not** fix it\nhere. Only `ios` and `edge` do. This is worth knowing before recommending\n`firefox` as the universal fix.\n\n## Evidence 2 — version bisect (standalone Xray-core, identical config, `fingerprint: chrome`)\n\n    Xray 24.9.30  (go1.23.1)  OK\n    Xray 25.3.6   (go1.24.1)  OK\n    Xray 25.4.30  (go1.24.2)  OK\n    Xray 25.6.8   (go1.24.4)  FAIL\n    Xray 25.8.3   (go1.24.5)  FAIL\n    Xray 25.9.11  (go1.25.1)  FAIL\n    Xray 26.10.21 (go1.27.3)  FAIL\n\nRegression window: between 25.4.30 and 25.6.8.\n\nError changes across the boundary:\n- <= 25.4.30: handshake completes, traffic flows\n- 25.6.8 / 25.9.11: `REALITY: processed invalid connection`\n- 25.8.3: also `protocol error: received *http2.GoAwayFrame before a SETTINGS frame`\n- 26.x: `REALITY: received real certificate (potential MITM or redirection)`\n\nI also tested `GODEBUG=tlsmlkem=0` on 25.6.8 — **no effect**, so the post-quantum\nML-KEM ClientHello is not the trigger.\n\n## Ruled out\n\n- **Server is healthy.** The REALITY inbound correctly falls back to the donor\n  site: TLS probe to `:58162` with SNI `google.com` returns the genuine cert,\n  thumbprint `35FFB4CB62622A26BFCA7BD897ACD434DCA0E7AC`, byte-identical to real\n  `google.com:443`. So fallback works and the server is reachable.\n- **Not DPI / not the ISP.** The Windows PC (wired) and the working phone (Wi-Fi)\n  sit behind the same public IP. Same provider, same path.\n- **Not the system clock.** Verified against an independent HTTP `Date` header.\n- **Not the credentials.** Same uuid/pbk/shortId/SNI work from Android/iOS, and\n  from Windows as soon as `fingerprint` is changed to `ios` or `edge`.\n- **Not the server config.** Untouched throughout; the only variable that\n  changed behaviour was the client-side core version / fingerprint.\n\n## Secondary bug — \"Connected\" is reported without any data-plane check\n\nThe UI flips to `Connected` **0.56 s** after `Xray::startXray()`, purely because\ntun2socks started and routes were installed:\n\n    11:38:39.543  Xray::startXray()\n    11:38:40.101  VpnProtocol::setConnectionState \"Connected\"\n\nIn one session the log then contained **2210** REALITY errors while the UI kept\nshowing \"Connected\". A single end-to-end request through the tunnel would have\nsurfaced this immediately. Suggest gating `Connected` on a real post-connect\nprobe (e.g. one HTTPS request via the tunnel).\n\n## Suggested "
+    },
+    {
+     "id": 6384260832,
+     "issue": 3305,
+     "issue_title": "ErrorCode: 1100. Error when retrieving configuration from API",
+     "created_at": "2026-10-24T12:33:30Z",
+     "user": "vault-thirteen",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3305#issuecomment-6384260832",
+     "body": "The same problem happens with the new version of the client - 5.0.4.2."
+    },
+    {
+     "id": 6383850300,
+     "issue": 2516,
+     "issue_title": "fix(windows): unblock WireGuard connect with large split-tunnel lists",
+     "created_at": "2026-10-24T11:50:24Z",
+     "user": "btrd1337",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2516#issuecomment-6383850300",
+     "body": "> @ygurov @vkamn could you take a look when you have time? Rebased cleanly on current dev, Windows build passes. This fixes the 5–20 min connect and endless reconnect with large split-tunnel lists (#2248).\r\n\r\nЯ проверил, работает, спасибо)"
+    },
     {
      "id": 6381415149,
      "issue": 3314,

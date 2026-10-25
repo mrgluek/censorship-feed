@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-25T16:18:16Z",
- "since": "2026-10-23T16:18:16Z",
+ "generated_at": "2026-10-25T20:50:34Z",
+ "since": "2026-10-23T20:50:34Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -188,7 +188,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-10-25T12:10:45Z",
-     "updated_at": "2026-10-25T13:30:42Z",
+     "updated_at": "2026-10-25T18:25:37Z",
      "user": "krivonosoff161",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405",
      "body": "Should Yggdrasil start QUIC links with 1200-byte packets to support paths with IP MTU 1280, or should this remain entirely a quic-go fallback policy?\n\nI reproduced a connection problem on `develop` at `2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35` (quic-go v0.64.1, Go 1.26.9). A proposed application-level change and regression test are available in [commit b37b195](https://github.com/krivonosoff161/yggdrasil-go/commit/b37b19588936020682f3c442c9d963d84211040b). I would like to confirm the intended behaviour and whether that change belongs here.\n\n### Small reproducible example\n\nUse the production QUIC link listener, dialler and TLS configuration, with a local UDP relay between them. The relay forwards datagrams in both directions but drops those exceeding the path's payload limit. It does not return a local send error or fabricate QUIC responses.\n\n| Path | UDP payload limit | Current configuration | InitialPacketSize=1200 on both endpoints |\n| --- | --- | --- | --- |\n| IPv4, IP MTU 1500 | 1472 bytes | connection and transfer pass | pass |\n| IPv4, IP MTU 1280 | 1252 bytes | handshake timeout | 4096-byte request and reply pass |\n| IPv6, IP MTU 1280 | 1232 bytes | handshake timeout | 4096-byte request and reply pass |\n\nThe [regression test](https://github.com/krivonosoff161/yggdrasil-go/blob/b37b19588936020682f3c442c9d963d84211040b/src/core/link_quic_test.go) is included in that commit. With the test added to the base code, the two low-MTU cases fail; with the three-line production change, all cases pass. Run it with:\n\n```sh\ngo test -count=1 -v -run TestQUICLinkThroughLimitedPath ./src/core\n```\n\nThe proposed change is in the shared listener/dialler configuration in `src/core/link_quic.go`:\n\n```go\n// Inside the existing quic.Config:\nInitialPacketSize: 1200,\n```\n\nThe default initial UDP payload is 1280 bytes, which becomes 1308 bytes with IPv4/UDP headers or 1328 with IPv6/UDP headers. If the smaller MTU is on an intermediate router, a local write can succeed while the packet is dropped further along the path. The local `EMSGSIZE` fallback added in quic-go 0.64 does not cover that silent-drop case. Path MTU discovery remains enabled with the proposed setting.\n\n### Routed failure and recovery\n\nI also tested actual Yggdrasil processes across two Linux kernel routers in isolated network namespaces:\n\n1. Establish the QUIC link with path MTU 1500 and successfully request a roughly 12 KiB NodeInfo response.\n2. Lower the intermediate link MTU to 1280 while keeping the endpoint links at 1500.\n3. Request the same response again.\n\nBefore the change, the large request fails, the peer goes down, and no recovery is observed during 85 seconds at MTU 1280. Restoring MTU 1500 restores communication. With 1200 configured on both endpoints, the first large request still fails, but the following small and large requests succeed while the path remains at MTU 1280. This was observed both with ICMP fragmentation-needed messages delivered and with them blocked, with packet-header captures and router counters checked.\n\nThis does **not** establish that the change fixes every PMTU decrease on an existing connection. The initial failed request remains, mixed-version peers may still send larger initial packets, and throughput impact has not been benchmarked. The established-connection black-hole problem is already tracked in [quic-go#5914](https://github.com/quic-go/quic-go/issues/5914). Related work includes the merged [local-error fallback #5911](https://github.com/quic-go/quic-go/pull/5911) and closed [handshake retry proposal #5936](https://github.com/quic-go/quic-go/pull/5936); I am not proposing to duplicate that library work here.\n\nLocal validation: Windows full Go test suite and `go vet` pass; all seven Linux test-package binaries were executed successfully in an isolated network namespace, including IPv6. NAT state loss, translated-port change and conntrack expiry also recovered with the candidate. GitHub CI has not run.\n\nWould starting at QUIC's 1200-byte"
@@ -500,20 +500,27 @@
      "user": "winchtester",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1396",
      "body": "# core: don't let a peer without a stream block the QUIC listener\n\nCloses #1391\n\n## What changes\n\n`src/core/link_quic.go`, accept loop only:\n\n- `AcceptStream` for an accepted QUIC connection is now awaited in a per-connection\n  goroutine instead of the listener goroutine, so `ql.Accept(ctx)` is called again\n  immediately.\n- That wait is bounded by `context.WithTimeout(ctx, quicStreamAcceptTimeout)`\n  (`quicStreamAcceptTimeout = 10 * time.Second`). If the peer does not open the link\n  stream in time, the connection is closed with `qc.CloseWithError(1, ...)`, as it\n  already was on a stream error.\n- The accepted `linkQUICStream` is handed to the listener channel from that goroutine\n  with a `select` on `ctx.Done()`, so the unbuffered `ch` (`link_quic.go:80`) cannot\n  stall the accept loop either.\n- The per-connection goroutines are cancelled when the accept loop exits (the loop\n  derives a cancellable child context and defers the cancel), so closing the listener\n  does not leave them waiting for the full timeout.\n\nNew test: `src/core/link_quic_test.go`.\n\n## Why this way\n\n- The defect is ordering, not a missing check: one connection in the wrong state consumed\n  the only goroutine that could accept the next one. Making the wait concurrent is the\n  smallest change that removes that coupling; it is also what the other link types already\n  do (`src/core/link.go:515` spawns a goroutine per accepted connection).\n- A deadline is needed on top of the goroutine, otherwise a silent peer keeps a\n  connection (and its goroutine) alive forever — the server's own `KeepAlivePeriod: 20s`\n  prevents `MaxIdleTimeout` from firing.\n- 10s is deliberately generous: a real peer opens the stream immediately after the\n  handshake (`linkQUIC.dial`, `link_quic.go:64`), so only peers that are not speaking the\n  link protocol hit the timeout.\n- No refactoring beyond that: the error `switch`, the channel type, `linkQUICListener`, the\n  dial path and the link framing are untouched.\n\n## Test\n\n`TestQUICListenerPeerWithoutStream` (`src/core/link_quic_test.go`):\n\n1. starts a real `linkQUIC` listener on `127.0.0.1:0` with a self-signed cert and the same\n   `quic.Config` as production (1m idle timeout, 20s keepalive);\n2. peer 1 completes the QUIC handshake and opens no stream, then the test waits 500ms so\n   the listener is parked waiting for that stream (`AcceptStream` does not return until the\n   peer sends something on a stream, which is exactly the blocking state);\n3. peer 2 completes the handshake, calls `OpenStreamSync` and writes `ping`, like a real\n   peer that starts its link handshake right away;\n4. the test requires `listener.Accept()` to return within 5s, then checks the accepted\n   connection reads `ping` and the peer reads back `pong`.\n\nOn the unpatched tree the test fails with:\n\n```\n--- FAIL: TestQUICListenerPeerWithoutStream (5.51s)\n    link_quic_test.go:145: listener did not accept the second peer while the first peer had no stream\n```\n\nWith the patch it passes in ~0.5s, including `-count=3 -race`.\n\n## How it was verified\n\n```\n$ cd /tmp/work/ygg-quic                      # v0.5.14 tree + patch\n$ GOFLAGS=-mod=mod GOPROXY=off go build ./...\n# exit 0\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -run TestQUICListenerPeerWithoutStream -count=1 -v\n--- PASS: TestQUICListenerPeerWithoutStream (0.51s)\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t0.510s\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -count=1\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t21.746s\n\n$ GOFLAGS=-mod=mod GOPROXY=off go test ./src/core/ -run TestQUICListenerPeerWithoutStream -count=3 -race\nok  \tgithub.com/yggdrasil-network/yggdrasil-go/src/core\t2.570s\n\n$ go vet ./src/core/     # clean\n$ gofmt -l src/core/     # no output\n```\n\nThe same test on the unpatched tree fails as quoted above (checked by reverting only\n`link_quic.go` and re-running the test).\n\n## Compatibility\n\n- No wire-format change: `linkQUICStream`, the `ch` channel, the QUIC/TLS configura"
-    },
-    {
-     "number": 1400,
-     "title": "Add signing to the macOS workflow",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-22T14:17:32Z",
-     "updated_at": "2026-10-23T19:09:36Z",
-     "user": "fulldecent",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400",
-     "body": "Please add binary signing to the continuous deployment workflow.\n\nThis will solve the problem that I can't open the binary.\n\n<img width=\"372\" height=\"428\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a462eccd-8e74-44c6-b056-e418449c22ca\" />\n\n> Apple could not verify “yggdrasil-0.5.14-macos-arm64.pkg” is free of malware that may harm your Mac or compromise your privacy.\n\n## Follow-on work\n\nWhile doing this, please also add attestations for the build process. Here is a simple example of a full CD process that also attaches GitHub build attestations to each automated releases.\n\nhttps://github.com/fulldecent/rust-template"
     }
    ],
    "comments": [
+    {
+     "id": 6401444963,
+     "issue": 1405,
+     "issue_title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
+     "created_at": "2026-10-25T18:25:37Z",
+     "user": "majestrate",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405#issuecomment-6401444963",
+     "body": "I suspect the right play is to let quic-go detect PMTU however it decides to internally. This shouldn't be our place to work around. "
+    },
+    {
+     "id": 6400991491,
+     "issue": 1405,
+     "issue_title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
+     "created_at": "2026-10-25T17:44:23Z",
+     "user": "krivonosoff161",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405#issuecomment-6400991491",
+     "body": "Fair point about the length — sorry. I'll keep follow-ups shorter.\n\nThis changes the initial UDP payload size to 1200 bytes, not stream limits. quic-go still rejects Initial datagrams below 1200 bytes.\n\nI ran separate local before/after checks using Yggdrasil's QUIC listener, dropping every server response so the client could not complete the handshake. The IPv4/IPv6 matrix covered default/1200-byte clients, repeats and truncated datagrams. The 1199- and 32-byte inputs produced no replies.\n\nThere is an important caveat: in a longer 12-second check with 2400 input bytes, the server sent 8417 bytes before and 7304 after. So I cannot claim a strict 3x bound. quic-go already explicitly [tests allowing the last packet to exceed that budget](https://github.com/quic-go/quic-go/blob/v0.64.1/internal/ackhandler/sent_packet_handler_test.go#L519-L531). These bounded checks did not demonstrate a new amplification bypass from this setting; they are not an exhaustive security assessment.\n\nOn general flakiness: no, this only addresses the demonstrated handshake/reconnection failure on a 1280-byte IP path. In the routed test, the first request could still fail; subsequent requests recovered with the setting. I haven't established a fix for QUIC's broader reliability problems."
+    },
     {
      "id": 6398260311,
      "issue": 1405,
@@ -657,20 +664,22 @@
      "user": "neilalexander",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/pull/1386#issuecomment-6382120437",
      "body": "Should be fixed in 26a2f73443d7998b11a5ce986dd7e02a1943b314."
-    },
-    {
-     "id": 6372697293,
-     "issue": 1400,
-     "issue_title": "Add signing to the macOS workflow",
-     "created_at": "2026-10-23T19:09:36Z",
-     "user": "fulldecent",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1400#issuecomment-6372697293",
-     "body": "lol, you overestimate my dad"
     }
    ]
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2585,
+     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-06T03:37:09Z",
+     "updated_at": "2026-10-25T17:14:40Z",
+     "user": "CrisRed",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
+     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
+    },
     {
      "number": 2614,
      "title": "move HaikuDaemon.cpp to a separate dir",
@@ -714,17 +723,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2612",
      "body": "Debian 13, there was Linux build like this: \r\n`g++ -DUSE_UPNP -DGITVER=3.0.0-18-ga646ac2c -Wl,-z,relro -Wl,-z,now  -o i2pd obj/daemon/Daemon.o obj/daemon/HaikuDaemon.o obj/daemon/HTTPServer.o obj/daemon/I2PControl.o obj/daemon/I2PControlHandlers.o obj/daemon/i2pd.o obj/daemon/UnixDaemon.o obj/daemon/UPnP.o libi2pd.a libi2pdclient.a libi2pdlang.a -lboost_json -lboost_url -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -lminiupnpc`\r\n\r\nНа Haiku не проверял.\r\n"
-    },
-    {
-     "number": 2585,
-     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-06T03:37:09Z",
-     "updated_at": "2026-10-25T02:03:38Z",
-     "user": "CrisRed",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
-     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
     },
     {
      "number": 2440,
@@ -938,6 +936,15 @@
    ],
    "comments": [
     {
+     "id": 6400667960,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-25T17:14:40Z",
+     "user": "OlegGirko",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6400667960",
+     "body": "So, what would be a solution for systems with modern OpenSSL that does not support DSA?\nI have a few eepsites that were created quote a while ago, so they use DSA-SHA1 as their keys. These keys correspond to the names registered with popular eepsite directories (like stats.i2p). Now I have no way to run these eepsites. Is there an upgrade path to newer key formats so I can re-register these eepsites with these new keys in eepsite directories?"
+    },
+    {
      "id": 6399588693,
      "issue": 2612,
      "issue_title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
@@ -1009,6 +1016,105 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7256,
+     "title": "Transport: Bind the UDP outbound socket with udp4/udp6 on OpenBSD",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-25T19:52:34Z",
+     "updated_at": "2026-10-25T20:09:58Z",
+     "user": "adsdevdoo",
+     "url": "https://github.com/XTLS/Xray-core/pull/7256",
+     "body": "Follow-up to #6688.\n\n#6688 binds the wildcard of the destination's family, but the merged version still passes the generic `\"udp\"` network to `ListenPacket`. For `\"[::]:0\"` Go also tries `0.0.0.0` (a lone `::` gets `IPv4zero` appended, golang/go#18806) and `ListenPacket` takes the first IPv4 address of the list. Where IPv4-mapped addresses exist that is still a dual-stack socket, so nothing shows up there. OpenBSD has no mapping: the socket stays `AF_INET` and every send to an IPv6 peer fails:\n\n```\nwrite udp 0.0.0.0:15085->[2001:4860:4806::]:123: address 2001:4860:4806::: non-IPv4 address\n```\n\nOn v26.10.21 this broke IPv6 UDP (QUIC, DNS, NTP) through `freedom` on an OpenBSD transparent-proxy router: 208 such errors in the first ~90 minutes after the upgrade. The build I tested #6624/#6688 with passed `udp4`/`udp6` explicitly, which is why it did not show up in my testing.\n\nThis names the family explicitly on OpenBSD only: `udp4` for a v4 bind address, `udp6` for a v6 one (a `sendThrough` address goes through the same check). Other platforms keep the network string and the dual-stack socket they get today.\n\n`TestDialUDPToIPv6` dials `[::1]` with `DialSystem` and writes one datagram. On OpenBSD 7.8 amd64 it fails without the change (`non-IPv4 address`) and passes with it; elsewhere it passes either way. The patched v26.10.21 has been running on the router since, and IPv6 UDP goes out from `[::]` again.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
+    },
+    {
+     "number": 7239,
+     "title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-23T02:43:26Z",
+     "updated_at": "2026-10-25T18:57:49Z",
+     "user": "bin-ran",
+     "url": "https://github.com/XTLS/Xray-core/issues/7239",
+     "body": "### Describe the bug\n\nOn Windows, Xray fails to start when the **current working directory** contains a directory junction:\n\n```\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nThe config file itself exists and is readable — the failure happens while Xray resolves the path of an already opened file.\n\n### Versions\n\n- Xray core **v26.10.21** (go1.27.3 windows/amd64) — broken\n- Xray core **v26.9.30** — works (the code path described below does not exist there)\n\n### Steps to reproduce\n\n```bat\nmkdir C:\\test\\target\necho {}> C:\\test\\target\\config.json\nmklink /J C:\\test\\link C:\\test\\target\n\ncd /d C:\\test\\link\nxray run -c config.json\n```\n\nResult:\n\n```\nXray 26.10.21 (Xray, Penetrates Everything.) 1b1647c (go1.27.3 windows/amd64)\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nWith the **physical** path it works:\n\n```bat\ncd /d C:\\test\\target\nxray run -c config.json\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\n[Warning] core: Xray 26.10.21 started\n```\n\n### Root cause\n\n`main/confloader/external/external.go`, function `readConfigFile()` (introduced in v26.10.21):\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\npath, err = filepath.EvalSymlinks(path)\nif err != nil {\n    return nil, err\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n`filepath.EvalSymlinks` fails on Windows with `ERROR_PATH_NOT_FOUND` (\"The system cannot find the path specified\") as soon as one component of the path is a **directory junction** (this is a Go standard library behavior, see the related golang/go report).\n\nNotes:\n- the file has already been opened successfully at this point (`os.Open(arg)` succeeded);\n- the resolved path is only used for an **extension whitelist** check, so the resolution itself is not required;\n- the failure is fatal and prevents the core from starting at all.\n\n### Impact\n\nEvery user whose Xray is launched with a working directory located under a junction / symlinked directory is affected, e.g.:\n\n- Scoop: `C:\\Users\\<user>\\scoop\\apps\\<app>\\current` is a junction to the versioned folder;\n- Chocolatey / WinGet shim directories;\n- any manually created `mklink /J` layout.\n\nThis is not only a CLI issue: for example **v2rayN** (which starts the core with `run -c config.json` and `WorkingDirectory = <install dir>\\binConfigs`) becomes completely unusable after updating the bundled core to v26.10.21 — the client shows `Failed to start: main: failed to load config files: [config.json] ... The system cannot find the path specified.` and no proxy is available.\n\n### Suggested fix\n\nDo not let the symlink resolution failure be fatal — fall back to the unresolved path and check the extension with `filepath.Ext`:\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\nif resolved, err := filepath.EvalSymlinks(path); err == nil {\n    path = resolved\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n### Minimal Go reproducer for the underlying behavior\n\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\tp, err := filepath.Abs(os.Args[1])\n\tfmt.Println(\"Abs:         \", p, err)\n\tr, err := filepath.EvalSymlinks(p)\n\tfmt.Println(\"EvalSymlinks:\", r, err)\n}\n```\n\nRun it with the CWD set to a junction directory and pass a file name inside it:\n\n```bat\ncd /d C:\\test\\link\ngo run main.go config.json\n`"
+    },
+    {
+     "number": 7255,
+     "title": "Consolidate file resolution and make symlink resolution best-effort",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-25T18:48:28Z",
+     "updated_at": "2026-10-25T18:48:28Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7255",
+     "body": "检查配置文件和 Lua 扩展名都是尽力而为模式，因为没解析硬链接\n\nGeodata 的自动下载，以前会破坏掉符号连接，现在遵循用户的意图\n\nClose #7239 这是由于 https://github.com/golang/go/issues/63703 导致的"
+    },
+    {
+     "number": 7252,
+     "title": "[Feature request] XHTTP: optional idle filler on the download stream, so an idle connection survives a CDN's origin-silence timeout",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-25T03:45:47Z",
+     "updated_at": "2026-10-25T18:29:12Z",
+     "user": "instaguybyebye-ship-it",
+     "url": "https://github.com/XTLS/Xray-core/issues/7252",
+     "body": "### What happens\n\nBehind Cloudflare (proxied record, any non-Enterprise plan), an XHTTP connection that carries no data for about two\nminutes is closed by the CDN, and the proxied TCP connection inside it breaks. Long-lived but mostly silent\nconnections (chat and push sockets, SSH sessions, database connections) get torn down and rebuilt every couple of\nminutes.\n\nThe same idle connection over WebSocket with `heartbeatPeriod` set survives, because the ping's pong is traffic\nfrom the origin.\n\n### Setup\n\n- Server: VLESS + XHTTP (`mode: packet-up`), TLS, behind Cloudflare. Xray-core v26.x; the code path below is the\n  same on `main`.\n- Client: Xray-core v26.9.9, `alpn` h2 or h3, default xmux plus `hKeepAlivePeriod: 10`.\n\n### Reproduce\n\n1. Through the tunnel, open a TCP connection to an SSH server and log in, running a command that prints nothing for\n   a while, e.g. `ssh -o ServerAliveInterval=0 -o TCPKeepAlive=no host 'sleep 200; echo done'`.\n2. Silent for 110 s: `done` arrives. Silent for 200 s: the session dies at 125-128 s (`client_loop: send\n   disconnect: Broken pipe`). Seen in every run.\n3. Control: the same session through a WebSocket transport on a different CDN held 290 s silent with TCP\n   keepalive off, at the default, and at 15 s, so the drop is specific to the XHTTP download path behind this CDN.\n\nTCP keepalive (`sockopt.tcpKeepAliveIdle`) and `xmux.hKeepAlivePeriod` do not help: both end at the CDN edge, and\nCloudflare's timer counts silence from the origin. Cloudflare documents a 100 s limit for the origin's response\n(error 524), and it can only be raised on Enterprise. The ~125 s drop observed mid-stream matches reports of\nstreaming responses behind Cloudflare.\n\n### Why\n\nIn `transport/internet/splithttp/hub.go`, the stream-up upload POST gets a periodic filler in its response\n(`scStreamUpServerSecs`, the goroutine that writes `X` padding), which keeps that request alive behind a CDN. The\ndownload (`GET`, stream-down / packet-up, and stream-one) gets nothing while idle: after the headers and the first\nflush, the server writes only real payload.\n\n### Request\n\nAn option, off by default, for the server to put a filler on the download stream every N seconds while it is\nidle (e.g. `scStreamDownServerSecs: \"20-80\"`, mirroring `scStreamUpServerSecs`), which the client discards. Since\nthe download body is not framed today, this probably needs a client that understands the filler, gated on the\nversion both sides already exchange (`x_version`) so older clients are never sent it.\n\nAn alternative that needs no new framing would also do: the client opening a fresh download request before the\ncurrent one has been idle for N seconds, handing the session over without losing data.\n\nHappy to test a build."
+    },
+    {
+     "number": 7253,
+     "title": "[Performance] Windows平台上Xray在网络拥堵时TCP下载速度严重下降，设置SO_RCVBUF后恢复正常",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-25T08:16:21Z",
+     "updated_at": "2026-10-25T18:27:02Z",
+     "user": "Vikrant-Aleph",
+     "url": "https://github.com/XTLS/Xray-core/issues/7253",
+     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n在 Windows 11 上使用 Xray-core 连接 VLESS + REALITY + Vision 节点时，发现 TCP 下载吞吐量在部分网络条件下明显低于 Linux 和 Android。\n\n本地宽带约为 100 Mbps。在网络条件较差、可能存在拥堵或丢包的时段，Windows 原生 Xray 的下载速度通常只有 10～30 Mbps，最近一次测试甚至只有约 10 Mbps。\n\n但在同一时段：\n\n- Android v2rayNG 连接同一节点，可以达到约 90 Mbps。\n- 同一台 Windows 电脑通过 WSL2 Linux 运行相同版本的 Xray-core，可以达到约 90 Mbps。\n- 在 Windows 原生 Xray 的 TCP 出站中显式设置 `SO_RCVBUF = 2 MiB` 后，下载速度可以从约 10 Mbps 提升至约 85 Mbps。\n\nWindows 和 WSL2 Linux 使用完全相同的 Xray-core 版本。\n\n因此，这个问题并不依赖于 v2rayN 的运行逻辑，更可能与 Windows 原生 Xray 建立的 TCP 连接、Socket 缓冲区行为或 Go/Windows 网络实现有关。\n\n不过，目前还无法确定根本原因属于 Xray-core、Go 运行时还是 Windows TCP 协议栈。\n\n#### 测试环境\n\n| 项目 | 信息 |\n|---|---|\n| Windows 系统 | Windows 11 26H2 |\n| Windows OS Build | 26300.9711 |\n| Windows 运行方式 | 命令行直接运行 `xray.exe`，不使用图形客户端 |\n| Windows Xray-core | v26.10.21 |\n| WSL2 Linux Xray-core | v26.10.21 |\n| Android 客户端 | v2rayNG 2.3.13 (xray v26.10.21) |\n| 协议 | VLESS |\n| 传输 | TCP |\n| 安全协议 | REALITY |\n| Flow | xtls-rprx-vision |\n| VPS TCP 拥塞控制 | BBR |\n| RTT | 约 140～180 ms |\n| 本地宽带 | 约 100 Mbps |\n\nMux 和 Fragment 均未启用。\n\n此前分别使用有线以太网和 Wi-Fi 测试，均出现过相同问题。\n\n#### 最新的同一时段对照测试\n\n在网络条件较差的同一时段，使用相同 Reality 节点进行了以下测试：\n\n| 测试方式 | 下载速度 |\n|---|---|\n| Android v2rayNG | 约 90 Mbps |\n| Windows 原生 Xray，默认 Socket 配置 | 约 10 Mbps |\n| Windows 原生 Xray，设置 `SO_RCVBUF = 2 MiB` | 约 85 Mbps |\n| WSL2 Linux Xray，相同核心版本 | 约 90 Mbps |\n\n\n两次测试使用相同的 Reality 节点和相同的出站配置，主要变化是 TCP Socket 的 `SO_RCVBUF` 设置。\n\n在相近的网络条件下，添加该设置后，Windows Xray 下载速度从约 10 Mbps 提升到了约 85 Mbps。\n\n此前还尝试将 `SO_RCVBUF` 从 2 MiB 增加到 4 MiB，但没有观察到明显的额外性能提升。\n\n#### Windows 电脑通过 Android 代理的交叉验证\n\n此前还进行了另一组测试：\n\n让 Android v2rayNG 建立 Reality 出站连接，并在 Android 上提供 SOCKS5 代理。\n\n同一台 Windows 电脑上的浏览器及 `curl` 通过该 SOCKS5 代理下载，可以达到接近 90～100 Mbps 的速度。\n\n例如，下载相同的 Cloudflare 测试文件时，曾观察到：\n\n- Windows 原生 Xray：约 2 MB/s。\n- Windows 通过 Android 的 SOCKS5 代理：约 12 MB/s。\n\n因此，Windows 浏览器、下载工具以及电脑本身的网络接入能力，并不能解释吞吐量差距。\n\n#### 问题与网络条件有关\n\n这个问题并不是全天持续存在。\n\n在深夜网络条件较好时，即使完全删除 `SO_RCVBUF` 自定义设置，Windows 原生 Xray 也能够达到约 85～90 Mbps。\n\n因此，这不是 Windows Xray 始终被限制在 10～30 Mbps 的固定性能瓶颈。\n\n更准确地说：\n\n**在某些网络条件下，Windows 原生 Xray 的 TCP 吞吐量明显低于 Linux/Android，而显式设置较大的 SO_RCVBUF 后，性能下降得到显著缓解。**\n\n#### VPS 端的 TCP 状态观察\n\n此前在 VPS 上使用以下命令观察测速期间的 TCP 状态：\n\n```bash\nss -tin state established '( sport = :443 )'\n```\n\n发现以下现象：\n\n**Windows 原生 Xray 下载速度较低时：**\n\n- 部分主要数据连接的 `snd_wnd` 约为 128～256 KiB。\n- 部分连接存在一定比例的 `rwnd_limited` 时间。\n- 能观察到 TCP 重传、乱序等现象。\n\n**Android v2rayNG 下载速度正常时：**\n\n- 部分主要数据连接的 `snd_wnd` 可以达到约 4 MiB。\n- 同样存在 TCP 重传，部分连接的重传字节数并不少。\n- 尽管存在重传，仍然能够保持较高下载吞吐量。\n\n#### 已尝试的排查\n\n1. **排除图形客户端影响**\n\n   Windows 测试直接运行 `xray.exe`，不用 v2rayN。\n\n2. **排除 Xray-core 版本差异**\n\n   Windows 原生 Xray 和 WSL2 Linux Xray 使用完全相同的 v26.10.21。\n\n   在相同时段，Linux 版能够达到约 90 Mbps，而 Windows 默认 Socket 配置只有约 10 Mbps。\n\n3. **排除浏览器及下载工具**\n\n   使用不同浏览器代理方式和 `curl --socks5-hostname` 测试，均观察到原生 Windows Xray 速度偏低。\n\n4. **排除网卡连接方式**\n\n   Windows 使用有线以太网和 Wi-Fi 均曾复现问题。\n\n5. **Windows TCP 自动调优**\n\n   Windows TCP 接收窗口自动调优原本为 `Normal`。\n\n   曾临时修改为 `Experimental`，没有明显改善，之后已经恢复 `Normal`。\n\n6. **测试 VPS 拥塞控制**\n\n   VPS 原本使用 BBR。\n\n   曾临时切换至 CUBIC，Windows 下载速度反而进一步下降至个位数 Mbps，随后恢复 BBR。\n\n7. **测试更大的 SO_RCVBUF**\n\n   设置 2 MiB 后，Windows 吞吐量明显改善。\n\n   进一步增加至 4 MiB，没有观察到明显的额外提升。\n\n### 重现方式\n\n**前提：**\n\n该问题在本人网络条件较差的时段更容易复现。网络状况良好时，默认配置也可能达到满速。\n\n**1. 使用默认 Socket 配置运行 Windows Xray**\n\nWindows 系统：\n\n```text\nWindows 11 26H2\nOS Build 26300.9711\n```\n\nXray-core：\n\n```text\nv26.10.21\n```\n\n通过命令行直接启动：\n\n```powershell\n.\\xray.exe run -config .\\config.json\n```\n\n使用 VLESS + REALITY + `xtls-rprx-vision` 出站，未设置 `SO_RCVBUF`。\n\n通过本地 SOCKS5 代理进行下载测速。\n\n在问题出现时，下载速度约为 10～30 Mbps，最近一次测试约为 10 Mbps。\n\n**2. 添加 SO_RCVBUF 设置**\n\n关闭 Windows Xray，在 VLESS 出站的 `streamSettings.sockopt` 中添加以下内容：\n\n```json\n{\n  \"customSockopt\": [\n    {\n      \"system\": \"windows\",\n      \"network\": \"tcp\",\n      \"type\": \"int\",\n      \"level\": \"65535\",\n      \"opt\": \"4098\",\n      \"value\": \"2097152\"\n    }\n  ]\n}\n```\n\n其中：\n\n- `level = 65"
+    },
+    {
+     "number": 7254,
+     "title": "[Interface] PrivateKey = USER_PRIVATE_KEY Address = 10.0.0.2/24 DNS = 1.1.1.1, 8.8.8.8  [Peer] PublicKey = SERVER_PUBLIC_KEY Endpoint = 185.200.100.50:51820 AllowedIPs = 0.0.0.0/0, ::/0 PersistentKeepalive = 25",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-25T12:42:16Z",
+     "updated_at": "2026-10-25T18:25:41Z",
+     "user": "shahinazari1366-pixel",
+     "url": "https://github.com/XTLS/Xray-core/issues/7254",
+     "body": ""
+    },
+    {
+     "number": 7251,
+     "title": "Validate numeric port list values before building ranges",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-25T00:08:37Z",
+     "updated_at": "2026-10-25T18:25:29Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7251",
+     "body": "A numeric `PortList` value bypasses the range check already applied to its string form: `65537` passes configuration validation while `\"65537\"` is rejected. Runtime port-list endpoints are 16-bit, so accepting an oversized value can change the port when it is narrowed.\n\nValidate the numeric branch with the existing `net.PortFromInt` before modifying the list. Preserve the current behavior for numeric zero, string zero, null, empty strings, valid lists/ranges and environment-based values.\n\nValidation:\n- 17 new regression/compatibility cases: four expected failures on the original code, all pass after the fix.\n- Affected configuration, net and routing package suites pass on Windows; the same suites pass with `-race` on Linux (220 test/subtest events each, no test failures or skips).\n- The built CLI accepts numeric/string `65535` and rejects numeric/string `65537`; the official v26.10.21 binary incorrectly accepts numeric `65537`.\n- Native Windows build, repository format check and `git diff --check` pass.\n- Full `go vet` of these packages reports two existing diagnostics, also reproduced on unchanged main: discarded cancellation in `app/router/command/command.go:101` and unreachable code in `infra/conf/xray.go:674`. No new diagnostics; full vet is not reported as green.\n\nAI-assisted implementation and tests; the diff and regression results were independently reviewed before submission.\n"
+    },
+    {
+     "number": 7185,
+     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-17T06:19:36Z",
+     "updated_at": "2026-10-25T18:18:12Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185",
+     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
+    },
+    {
+     "number": 6482,
+     "title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-07-12T14:38:41Z",
+     "updated_at": "2026-10-25T17:17:47Z",
+     "user": "alikoleini",
+     "url": "https://github.com/XTLS/Xray-core/issues/6482",
+     "body": "VLESS + XHTTP + REALITY inbound works fine on v26.6.27. After upgrading to v26.7.11 with the exact same config, clients can no longer connect. Downgrading back to v26.6.27 immediately fixes it."
+    },
+    {
      "number": 7250,
      "title": "Fix config loading through Windows directory junctions",
      "is_pr": true,
@@ -1018,39 +1124,6 @@
      "user": "Eljees",
      "url": "https://github.com/XTLS/Xray-core/pull/7250",
      "body": "Fixes #7239.\n\nOn Windows, `xray run -c config.json` can fail when its working directory contains a directory junction: opening the file succeeds, but `filepath.EvalSymlinks` returns \"The system cannot find the path specified.\" Reproduced with the official v26.10.21 Windows release and Go 1.27.3 on Windows 11 (build 26100).\n\nResolve the final Windows path from the already opened file handle with `GetFinalPathNameByHandle`, keeping the allowed-extension check on the resolved target. Resolver errors remain fatal. Other platforms retain the existing absolute-path and symlink resolution. The command and regular-file gates are unchanged.\n\nRegression tests use a real directory junction and a child process whose working directory is the junction, covering relative and absolute config paths. Tests also cover UTF-16 buffer growth, closed handles, the extension allowlist, pipe/other-command behavior, and symlink target extensions.\n\nValidation on the submitted commit:\n- Both native Windows junction cases fail on the original implementation and pass with this change. The freshly built CLI reports `Configuration OK` for the physical path and both junction cases.\n- `go test -count=1 ./main/confloader/... ./main/commands/base` and affected `go vet` pass on Windows (Go 1.27.3). The affected suite also passes with `-race` on Linux (Go 1.27.1).\n- Two Windows file-symlink cases skip with error 1314 (symlink privilege unavailable); both target-extension cases run and pass on Linux.\n- Native Windows CLI build, repository format check on the committed LF source bytes, and `git diff --check` pass.\n- The full application suite and macOS runtime tests were not run locally.\n\nAI assistance (OpenAI Codex) was used for implementation, tests, and review; the validation commands above were run locally.\n"
-    },
-    {
-     "number": 7185,
-     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-10-25T13:18:52Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185",
-     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
-    },
-    {
-     "number": 7254,
-     "title": "[Interface] PrivateKey = USER_PRIVATE_KEY Address = 10.0.0.2/24 DNS = 1.1.1.1, 8.8.8.8  [Peer] PublicKey = SERVER_PUBLIC_KEY Endpoint = 185.200.100.50:51820 AllowedIPs = 0.0.0.0/0, ::/0 PersistentKeepalive = 25",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-25T12:42:16Z",
-     "updated_at": "2026-10-25T12:42:16Z",
-     "user": "shahinazari1366-pixel",
-     "url": "https://github.com/XTLS/Xray-core/issues/7254",
-     "body": ""
-    },
-    {
-     "number": 7253,
-     "title": "[Performance] Windows平台上Xray在网络拥堵时TCP下载速度严重下降，设置SO_RCVBUF后恢复正常",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-25T08:16:21Z",
-     "updated_at": "2026-10-25T12:22:46Z",
-     "user": "Vikrant-Aleph",
-     "url": "https://github.com/XTLS/Xray-core/issues/7253",
-     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n在 Windows 11 上使用 Xray-core 连接 VLESS + REALITY + Vision 节点时，发现 TCP 下载吞吐量在部分网络条件下明显低于 Linux 和 Android。\n\n本地宽带约为 100 Mbps。在网络条件较差、可能存在拥堵或丢包的时段，Windows 原生 Xray 的下载速度通常只有 10～30 Mbps，最近一次测试甚至只有约 10 Mbps。\n\n但在同一时段：\n\n- Android v2rayNG 连接同一节点，可以达到约 90 Mbps。\n- 同一台 Windows 电脑通过 WSL2 Linux 运行相同版本的 Xray-core，可以达到约 90 Mbps。\n- 在 Windows 原生 Xray 的 TCP 出站中显式设置 `SO_RCVBUF = 2 MiB` 后，下载速度可以从约 10 Mbps 提升至约 85 Mbps。\n\nWindows 和 WSL2 Linux 使用完全相同的 Xray-core 版本。\n\n因此，这个问题并不依赖于 v2rayN 的运行逻辑，更可能与 Windows 原生 Xray 建立的 TCP 连接、Socket 缓冲区行为或 Go/Windows 网络实现有关。\n\n不过，目前还无法确定根本原因属于 Xray-core、Go 运行时还是 Windows TCP 协议栈。\n\n#### 测试环境\n\n| 项目 | 信息 |\n|---|---|\n| Windows 系统 | Windows 11 26H2 |\n| Windows OS Build | 26300.9711 |\n| Windows 运行方式 | 命令行直接运行 `xray.exe`，不使用图形客户端 |\n| Windows Xray-core | v26.10.21 |\n| WSL2 Linux Xray-core | v26.10.21 |\n| Android 客户端 | v2rayNG 2.3.13 (xray v26.10.21) |\n| 协议 | VLESS |\n| 传输 | TCP |\n| 安全协议 | REALITY |\n| Flow | xtls-rprx-vision |\n| VPS TCP 拥塞控制 | BBR |\n| RTT | 约 140～180 ms |\n| 本地宽带 | 约 100 Mbps |\n\nMux 和 Fragment 均未启用。\n\n此前分别使用有线以太网和 Wi-Fi 测试，均出现过相同问题。\n\n#### 最新的同一时段对照测试\n\n在网络条件较差的同一时段，使用相同 Reality 节点进行了以下测试：\n\n| 测试方式 | 下载速度 |\n|---|---|\n| Android v2rayNG | 约 90 Mbps |\n| Windows 原生 Xray，默认 Socket 配置 | 约 10 Mbps |\n| Windows 原生 Xray，设置 `SO_RCVBUF = 2 MiB` | 约 85 Mbps |\n| WSL2 Linux Xray，相同核心版本 | 约 90 Mbps |\n\n\n两次测试使用相同的 Reality 节点和相同的出站配置，主要变化是 TCP Socket 的 `SO_RCVBUF` 设置。\n\n在相近的网络条件下，添加该设置后，Windows Xray 下载速度从约 10 Mbps 提升到了约 85 Mbps。\n\n此前还尝试将 `SO_RCVBUF` 从 2 MiB 增加到 4 MiB，但没有观察到明显的额外性能提升。\n\n#### Windows 电脑通过 Android 代理的交叉验证\n\n此前还进行了另一组测试：\n\n让 Android v2rayNG 建立 Reality 出站连接，并在 Android 上提供 SOCKS5 代理。\n\n同一台 Windows 电脑上的浏览器及 `curl` 通过该 SOCKS5 代理下载，可以达到接近 90～100 Mbps 的速度。\n\n例如，下载相同的 Cloudflare 测试文件时，曾观察到：\n\n- Windows 原生 Xray：约 2 MB/s。\n- Windows 通过 Android 的 SOCKS5 代理：约 12 MB/s。\n\n因此，Windows 浏览器、下载工具以及电脑本身的网络接入能力，并不能解释吞吐量差距。\n\n#### 问题与网络条件有关\n\n这个问题并不是全天持续存在。\n\n在深夜网络条件较好时，即使完全删除 `SO_RCVBUF` 自定义设置，Windows 原生 Xray 也能够达到约 85～90 Mbps。\n\n因此，这不是 Windows Xray 始终被限制在 10～30 Mbps 的固定性能瓶颈。\n\n更准确地说：\n\n**在某些网络条件下，Windows 原生 Xray 的 TCP 吞吐量明显低于 Linux/Android，而显式设置较大的 SO_RCVBUF 后，性能下降得到显著缓解。**\n\n#### VPS 端的 TCP 状态观察\n\n此前在 VPS 上使用以下命令观察测速期间的 TCP 状态：\n\n```bash\nss -tin state established '( sport = :443 )'\n```\n\n发现以下现象：\n\n**Windows 原生 Xray 下载速度较低时：**\n\n- 部分主要数据连接的 `snd_wnd` 约为 128～256 KiB。\n- 部分连接存在一定比例的 `rwnd_limited` 时间。\n- 能观察到 TCP 重传、乱序等现象。\n\n**Android v2rayNG 下载速度正常时：**\n\n- 部分主要数据连接的 `snd_wnd` 可以达到约 4 MiB。\n- 同样存在 TCP 重传，部分连接的重传字节数并不少。\n- 尽管存在重传，仍然能够保持较高下载吞吐量。\n\n#### 已尝试的排查\n\n1. **排除图形客户端影响**\n\n   Windows 测试直接运行 `xray.exe`，不用 v2rayN。\n\n2. **排除 Xray-core 版本差异**\n\n   Windows 原生 Xray 和 WSL2 Linux Xray 使用完全相同的 v26.10.21。\n\n   在相同时段，Linux 版能够达到约 90 Mbps，而 Windows 默认 Socket 配置只有约 10 Mbps。\n\n3. **排除浏览器及下载工具**\n\n   使用不同浏览器代理方式和 `curl --socks5-hostname` 测试，均观察到原生 Windows Xray 速度偏低。\n\n4. **排除网卡连接方式**\n\n   Windows 使用有线以太网和 Wi-Fi 均曾复现问题。\n\n5. **Windows TCP 自动调优**\n\n   Windows TCP 接收窗口自动调优原本为 `Normal`。\n\n   曾临时修改为 `Experimental`，没有明显改善，之后已经恢复 `Normal`。\n\n6. **测试 VPS 拥塞控制**\n\n   VPS 原本使用 BBR。\n\n   曾临时切换至 CUBIC，Windows 下载速度反而进一步下降至个位数 Mbps，随后恢复 BBR。\n\n7. **测试更大的 SO_RCVBUF**\n\n   设置 2 MiB 后，Windows 吞吐量明显改善。\n\n   进一步增加至 4 MiB，没有观察到明显的额外提升。\n\n### 重现方式\n\n**前提：**\n\n该问题在本人网络条件较差的时段更容易复现。网络状况良好时，默认配置也可能达到满速。\n\n**1. 使用默认 Socket 配置运行 Windows Xray**\n\nWindows 系统：\n\n```text\nWindows 11 26H2\nOS Build 26300.9711\n```\n\nXray-core：\n\n```text\nv26.10.21\n```\n\n通过命令行直接启动：\n\n```powershell\n.\\xray.exe run -config .\\config.json\n```\n\n使用 VLESS + REALITY + `xtls-rprx-vision` 出站，未设置 `SO_RCVBUF`。\n\n通过本地 SOCKS5 代理进行下载测速。\n\n在问题出现时，下载速度约为 10～30 Mbps，最近一次测试约为 10 Mbps。\n\n**2. 添加 SO_RCVBUF 设置**\n\n关闭 Windows Xray，在 VLESS 出站的 `streamSettings.sockopt` 中添加以下内容：\n\n```json\n{\n  \"customSockopt\": [\n    {\n      \"system\": \"windows\",\n      \"network\": \"tcp\",\n      \"type\": \"int\",\n      \"level\": \"65535\",\n      \"opt\": \"4098\",\n      \"value\": \"2097152\"\n    }\n  ]\n}\n```\n\n其中：\n\n- `level = 65"
     },
     {
      "number": 7249,
@@ -1084,28 +1157,6 @@
      "user": "yx64",
      "url": "https://github.com/XTLS/Xray-core/issues/7243",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nSince v26.10.21 (REALITY `83f621788ca8`), every authenticated REALITY connection fails when the target sends an **empty EncryptedExtensions** (no SNI ack, no ALPN, nothing else). With `\"show\": true` the server prints:\n\n```\nhs.handshake() err: payload[0]: 8, padding: -4\n```\n\nv26.9.9 (REALITY `8cdf7bf9c7f0`) works with the same target.\n\nCause:\n\n- XTLS/REALITY `3c98159` (\"Sync upstream Go 1.27+\", #30) added to `handshake_server_tls13.go`:\n  ```go\n  if !hs.c.didResume && hs.clientHello.serverName != \"\" {\n      encryptedExtensions.serverNameAck = true\n  }\n  ```\n  An authenticated connection always carries SNI unless `serverNames` contains `\"\"`, so REALITY's own EncryptedExtensions now always has the 4-byte empty `server_name` extension. Before this commit `encryptedExtensionsMsg` had no such field.\n- `[REALITY] SECTION: mimic recorded handshakeLen` in `conn.go` pads each handshake record to the length recorded from the target and returns `payload[0]: %v, padding: %v` when its own record is longer (`payload[0]: 8` is EncryptedExtensions).\n- REALITY's own EncryptedExtensions has no ALPN, so it is now 4 bytes longer than an empty one. A target whose EncryptedExtensions is empty gives a 28-byte record (including the 5-byte record header) against REALITY's 32, hence padding -4. Any extension on the target side (an SNI ack, ALPN, ...) is at least 4 bytes and absorbs it.\n\nNot setting `serverNameAck` in the REALITY server (the pre-sync behaviour) looks sufficient, since padding then matches any target; I have not tested a patch.\n\nThis is easy to miss: the fallback path does not reach this code, so probing the node without the key looks fine, and without `show` the server logs only an Info line (`REALITY: processed invalid connection ...: handshake did not complete successfully`) while the client gets EOF. We hit it on a production node whose target neither acks SNI nor negotiates ALPN. To check a target, look for any extension besides `supported versions` and `key share`:\n\n```\nopenssl s_client -connect <Domain>:443 -servername <Domain> -tls1_3 -alpn h2,http/1.1 -tlsextdebug </dev/null 2>/dev/null | grep 'TLS server extension'\n```\n\n### Reproduction Method\n\nAll on loopback (Linux, OpenSSL 3.5.5). Three `openssl s_server` targets with the same self-signed certificate for `example.test`:\n\n```\nopenssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout k.pem -out c.pem -days 30 -subj /CN=example.test -addext subjectAltName=DNS:example.test\n# A: empty EncryptedExtensions\nopenssl s_server -accept 127.0.0.1:20443 -cert c.pem -key k.pem -tls1_3 -www -quiet\n# B: acks SNI (s_server acks only when -servername installs its callback and the name matches)\nopenssl s_server -accept 127.0.0.1:20444 -cert c.pem -key k.pem -tls1_3 -www -quiet -servername example.test -cert2 c.pem -key2 k.pem\n# C: no SNI ack, but negotiates ALPN\nopenssl s_server -accept 127.0.0.1:20445 -cert c.pem -key k.pem -tls1_3 -www -quiet -alpn h2,http/1.1\n# something to fetch through the proxy\npython3 -m http.server 18080 --bind 127.0.0.1\n```\n\nStart the server (config below, `target` pointing at A, B or C) and the client (always v26.10.21), then `curl -x socks5h://127.0.0.1:11080 http://127.0.0.1:18080/`:\n\n| server | target | target EE record | result |\n|---|---|---|---|\n| v26.10.21 | A | 28 | curl: (56) Recv failure: Connection reset by peer; `padding: -4` |\n| v26.10.21 | B | 32 | 200 |\n| v26.10"
-    },
-    {
-     "number": 7252,
-     "title": "[Feature request] XHTTP: optional idle filler on the download stream, so an idle connection survives a CDN's origin-silence timeout",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-25T03:45:47Z",
-     "updated_at": "2026-10-25T03:45:47Z",
-     "user": "instaguybyebye-ship-it",
-     "url": "https://github.com/XTLS/Xray-core/issues/7252",
-     "body": "### What happens\n\nBehind Cloudflare (proxied record, any non-Enterprise plan), an XHTTP connection that carries no data for about two\nminutes is closed by the CDN, and the proxied TCP connection inside it breaks. Long-lived but mostly silent\nconnections (chat and push sockets, SSH sessions, database connections) get torn down and rebuilt every couple of\nminutes.\n\nThe same idle connection over WebSocket with `heartbeatPeriod` set survives, because the ping's pong is traffic\nfrom the origin.\n\n### Setup\n\n- Server: VLESS + XHTTP (`mode: packet-up`), TLS, behind Cloudflare. Xray-core v26.x; the code path below is the\n  same on `main`.\n- Client: Xray-core v26.9.9, `alpn` h2 or h3, default xmux plus `hKeepAlivePeriod: 10`.\n\n### Reproduce\n\n1. Through the tunnel, open a TCP connection to an SSH server and log in, running a command that prints nothing for\n   a while, e.g. `ssh -o ServerAliveInterval=0 -o TCPKeepAlive=no host 'sleep 200; echo done'`.\n2. Silent for 110 s: `done` arrives. Silent for 200 s: the session dies at 125-128 s (`client_loop: send\n   disconnect: Broken pipe`). Seen in every run.\n3. Control: the same session through a WebSocket transport on a different CDN held 290 s silent with TCP\n   keepalive off, at the default, and at 15 s, so the drop is specific to the XHTTP download path behind this CDN.\n\nTCP keepalive (`sockopt.tcpKeepAliveIdle`) and `xmux.hKeepAlivePeriod` do not help: both end at the CDN edge, and\nCloudflare's timer counts silence from the origin. Cloudflare documents a 100 s limit for the origin's response\n(error 524), and it can only be raised on Enterprise. The ~125 s drop observed mid-stream matches reports of\nstreaming responses behind Cloudflare.\n\n### Why\n\nIn `transport/internet/splithttp/hub.go`, the stream-up upload POST gets a periodic filler in its response\n(`scStreamUpServerSecs`, the goroutine that writes `X` padding), which keeps that request alive behind a CDN. The\ndownload (`GET`, stream-down / packet-up, and stream-one) gets nothing while idle: after the headers and the first\nflush, the server writes only real payload.\n\n### Request\n\nAn option, off by default, for the server to put a filler on the download stream every N seconds while it is\nidle (e.g. `scStreamDownServerSecs: \"20-80\"`, mirroring `scStreamUpServerSecs`), which the client discards. Since\nthe download body is not framed today, this probably needs a client that understands the filler, gated on the\nversion both sides already exchange (`x_version`) so older clients are never sent it.\n\nAn alternative that needs no new framing would also do: the client opening a fresh download request before the\ncurrent one has been idle for N seconds, handing the session over without losing data.\n\nHappy to test a build."
-    },
-    {
-     "number": 7251,
-     "title": "Validate numeric port list values before building ranges",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-25T00:08:37Z",
-     "updated_at": "2026-10-25T00:08:37Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7251",
-     "body": "A numeric `PortList` value bypasses the range check already applied to its string form: `65537` passes configuration validation while `\"65537\"` is rejected. Runtime port-list endpoints are 16-bit, so accepting an oversized value can change the port when it is narrowed.\n\nValidate the numeric branch with the existing `net.PortFromInt` before modifying the list. Preserve the current behavior for numeric zero, string zero, null, empty strings, valid lists/ranges and environment-based values.\n\nValidation:\n- 17 new regression/compatibility cases: four expected failures on the original code, all pass after the fix.\n- Affected configuration, net and routing package suites pass on Windows; the same suites pass with `-race` on Linux (220 test/subtest events each, no test failures or skips).\n- The built CLI accepts numeric/string `65535` and rejects numeric/string `65537`; the official v26.10.21 binary incorrectly accepts numeric `65537`.\n- Native Windows build, repository format check and `git diff --check` pass.\n- Full `go vet` of these packages reports two existing diagnostics, also reproduced on unchanged main: discarded cancellation in `app/router/command/command.go:101` and unreachable code in `infra/conf/xray.go:674`. No new diagnostics; full vet is not reported as green.\n\nAI-assisted implementation and tests; the diff and regression results were independently reviewed before submission.\n"
     },
     {
      "number": 7248,
@@ -1197,6 +1248,114 @@
     }
    ],
    "comments": [
+    {
+     "id": 6402569811,
+     "issue": 7256,
+     "issue_title": "Transport: Bind the UDP outbound socket with udp4/udp6 on OpenBSD",
+     "created_at": "2026-10-25T20:09:28Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7256#issuecomment-6402569811",
+     "body": "这看起来像是上游的问题 都传入 0.0.0.0 了 如果每个跨平台项目还要写这么一串逻辑就太好笑了\r\n还是把这个反馈给go吧"
+    },
+    {
+     "id": 6402444127,
+     "issue": 7256,
+     "issue_title": "Transport: Bind the UDP outbound socket with udp4/udp6 on OpenBSD",
+     "created_at": "2026-10-25T19:57:42Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7256#issuecomment-6402444127",
+     "body": "如果这个pr前有问题 #6688 是怎么按你的说法通过测试的？"
+    },
+    {
+     "id": 6401796163,
+     "issue": 7239,
+     "issue_title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
+     "created_at": "2026-10-25T18:57:49Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/issues/7239#issuecomment-6401796163",
+     "body": "try https://github.com/XTLS/Xray-core/actions/runs/40220514637"
+    },
+    {
+     "id": 6401483390,
+     "issue": 7252,
+     "issue_title": "[Feature request] XHTTP: optional idle filler on the download stream, so an idle connection survives a CDN's origin-silence timeout",
+     "created_at": "2026-10-25T18:29:12Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7252#issuecomment-6401483390",
+     "body": "也许通过设置ssh的保活参数("
+    },
+    {
+     "id": 6401458244,
+     "issue": 7253,
+     "issue_title": "[Performance] Windows平台上Xray在网络拥堵时TCP下载速度严重下降，设置SO_RCVBUF后恢复正常",
+     "created_at": "2026-10-25T18:26:52Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7253#issuecomment-6401458244",
+     "body": "Windows好像是接收窗口自动调谐还是哪个烂功能导致的 我当年也深受其害 去netsh捣鼓几个参数来回测几下就好了 属于Windows自己的问题"
+    },
+    {
+     "id": 6401443367,
+     "issue": 7251,
+     "issue_title": "Validate numeric port list values before building ranges",
+     "created_at": "2026-10-25T18:25:28Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7251#issuecomment-6401443367",
+     "body": "这种小旮旯应该没什么必要吧"
+    },
+    {
+     "id": 6401364521,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-25T18:18:12Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6401364521",
+     "body": "麻烦就算，谁需要谁 PR"
+    },
+    {
+     "id": 6401266321,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-25T18:09:30Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6401266321",
+     "body": "似乎有这功能，但是似乎没几个这样做的\r\n要做我也只想到三个表能单列的"
+    },
+    {
+     "id": 6401019176,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-25T17:46:58Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6401019176",
+     "body": "或许有人心疼那点流量，打算用精简版的 dat，然后又想要扩展版的某个分类\r\n如果麻烦就算了，geoip 因为有现成的很容易做"
+    },
+    {
+     "id": 6400962626,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-25T17:41:43Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6400962626",
+     "body": "> 都完事后 main 文档别忘了\r\n\r\n~已降低文档质量~\r\n\r\n> geosite 要不要提供独立分类的 dat 文件在 release 分支\r\n\r\n好像必要性不是很强的样子 有哪些要用到的吗"
+    },
+    {
+     "id": 6400694465,
+     "issue": 6482,
+     "issue_title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
+     "created_at": "2026-10-25T17:17:02Z",
+     "user": "Raymond520888",
+     "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6400694465",
+     "body": "刚试了一下，Chrome120和Firefox148都用不了不知道为什么\n"
+    },
+    {
+     "id": 6400590930,
+     "issue": 6482,
+     "issue_title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
+     "created_at": "2026-10-25T17:07:36Z",
+     "user": "Jackyin7",
+     "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6400590930",
+     "body": "可以在shadowrocket的系统设置里面把tcp-指纹改成Chrome140即可解决\n"
+    },
     {
      "id": 6399909433,
      "issue": 6800,
@@ -1544,6 +1703,28 @@
   "amnezia-vpn/amnezia-client": {
    "issues": [
     {
+     "number": 3312,
+     "title": "fix: gateway requests on slow or blocked dns",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-22T09:16:59Z",
+     "updated_at": "2026-10-25T18:23:30Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3312",
+     "body": ""
+    },
+    {
+     "number": 3326,
+     "title": "fix: keep default godebug when disabling async preemption",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-25T18:20:49Z",
+     "updated_at": "2026-10-25T18:20:49Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3326",
+     "body": ""
+    },
+    {
      "number": 3325,
      "title": "feat: Add Indonesian (id_ID) localization",
      "is_pr": true,
@@ -1707,39 +1888,6 @@
      "user": "DmStepankov",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3314",
      "body": "# macOS: Site-based split tunneling is not applied for AWG/WireGuard — always full tunnel\n\n## Environment\n\n- AmneziaVPN client: **5.0.3.0** (macOS pkg, universal)\n- OS: **macOS 27.0.1** (Apple Silicon, arm64)\n- Protocol: **AWG** (self-hosted server, amneziawg-tools v3.1.20260812)\n- GUI state: Settings → Split tunneling → Sites → **\"Only for selected sites\"** (`Conf.routeMode = 1`, `Conf.ForwardSites` populated with 36 domains), VPN reconnected after the change\n\n## Summary\n\nOn macOS, for AWG (and WireGuard) connections, the site-based split tunneling settings are **silently ignored** — the connection is always full tunnel. Two independent code paths cause this:\n\n### 1. Route-split logic is skipped for AWG/WG containers\n\n`client/vpnConnection.cpp` (`VpnConnection::onConnectionStateChanged`, Connected branch) wraps the **entire** split-tunneling route logic in:\n\n```cpp\n// line 135\nif (!ContainerUtils::isAwgContainer(container) && container != DockerContainer::WireGuard) {\n    ...\n    if (m_appSettingsRepository->isSitesSplitTunnelingEnabled()) {\n        // routeDeleteList(\"0.0.0.0\"), VpnOnlyForwardSites -> addSitesRoutes(),\n        // VpnAllExceptSites -> 0.0.0.0/1 + 128.0.0.0/1 ...\n    }\n}\n```\n\nFor AWG and WireGuard containers none of this ever runs: neither forward-site routes (include mode) nor exception routes (exclude mode) are added, and the DNS servers are not excluded from the tunnel on macOS.\n\n### 2. Client config is hardcoded to full tunnel\n\n`client/core/configurators/wireguardConfigurator.cpp` (line 275):\n\n```cpp\nclientConfig.allowedIps = QStringList { \"0.0.0.0/0\", \"::/0\" };\n```\n\nThis is unconditional — the configured split-tunneling mode is not reflected in `AllowedIPs`. The macOS daemon then expands the default route into two halves (`client/platforms/macos/daemon/wireguardutilsmacos.cpp`, `updateRoutePrefix`, line 357):\n\n```cpp\nreturn m_rtmonitor->insertRoute(IPAddress(\"0.0.0.0/1\")) &&\n       m_rtmonitor->insertRoute(IPAddress(\"128.0.0.0/1\"));\n```\n\nSo every AWG connection gets `0/1` + `128.0/1` → tunnel, i.e. full tunnel, regardless of GUI state.\n\n### 3. Related: `routeGateway()` is never set for WG/AWG\n\n`VpnProtocol::routeGateway()` is only populated by the OpenVPN (`openVpnProtocol.cpp:172,178`) and Xray (`xrayProtocol.cpp:33`) protocols. For WireGuard/AWG it stays empty. The macOS-only branch in the `VpnAllExceptSites` path relies on it:\n\n```cpp\n#ifdef Q_OS_MACOS\n    iface->routeAddList(m_vpnProtocol->routeGateway(), QStringList() << dns1 << dns2);\n#endif\n    addSitesRoutes(m_vpnProtocol->routeGateway(), routeMode);\n```\n\n— so even for protocols where the split logic runs, on macOS the DNS exclusion routes and site routes are added via an **empty gateway** whenever the protocol is WG/AWG (`routeAddList(\"\", ip)` silently fails).\n\n## Steps to reproduce\n\n1. macOS 27.0.1 (arm64), AmneziaVPN 5.0.3.0, self-hosted AWG server\n2. Settings → Split tunneling → Sites → mode \"Only for selected sites\", add e.g. `youtube.com`\n3. Connect via AWG\n4. `route -n get alfabank.ru` (not in the list) → `interface: utunX` (tunnel) — expected `en0`\n5. `route -n get youtube.com` → `interface: utunX` — this one is correct, but only because everything is routed into the tunnel\n\n## Actual result\n\n- `route -n get default` → en0, but `0/1` + `128.0/1` → utun (full tunnel in practice)\n- Sites **not** in the forward list (including the configured DNS servers, e.g. 1.1.1.1) are routed through the tunnel\n- GUI split-tunneling settings have **no effect** on AWG connections\n\n## Impact\n\n- \"All except sites\" mode cannot keep RU-local resources (banks, gov services) on the direct path — they egress via the VPN IP\n- Overlay VPNs that must coexist with Amnezia (e.g. Tailscale system extension) break under the captured routes: their control-plane sockets and UDP (STUN/DERP) die, `tailscale netcheck` reports `UDP: false`, controlplane unreachable — while ordinary user processes through the tunnel work fine\n- Workaround today: switch the connection to XRay (t"
-    },
-    {
-     "number": 3321,
-     "title": "fix: allocate WireGuard client IP independently of peer order",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-23T20:17:27Z",
-     "updated_at": "2026-10-23T20:17:27Z",
-     "user": "wBaob",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3321",
-     "body": "Fixes #3261.\n\nSelect the numerically highest peer IPv4 address instead of the last entry to prevent duplicate IP allocation when peers are reordered.\n\nValidation: standalone Qt 6 harness, 1010 checks. Previous logic: 972 failures. Patched logic: 0 failures. git diff --check passed.\n\nFull application build and live VPN validation were not run."
-    },
-    {
-     "number": 3130,
-     "title": "[macOS 26.6.2] System-wide network deadlock in tun2socks/utun path triggered by Docker Desktop",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-05T11:50:44Z",
-     "updated_at": "2026-10-23T19:14:13Z",
-     "user": "sergiusd",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3130",
-     "body": "# [macOS 26.6.2] System-wide network deadlock in tun2socks/utun path triggered by Docker Desktop\n\n## Summary\n\nmacOS became completely unresponsive while AmneziaVPN was connected. The Apple-generated stackshot identified an explicit kernel lock cycle involving Docker Desktop and the input thread of the tunnel interface used by AmneziaVPN:\n\n```text\nDeadlock: com.docker.backend (Docker) [81977] thread 0x9c5f82\n  -> kernel_task [0] thread 0x91c3f9 \"dlil_input_utun22\"\n  -> com.docker.backend (Docker) [81977] thread 0x9c5f82\n\nBlocked by Deadlock: 58 tasks\n```\n\nThe deadlock blocked `WindowServer`, Finder, Dock, `runningboardd`, `powerd`, `mDNSResponder`, AmneziaVPN, `tun2socks`, Docker Desktop, browsers, terminals, and IDEs. Normal Force Quit and shutdown were impossible, so the Mac had to be powered off by holding the power button.\n\nThis appears related to #2933 and possibly #2897, but the trigger and final lock graph are different. In this case, the lock cycle formed immediately after Docker Desktop started and opened many outbound connections through Amnezia's `utun22` interface.\n\n## Environment\n\n- Hardware: MacBookPro18,2, Apple Silicon, 32 GB RAM\n- macOS: 26.6.2, build 25G83, arm64\n- AmneziaVPN: 5.0.1.5; bundle version `5.0.1 (5)`\n- Tunnel process: `/Applications/AmneziaVPN.app/Contents/MacOS/tun2socks`\n- Tunnel interface: `utun22`\n- Protocol path: most likely XRay/VLESS or another Amnezia mode using the external `tun2socks` process\n- Docker Desktop: 4.66.1, build 222799\n- Docker networking: gVisor; `UseVpnkit` enabled\n- LuLu 4.5.1 network extension was also active\n- ProtonVPN was installed but disconnected\n\n## Expected behavior\n\nStarting or using Docker Desktop while AmneziaVPN is connected should not deadlock the macOS networking stack. A failed socket or tunnel operation should return an error or time out without blocking unrelated applications, `WindowServer`, or system shutdown.\n\n## Actual behavior\n\nApplications progressively stopped responding, followed by Finder, Dock, `WindowServer`, and essential system services. Keyboard shortcuts, Force Quit, terminal access, and normal shutdown stopped working. A forced power-off was required.\n\nmacOS recorded the reset as:\n\n```text\nBoot failure count: 1\nBoot faults: btn_rst,finger_reset force_off\n```\n"
-    },
-    {
-     "number": 3284,
-     "title": "Xray: DNS Amnezia (172.29.172.254) блокируется на сервере новым Xray-core, клиент «подключён», но сайты не открываются",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-14T11:16:36Z",
-     "updated_at": "2026-10-23T16:52:56Z",
-     "user": "spongegot",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3284",
-     "body": "**Проблема**\nКлиент Amnezia (Windows) подключается по Xray (VLESS + Reality, flow xtls-rprx-vision, TCP). Статус «Подключено», но все сайты выдают ERR_TIMED_OUT.\n\n**Причина (из лога сервера, loglevel info)**\nВ контейнере amnezia-xray работает Xray 26.7.28. В логе:\n\n```\napp/dispatcher: default route for udp:172.29.172.254:53\nproxy/freedom: blocked target: udp:172.29.172.254:53, blackholing connection for 44s\n```\n\n172.29.172.254 это Amnezia DNS внутри docker-сети. Новый `freedom` outbound блокирует приватные адреса по умолчанию, поэтому все DNS-запросы клиента уходят в чёрную дыру (см. раздел finalRules в документации Xray: https://xtls.github.io/config/outbounds/freedom.html). В server.json от Amnezia единственный outbound это `{\"protocol\": \"freedom\"}` без finalRules.\n\n**Возможное решение**\nДобавить в freedom разрешающее правило для адреса Amnezia DNS:\n\n```json\n{\"protocol\": \"freedom\", \"settings\": {\"finalRules\": [{\"action\": \"allow\", \"port\": \"53\", \"ip\": [\"172.29.172.254\"]}]}}\n```\n\nКонфиг с таким правилом проходит `xray run -test`. Работу через клиент Amnezia я проверить не смог (мешает другая проблема, см. отдельный issue про fingerprint), так что это предположение, а не подтверждённый фикс.\n\n**Окружение**\n- Клиент Amnezia: 5.0.3.0\n- ОС клиента: Windows 11 26H2\n- Сервер: Ubuntu 22.04, свой VPS, Docker-контейнер amnezia-xray, Xray 26.7.28\n\nПохожий симптом в обсуждении: https://github.com/amnezia-vpn/amnezia-client/discussions/2172"
     }
    ],
    "comments": [
@@ -1805,24 +1953,6 @@
      "user": "igorburago",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3314#issuecomment-6381415149",
      "body": "Just ran into this very bug myself. Can confirm both the erroneous behavior and its culprit in the code."
-    },
-    {
-     "id": 6372778268,
-     "issue": 3130,
-     "issue_title": "[macOS 26.6.2] System-wide network deadlock in tun2socks/utun path triggered by Docker Desktop",
-     "created_at": "2026-10-23T19:14:12Z",
-     "user": "stone-w4tch3r",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3130#issuecomment-6372778268",
-     "body": "I encountered repeated macos crashed with amnezia ON and docker ON. Reproduced it multiuple times, for me having both ON resulkts in crash in about 1h\n\nThis started only today, strange\n\nI researched issue together with codex and asked it to upload info to github. Hope to help fixing it\n\nALL BELLOW THE LINE IS GENERATED BY CODEX GPT-6.1-SOL MEDIUM\n\n---\n\n## Additional occurrence: the same Docker/kernel lock cycle also occurs with AmneziaWG\n\nThis appears to match this issue's lock-cycle signature. The additional finding is that the later incident used `amneziawg-go`, not `tun2socks`. The observations below were extracted from local Apple diagnostic reports, running-process snapshots, PF rules, and Docker's installer log. They do not establish which component introduces the locking bug.\n\nAll incident times below are **October 23, 2026, UTC+05:00**. The preface above describes the user's experience that day; this comment is being posted on October 24.\n\n## Environment\n\n- Apple Silicon Mac, model identifier `Mac17,9`, 48 GB RAM.\n- macOS **26.7.1**, build **25G241**.\n- AmneziaVPN **5.0.3 (0)**; installer version **5.0.3.0**.\n- Docker Desktop **4.96.0 (243774)** in the earlier hang report and **4.96.3 (244472)** in the later report.\n- Docker's **Use kernel networking for UDP** setting was checked in the UI by the user and was **off**. This did not prevent recurrence.\n- The later working connection was managed by the root `AmneziaVPN-service`, with its child `amneziawg-go`, using `utun6` with MTU 1376.\n\nOther networking/security components were present and have not been isolated as variables:\n\n- Cisco AnyConnect Socket Filter Extension **4.10.02086**, active.\n- Amiconnect tunnel extension **1.15.2573/1**, active; its VPN reported connected.\n- Kaspersky system extension **12.2.0.32**, active.\n- VMware Fusion networking services and virtual bridges were present.\n\nThis is not a clean-room reproduction. These components are disclosed as possible confounders, not identified causes.\n\n## Recorded incidents\n\n### 1. First watchdog panic at 20:52\n\n`configd-2026-10-23-204953.ips` identifies its unresponsive queue as `IPConfigurationAgentQueue` and records the following wait chain:\n\n```text\nconfigd thread 1553334:\n  kernel mutex 0xfffffe000c2b1be0 owned by thread 21088\n\ncom.docker.backend [3742], thread 21088:\n  krwlock 0xfffffe000c2e4848 for reading owned by thread 1494558\n\nkernel_task [0], thread 1494558, \"dlil_input_utun22\":\n  kernel mutex 0x6ecd4ee646c791cd owned by thread 21088\n```\n\nThe final two threads form a cycle. `panic-full-2026-10-23-205224.0002.panic` then records:\n\n```text\nuserspace watchdog timeout: no successful checkins from configd (1 induced crashes) in 180 seconds\n```\n\n### 2. Further hangs at 21:12 and 21:13\n\nAfter the first reboot, two AmneziaVPN hang reports explicitly identify:\n\n```text\nDeadlock: com.docker.backend (Docker) [13485] thread 0xdb33 -> kernel_task [0] thread 0xb9ed \"dlil_input_utun22\" -> com.docker.backend (Docker) [13485] thread 0xdb33\n```\n\nThe reports list 35 and 37 tasks blocked by the deadlock. `tun2socks` and `AmneziaVPN-service` are among the blocked tasks. A shutdown-stall report was also generated before another reboot.\n\n### 3. Recurrence with AmneziaWG at 23:16; watchdog panic at 23:31\n\nAfter uninstalling and reinstalling AmneziaVPN, the user connected using AmneziaWG. Process snapshots verified `amneziawg-go` as the tunnel worker. The later AmneziaVPN hang report explicitly identifies:\n\n```text\nDeadlock: com.docker.backend (Docker) [31595] thread 0x26382 -> kernel_task [0] thread 0x388f0 \"dlil_input_utun6\" -> com.docker.backend (Docker) [31595] thread 0x26382\n```\n\nThe report lists **36 blocked tasks**, including `amneziawg-go [48098]`.\n\nDocker thread `0x26382` is in `close()` and eventually waits in `IORWLockRead` on a read lock owned by kernel thread `0x388f0`. The kernel tunnel input thread waits back on that Docker thread. The unsymbolicated intermediate kernel frames prevent attributing this to a sp"
-    },
-    {
-     "id": 6367232259,
-     "issue": 3284,
-     "issue_title": "Xray: DNS Amnezia (172.29.172.254) блокируется на сервере новым Xray-core, клиент «подключён», но сайты не открываются",
-     "created_at": "2026-10-23T14:28:05Z",
-     "user": "sco3",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3284#issuecomment-6367232259",
-     "body": "I can confirm that after these changes \n```\n{                  \n        \"protocol\": \"freedom\",\n        \"settings\": {\n            \"domainStrategy\": \"AsIs\",\n            \"finalRules\": [\n                {\n                    \"action\": \"allow\",\n                    \"port\": \"53\",\n                    \"ip\": [\"172.29.172.254\"]\n                }\n            ]\n        }\n    }\n```\nOne can apply changes with the following commands:\n```\nsudo docker exec -it amnezia-xray sh\n\nsed -i 's/\"protocol\": \"freedom\"/\"protocol\": \"freedom\", \"settings\": {\"domainStrategy\": \"AsIs\", \"finalRules\": [{\"action\": \"allow\", \"port\": \"53\", \"ip\": [\"172.29.172.254\"]}]}/g' /opt/amnezia/xray/server.json\n\nexit \n\nsudo docker restart amnezia-xray\n```\n\nXray  works with amnezia dns.\n\nEnvironment:\n\nFedora 44\nAmnezia 5.0.3.0\nXray 26.7.28\n \n\n\nOn another VM with  Xray 25.8.3  dns works without updating `server.json`"
     }
    ]
   },

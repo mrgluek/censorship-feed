@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-24T23:13:59Z",
- "since": "2026-10-22T23:13:59Z",
+ "generated_at": "2026-10-25T04:40:33Z",
+ "since": "2026-10-23T04:40:33Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -47,17 +47,6 @@
      "user": "wkrp",
      "url": "https://github.com/net4people/bbs/issues/677",
      "body": "This is analysis, based on reverse engineering, of an entropy-related subroutine in qdpi_detector, part of Qosmos ixEngine and one of the software libraries found in the [2025 Geedge Networks leak](https://github.com/net4people/bbs/issues/519). I call the function `entropy_score`, because it accepts a byte buffer and returns a score between 0 and 10000 that depends on factors such as the proportion of 0 bits to 1 bits and the number of contiguous runs of bits. The function is called from many places in qdpi_detector, including in contexts that use configuration parameters with names like `\"entropy_threshold\"`, `\"printable_char_seq_threshold\"`, and `\"char_occur_threshold\"`. I was initially attracted to this function because the configuration parameter names [are reminscent](https://github.com/net4people/bbs/issues/519#issuecomment-3439657972) of the documented [\"exemptions\" to the blocking of fully encrypted traffic in China](https://gfw.report/publications/usenixsecurity23/en/#4), which include \"Entropy exemption\", \"More than 20 contiguous bytes are printable\", and \"Half of the first packet are printable\". After analysis, the precise details of classification do not exactly match up, so I do not think the previously discussed classifier of fully encrypted protocols in China is based on qdpi_detector or the `entropy_score` function. But it is similar in spirit.\n\nI've made a commented disassembly of the `entropy_score` function, as well as a translation into C.\n\n- [impl.s](https://github.com/user-attachments/files/33787102/impl.s.txt)\n- [entropy.c](https://github.com/user-attachments/files/33786954/entropy.c)\n\nTo compile the code test harness, do this:\n\n<pre>\n<b>cc -Wall -O2 -g -masm=intel -c -o entropy.o entropy.c</b>\n<b>as -g -o impl.o impl.s</b>\n<b>cc -Wall -O2 -g -no-pie entropy.o impl.o -o entropy</b>\n</pre>\n\n## Background\n\nAmong the files of [the Geedge Networks leak of September 2025](https://github.com/net4people/bbs/issues/519), under an \"AppSketch\" subdirectory, are RPM files of many different versions of a package called \"qdpi_detector\". The version numbers range from 3.0.2 to 5.0.6. One such RPM file is repo/repo.geedge.net/pulp/content/8/x86_64/stable/AppSketch/Packages/q/qdpi_detector-5.0.6.64c1824-1.el8.x86_64.rpm. The RPMs are binary only, with no source code other than some header files. Even Geedge did not have the source code of QDPI; the InterSecLab report on the Geedge leak [notes](https://interseclab.org/wp-content/uploads/2025/09/The-Internet-Coup_September2025.pdf#page=23):\n\n> Another system for performing deep packet inspection consists of two binary files, named \"libqmengine.so\" and \"libqmbundle.so.\" While the leaked information does not include the associated source code, it includes Jira tickets that refer to the system as QDPI or \"third-party recognition engine library\" (第三方识别引擎库), implying that it may not have been developed by Geedge Networks. The Jira tickets analyzed in the data express concerns regarding the inability to modify the behavior of the third-party engine and highlight challenges in obtaining a technical support contact for this system. Such concerns lend further support to the notion that these binaries were not developed by Geedge Networks.\n\nYou can extract files from the RPMs with the [rpm2cpio](https://man.archlinux.org/man/rpm2cpio.8.en) command. To list the files, use `cpio -t`:\n\n<pre>\n$ <b>rpm2cpio qdpi_detector-5.0.6.64c1824-1.el8.x86_64.rpm | cpio -t -v</b>\ndrwxr-xr-x   1 root     root            0 Nov 28  2024 ./opt/tsg/sapp\ndrwxr-xr-x   1 root     root            0 Nov 28  2024 ./opt/tsg/sapp/stellar_plugin\ndrwxr-xr-x   1 root     root            0 Nov 28  2024 ./opt/tsg/sapp/stellar_plugin/qdpi_detector\n-rw-r--r--   1 root     root     22150144 Nov 28  2024 ./opt/tsg/sapp/stellar_plugin/qdpi_detector/libqmbundle.so\n-rw-r--r--   1 root     root      1985784 Nov 28  2024 ./opt/tsg/sapp/stellar_plugin/qdpi_detector/libqmengine.so\n-rwxr-xr-x   1 root     root        70408 Nov "
-    },
-    {
-     "number": 678,
-     "title": "Keeping net4people Alive Beyond GitHub — Let's Build 10 Mirrors! 🌐",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-21T23:15:37Z",
-     "updated_at": "2026-10-23T02:43:10Z",
-     "user": "jettmesh",
-     "url": "https://github.com/net4people/bbs/issues/678",
-     "body": "We've created a mirror of the **net4people community** using [REDACTED], and we'd love for you to check it out!\n\n🔗 **Explore the mirror:** [REDACTED]\n\n[REDACTED] is a decentralized mirroring project designed to help communities preserve their discussions, knowledge, and resources without depending entirely on a single platform.\n\nOur goal is simple: **get 10 independent mirrors up and running**, and we'd love for others in the community to help us reach that milestone by hosting their own.\n\nWe hope you like it and find it useful! More importantly, we hope this can help keep the net4people community alive and accessible, **even if GitHub goes dark, repositories get taken down, or access is restricted.**\n\nThe more mirrors we have, the harder it becomes for our shared knowledge to disappear.\n\n**Let's keep the community alive, together.** ❤️\n\nP.S. Here is a logo I made feel free to use it\n\n[REDACTED]"
     }
    ],
    "comments": [
@@ -690,12 +679,23 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2585,
+     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-06T03:37:09Z",
+     "updated_at": "2026-10-25T02:03:38Z",
+     "user": "CrisRed",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
+     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
+    },
+    {
      "number": 2612,
      "title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-24T20:09:11Z",
-     "updated_at": "2026-10-24T22:30:19Z",
+     "updated_at": "2026-10-25T00:54:57Z",
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2612",
      "body": "Debian 13, there was Linux build like this: \r\n`g++ -DUSE_UPNP -DGITVER=3.0.0-18-ga646ac2c -Wl,-z,relro -Wl,-z,now  -o i2pd obj/daemon/Daemon.o obj/daemon/HaikuDaemon.o obj/daemon/HTTPServer.o obj/daemon/I2PControl.o obj/daemon/I2PControlHandlers.o obj/daemon/i2pd.o obj/daemon/UnixDaemon.o obj/daemon/UPnP.o libi2pd.a libi2pdclient.a libi2pdlang.a -lboost_json -lboost_url -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -lminiupnpc`\r\n\r\nНа Haiku не проверял.\r\n"
@@ -934,6 +934,33 @@
    ],
    "comments": [
     {
+     "id": 6392248314,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-25T02:03:37Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6392248314",
+     "body": "The crash itself is fixed in the openssl branch since b31431ba (PR #2606): `DSASigner::Sign` now checks the result of `EVP_DigestSignInit`/`EVP_DigestSign` and of `d2i_DSA_SIG`, logs an error and leaves the signature zeroed instead of passing the NULL `DSA_SIG` to `DSA_SIG_get0`. The non-EVP branch got the same check for `DSA_do_sign`.\n\nVerified both ways with a harness that takes the key away from the signer, which puts the code in the same state as a provider refusing DSA: without the change a segmentation fault (exit code 139), with it the call returns and the signature stays all zeros; with the key in place the signature is still produced in full.\n\nNote this only removes the crash - on such a build signing still fails, so a destination with a DSA_SHA1 key will not work there. If that is the case for the hidden services in question, the key type has to change."
+    },
+    {
+     "id": 6391651391,
+     "issue": 2612,
+     "issue_title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
+     "created_at": "2026-10-25T00:54:57Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2612#issuecomment-6391651391",
+     "body": "Вообще если хочешь по фэншую, так перенеси в отдельную директорию Haiku по аналогии с  Win32. Этот HaikuDaemon.cpp тоже следует разделить на собственно демон и UI компоненты."
+    },
+    {
+     "id": 6391513746,
+     "issue": 2612,
+     "issue_title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
+     "created_at": "2026-10-25T00:39:07Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2612#issuecomment-6391513746",
+     "body": "А чем мешает то? Не вижу смысла усложнять, тем более что скорее всего будет вынесен в отдельную директорию."
+    },
+    {
      "id": 6365885894,
      "issue": 1784,
      "issue_title": "Each time i2pd update means examining differences in i2pd.conf. file, why not having different .conf file for user changes?",
@@ -960,15 +987,48 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7252,
+     "title": "[Feature request] XHTTP: optional idle filler on the download stream, so an idle connection survives a CDN's origin-silence timeout",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-25T03:45:47Z",
+     "updated_at": "2026-10-25T03:45:47Z",
+     "user": "instaguybyebye-ship-it",
+     "url": "https://github.com/XTLS/Xray-core/issues/7252",
+     "body": "### What happens\n\nBehind Cloudflare (proxied record, any non-Enterprise plan), an XHTTP connection that carries no data for about two\nminutes is closed by the CDN, and the proxied TCP connection inside it breaks. Long-lived but mostly silent\nconnections (chat and push sockets, SSH sessions, database connections) get torn down and rebuilt every couple of\nminutes.\n\nThe same idle connection over WebSocket with `heartbeatPeriod` set survives, because the ping's pong is traffic\nfrom the origin.\n\n### Setup\n\n- Server: VLESS + XHTTP (`mode: packet-up`), TLS, behind Cloudflare. Xray-core v26.x; the code path below is the\n  same on `main`.\n- Client: Xray-core v26.9.9, `alpn` h2 or h3, default xmux plus `hKeepAlivePeriod: 10`.\n\n### Reproduce\n\n1. Through the tunnel, open a TCP connection to an SSH server and log in, running a command that prints nothing for\n   a while, e.g. `ssh -o ServerAliveInterval=0 -o TCPKeepAlive=no host 'sleep 200; echo done'`.\n2. Silent for 110 s: `done` arrives. Silent for 200 s: the session dies at 125-128 s (`client_loop: send\n   disconnect: Broken pipe`). Seen in every run.\n3. Control: the same session through a WebSocket transport on a different CDN held 290 s silent with TCP\n   keepalive off, at the default, and at 15 s, so the drop is specific to the XHTTP download path behind this CDN.\n\nTCP keepalive (`sockopt.tcpKeepAliveIdle`) and `xmux.hKeepAlivePeriod` do not help: both end at the CDN edge, and\nCloudflare's timer counts silence from the origin. Cloudflare documents a 100 s limit for the origin's response\n(error 524), and it can only be raised on Enterprise. The ~125 s drop observed mid-stream matches reports of\nstreaming responses behind Cloudflare.\n\n### Why\n\nIn `transport/internet/splithttp/hub.go`, the stream-up upload POST gets a periodic filler in its response\n(`scStreamUpServerSecs`, the goroutine that writes `X` padding), which keeps that request alive behind a CDN. The\ndownload (`GET`, stream-down / packet-up, and stream-one) gets nothing while idle: after the headers and the first\nflush, the server writes only real payload.\n\n### Request\n\nAn option, off by default, for the server to put a filler on the download stream every N seconds while it is\nidle (e.g. `scStreamDownServerSecs: \"20-80\"`, mirroring `scStreamUpServerSecs`), which the client discards. Since\nthe download body is not framed today, this probably needs a client that understands the filler, gated on the\nversion both sides already exchange (`x_version`) so older clients are never sent it.\n\nAn alternative that needs no new framing would also do: the client opening a fresh download request before the\ncurrent one has been idle for N seconds, handing the session over without losing data.\n\nHappy to test a build."
+    },
+    {
      "number": 7250,
      "title": "Fix config loading through Windows directory junctions",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-24T21:39:54Z",
-     "updated_at": "2026-10-24T23:13:45Z",
+     "updated_at": "2026-10-25T00:57:25Z",
      "user": "Eljees",
      "url": "https://github.com/XTLS/Xray-core/pull/7250",
      "body": "Fixes #7239.\n\nOn Windows, `xray run -c config.json` can fail when its working directory contains a directory junction: opening the file succeeds, but `filepath.EvalSymlinks` returns \"The system cannot find the path specified.\" Reproduced with the official v26.10.21 Windows release and Go 1.27.3 on Windows 11 (build 26100).\n\nResolve the final Windows path from the already opened file handle with `GetFinalPathNameByHandle`, keeping the allowed-extension check on the resolved target. Resolver errors remain fatal. Other platforms retain the existing absolute-path and symlink resolution. The command and regular-file gates are unchanged.\n\nRegression tests use a real directory junction and a child process whose working directory is the junction, covering relative and absolute config paths. Tests also cover UTF-16 buffer growth, closed handles, the extension allowlist, pipe/other-command behavior, and symlink target extensions.\n\nValidation on the submitted commit:\n- Both native Windows junction cases fail on the original implementation and pass with this change. The freshly built CLI reports `Configuration OK` for the physical path and both junction cases.\n- `go test -count=1 ./main/confloader/... ./main/commands/base` and affected `go vet` pass on Windows (Go 1.27.3). The affected suite also passes with `-race` on Linux (Go 1.27.1).\n- Two Windows file-symlink cases skip with error 1314 (symlink privilege unavailable); both target-extension cases run and pass on Linux.\n- Native Windows CLI build, repository format check on the committed LF source bytes, and `git diff --check` pass.\n- The full application suite and macOS runtime tests were not run locally.\n\nAI assistance (OpenAI Codex) was used for implementation, tests, and review; the validation commands above were run locally.\n"
+    },
+    {
+     "number": 7249,
+     "title": "Geodata: Update built-in private IP ranges",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T18:09:07Z",
+     "updated_at": "2026-10-25T00:36:54Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249",
+     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
+    },
+    {
+     "number": 7251,
+     "title": "Validate numeric port list values before building ranges",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-25T00:08:37Z",
+     "updated_at": "2026-10-25T00:08:37Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7251",
+     "body": "A numeric `PortList` value bypasses the range check already applied to its string form: `65537` passes configuration validation while `\"65537\"` is rejected. Runtime port-list endpoints are 16-bit, so accepting an oversized value can change the port when it is narrowed.\n\nValidate the numeric branch with the existing `net.PortFromInt` before modifying the list. Preserve the current behavior for numeric zero, string zero, null, empty strings, valid lists/ranges and environment-based values.\n\nValidation:\n- 17 new regression/compatibility cases: four expected failures on the original code, all pass after the fix.\n- Affected configuration, net and routing package suites pass on Windows; the same suites pass with `-race` on Linux (220 test/subtest events each, no test failures or skips).\n- The built CLI accepts numeric/string `65535` and rejects numeric/string `65537`; the official v26.10.21 binary incorrectly accepts numeric `65537`.\n- Native Windows build, repository format check and `git diff --check` pass.\n- Full `go vet` of these packages reports two existing diagnostics, also reproduced on unchanged main: discarded cancellation in `app/router/command/command.go:101` and unreachable code in `infra/conf/xray.go:674`. No new diagnostics; full vet is not reported as green.\n\nAI-assisted implementation and tests; the diff and regression results were independently reviewed before submission.\n"
     },
     {
      "number": 7248,
@@ -991,17 +1051,6 @@
      "user": "hxehex",
      "url": "https://github.com/XTLS/Xray-core/pull/7247",
      "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
-    },
-    {
-     "number": 7249,
-     "title": "Geodata: Update built-in private IP ranges",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-24T18:09:07Z",
-     "updated_at": "2026-10-24T19:59:03Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249",
-     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
     },
     {
      "number": 7233,
@@ -1167,61 +1216,53 @@
      "user": "alikoleini",
      "url": "https://github.com/XTLS/Xray-core/issues/6482",
      "body": "VLESS + XHTTP + REALITY inbound works fine on v26.6.27. After upgrading to v26.7.11 with the exact same config, clients can no longer connect. Downgrading back to v26.6.27 immediately fixes it."
-    },
-    {
-     "number": 7235,
-     "title": "Withdrawn",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-22T22:26:09Z",
-     "updated_at": "2026-10-23T02:51:33Z",
-     "user": "makirov03",
-     "url": "https://github.com/XTLS/Xray-core/issues/7235",
-     "body": "Withdrawn by the author."
-    },
-    {
-     "number": 7239,
-     "title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-23T02:43:26Z",
-     "updated_at": "2026-10-23T02:43:45Z",
-     "user": "bin-ran",
-     "url": "https://github.com/XTLS/Xray-core/issues/7239",
-     "body": "### Describe the bug\n\nOn Windows, Xray fails to start when the **current working directory** contains a directory junction:\n\n```\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nThe config file itself exists and is readable — the failure happens while Xray resolves the path of an already opened file.\n\n### Versions\n\n- Xray core **v26.10.21** (go1.27.3 windows/amd64) — broken\n- Xray core **v26.9.30** — works (the code path described below does not exist there)\n\n### Steps to reproduce\n\n```bat\nmkdir C:\\test\\target\necho {}> C:\\test\\target\\config.json\nmklink /J C:\\test\\link C:\\test\\target\n\ncd /d C:\\test\\link\nxray run -c config.json\n```\n\nResult:\n\n```\nXray 26.10.21 (Xray, Penetrates Everything.) 1b1647c (go1.27.3 windows/amd64)\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nWith the **physical** path it works:\n\n```bat\ncd /d C:\\test\\target\nxray run -c config.json\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\n[Warning] core: Xray 26.10.21 started\n```\n\n### Root cause\n\n`main/confloader/external/external.go`, function `readConfigFile()` (introduced in v26.10.21):\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\npath, err = filepath.EvalSymlinks(path)\nif err != nil {\n    return nil, err\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n`filepath.EvalSymlinks` fails on Windows with `ERROR_PATH_NOT_FOUND` (\"The system cannot find the path specified\") as soon as one component of the path is a **directory junction** (this is a Go standard library behavior, see the related golang/go report).\n\nNotes:\n- the file has already been opened successfully at this point (`os.Open(arg)` succeeded);\n- the resolved path is only used for an **extension whitelist** check, so the resolution itself is not required;\n- the failure is fatal and prevents the core from starting at all.\n\n### Impact\n\nEvery user whose Xray is launched with a working directory located under a junction / symlinked directory is affected, e.g.:\n\n- Scoop: `C:\\Users\\<user>\\scoop\\apps\\<app>\\current` is a junction to the versioned folder;\n- Chocolatey / WinGet shim directories;\n- any manually created `mklink /J` layout.\n\nThis is not only a CLI issue: for example **v2rayN** (which starts the core with `run -c config.json` and `WorkingDirectory = <install dir>\\binConfigs`) becomes completely unusable after updating the bundled core to v26.10.21 — the client shows `Failed to start: main: failed to load config files: [config.json] ... The system cannot find the path specified.` and no proxy is available.\n\n### Suggested fix\n\nDo not let the symlink resolution failure be fatal — fall back to the unresolved path and check the extension with `filepath.Ext`:\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\nif resolved, err := filepath.EvalSymlinks(path); err == nil {\n    path = resolved\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n### Minimal Go reproducer for the underlying behavior\n\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\tp, err := filepath.Abs(os.Args[1])\n\tfmt.Println(\"Abs:         \", p, err)\n\tr, err := filepath.EvalSymlinks(p)\n\tfmt.Println(\"EvalSymlinks:\", r, err)\n}\n```\n\nRun it with the CWD set to a junction directory and pass a file name inside it:\n\n```bat\ncd /d C:\\test\\link\ngo run main.go config.json\n`"
-    },
-    {
-     "number": 7237,
-     "title": "Bump github.com/pires/go-proxyproto from 0.15.0 to 0.16.0",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-23T00:12:49Z",
-     "updated_at": "2026-10-23T00:12:53Z",
-     "user": "dependabot[bot]",
-     "url": "https://github.com/XTLS/Xray-core/pull/7237",
-     "body": "Bumps [github.com/pires/go-proxyproto](https://github.com/pires/go-proxyproto) from 0.15.0 to 0.16.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/pires/go-proxyproto/releases\">github.com/pires/go-proxyproto's releases</a>.</em></p>\n<blockquote>\n<h2>v0.16.0</h2>\n<h2>Breaking changes</h2>\n<p>Not really breaking changes to the lib users but rather folks who adopted our HTTP2 helper/examples code. Upgrading <code>golang.org/x/net to 0.61.0</code> required adopting the new API for HTTP2.</p>\n<h2>What's Changed</h2>\n<ul>\n<li>fix: WriteTo empty buffer handling by <a href=\"https://github.com/mymmrac\"><code>@​mymmrac</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/182\">pires/go-proxyproto#182</a></li>\n<li>fix(ci): drop Go 1.25, add 1.27 by <a href=\"https://github.com/pires\"><code>@​pires</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/185\">pires/go-proxyproto#185</a></li>\n<li>deps,ci: bump Go and fix CI validations by <a href=\"https://github.com/pires\"><code>@​pires</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/188\">pires/go-proxyproto#188</a></li>\n<li>deps,http2: bump golang.org/x/next from 0.58.0 to 0.61.0 by <a href=\"https://github.com/pires\"><code>@​pires</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/189\">pires/go-proxyproto#189</a></li>\n</ul>\n<h2>New Contributors</h2>\n<ul>\n<li><a href=\"https://github.com/mymmrac\"><code>@​mymmrac</code></a> made their first contribution in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/182\">pires/go-proxyproto#182</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/pires/go-proxyproto/compare/v0.15.0...v0.16.0\">https://github.com/pires/go-proxyproto/compare/v0.15.0...v0.16.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/32ab3555fc278d55ee172d3b201a88dc5bfd689f\"><code>32ab355</code></a> deps,http2: bump golang.org/x/next from 0.58.0 to 0.61.0</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/c7268feb5ae6af7216b15b74c10f978721666b13\"><code>c7268fe</code></a> ci: validate GHA config before anything else</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/4331312552125793c1418044c7ef5bbf3d484374\"><code>4331312</code></a> ci: explicitly set GHA workflow permissions</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/2d70a5ab2d169f8e95022cf589fdcd3c86c4c363\"><code>2d70a5a</code></a> deps,ci: bump Go and fix CI validations</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/ec43bde09eff6f1d1173c07e2412366f7b5101e0\"><code>ec43bde</code></a> fix(ci): drop Go 1.25, add 1.27</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/c435999ef4e81a3be420c6f1ceac9a33fe4b05e8\"><code>c435999</code></a> build(deps): bump golang.org/x/net from 0.57.0 to 0.58.0</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/a9aa477883d1248ec70971003f04df6bdd9fdb58\"><code>a9aa477</code></a> fix: WriteTo empty buffer handling (<a href=\"https://redirect.github.com/pires/go-proxyproto/issues/182\">#182</a>)</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/b9877208baf4fffe3e2d267ae9b5b3ddb5f86968\"><code>b987720</code></a> build(deps): bump golang.org/x/net from 0.55.0 to 0.57.0</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/88dff81d0a25dd975b227d99278dec8b3dd3dc91\"><code>88dff81</code></a> fix dependabot for Go</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/86099fba92f4d2ac7198f3062c4f4ebc48d5399e\"><code>86099fb</code></a> enable dependabot</li>\n<li>Additional commits viewable in <a href=\"https://github.com/pires/go-proxyproto/compare/v0.15.0...v0.16.0\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=github.com/pires"
-    },
-    {
-     "number": 7236,
-     "title": "WebSocket: Treat normal close frames as io.EOF",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-22T23:35:54Z",
-     "updated_at": "2026-10-22T23:36:02Z",
-     "user": "thatssoheil",
-     "url": "https://github.com/XTLS/Xray-core/pull/7236",
-     "body": "## What this fixes\n\nA WebSocket close frame with a normal status (1000) or no status (1005) ends the byte stream the same way a FIN does, but `connection.Read` surfaced gorilla's `*websocket.CloseError` to its callers.\n\nVLESS and Trojan carry payload without framing, so a response copy ended with that error. `app/proxyman/outbound.Handler.Dispatch` treats every error other than `io.EOF` as a failure and calls `common.Interrupt`, which releases the data still buffered in the pipe before the inbound has read it. The client gets a short response that ends with a normal FIN - silent truncation for HTTP/1.0 responses without Content-Length, and a `websocket: close 1000 (normal)` line for every such connection.\n\nFix: map `websocket.IsCloseError(err, CloseNormalClosure, CloseNoStatusReceived)` to `io.EOF` in `connection.Read`. Other close codes keep their error semantics. The same wrapper is used by the XHTTP browser dialer client (`transport/internet/splithttp/browser_client.go`), so that path inherits the fix.\n\nFixes #7235.\n\n## Test record\n\nEnvironment: `1b1647cd` (v26.10.21), linux/amd64. The configs and scripts from the report used verbatim: target answers `HTTP/1.0 200 OK` + 65536 body bytes without Content-Length, then closes; the client fetches through an `http` inbound -> VLESS/ws outbound.\n\n| scenario | base `1b1647cd` | with fix `bba46a28` |\n|---|---|---|\n| 20 sequential fetches, `GOMAXPROCS=1` | 19/20 short (15 x 0 B, 2 x 32749 B, 1 x 8171 B, 1 x 8173 B); 20 `close 1000` log lines | 20/20 complete 65536 B; 0 close lines |\n| 10 rounds x 20 concurrent fetches | ~172/200 short; 200 `close 1000` log lines | 200/200 complete; 0 close lines |\n| raw TCP control (same scripts) | 20/20 complete; 0 close lines | 20/20 complete |\n\nThe byte counts above are from the runs saved for this report; a second base run produced the same shape (18/20 short) with a different byte split.\n\nUnit tests (new `connection_test.go`, real WebSocket server + the production wrapper): RED on base - close 1000 and 1005 come back as `websocket: close 1000 (normal)` / `close 1005 (no status)` instead of `io.EOF`; GREEN with the fix. A 1001 (`going away`) control asserts that other close codes stay errors, before and after.\n\n`go test ./transport/internet/...` - 25 packages pass. `go build ./...`, `gofmt`, `go vet` clean.\n\nKnown boundary: a close frame arriving in the middle of a fragmented message still surfaces as a close error, because that payload is genuinely incomplete; only a close after a complete message is remapped, which is the reported mechanism.\n"
     }
    ],
    "comments": [
     {
-     "id": 6390748340,
-     "issue": 7250,
-     "issue_title": "Fix config loading through Windows directory junctions",
-     "created_at": "2026-10-24T23:13:45Z",
+     "id": 6391494484,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-25T00:36:54Z",
      "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7250#issuecomment-6390748340",
-     "body": "不要抽 helper\r\n直接内联写即可"
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391494484",
+     "body": "总之用户连接到 xray 服务器端，默认不允许访问到公网不可能出现的 ip\r\n反之不该发往公网的流量，默认也不应发给 xray 服务器"
+    },
+    {
+     "id": 6391438595,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-25T00:30:38Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391438595",
+     "body": "并不，核心要考虑得更多\r\n\r\n例如 6to4、example addr\r\n都可能在一些奇怪的局域网中被使用，必须把它们纳入进来"
+    },
+    {
+     "id": 6391414442,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-25T00:27:56Z",
+     "user": "kokoromagic",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391414442",
+     "body": "Actually block `127.0.0.1/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::/127`, `fe80::/10`, `fc00::/7` is enough to prevent LAN access"
+    },
+    {
+     "id": 6391365802,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-25T00:22:29Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391365802",
+     "body": "从语义上来说你是对的\r\n然而绝大多数用户已经习惯了 `private`\r\n新引入分类也不会有人知道\r\n不具备网络知识的用户只会天真的觉得 block / direct `geosite:private` 便足够了"
+    },
+    {
+     "id": 6391333651,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-25T00:19:17Z",
+     "user": "kokoromagic",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391333651",
+     "body": "~Should we introduce `geoip:reserved` because private IP is different from reserved IP~\r\nThey lie on Global Space but cannot be routed on internet"
     },
     {
      "id": 6389964771,
@@ -1600,33 +1641,6 @@
      "user": "geniusyrp",
      "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6357853333",
      "body": "@aardenye https://github.com/MHSanaei/3x-ui/issues/6596#issuecomment-6357833175"
-    },
-    {
-     "id": 6357264632,
-     "issue": 7131,
-     "issue_title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "created_at": "2026-10-23T04:18:05Z",
-     "user": "maoxikun",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131#issuecomment-6357264632",
-     "body": "ech 是不是跟safari不太兼容，同时配置 \"fingerprint\": \"safari\" 和 ech（reality正常） 在不配置 alpn 和 \"alpn\": [h2\"] 情况报错， \"alpn\": [h3\"] 则正常\n`[Info] [2581954356] transport/internet/splithttp: failed to GET https://xxx.com/zzzz/ > Get \"https://xxx.com/zzzz/fa106b9a-c1ee-4ded-9c89-9f4582b144ea\": tls: malformed outer client hello`"
-    },
-    {
-     "id": 6356752822,
-     "issue": 7238,
-     "issue_title": "Direct/Freedom outbound: Close blocked connections after `blockDelay` (VLESS, Hysteria, etc.)",
-     "created_at": "2026-10-23T03:35:19Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6356752822",
-     "body": "改用 time.After"
-    },
-    {
-     "id": 6356122816,
-     "issue": 7239,
-     "issue_title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
-     "created_at": "2026-10-23T02:43:45Z",
-     "user": "bin-ran",
-     "url": "https://github.com/XTLS/Xray-core/issues/7239#issuecomment-6356122816",
-     "body": "Related reports:\n- Go standard library behavior (filepath.EvalSymlinks on Windows junctions): https://github.com/golang/go/issues/82447\n- Affected client (v2rayN, installed via Scoop): https://github.com/2dust/v2rayN/issues/10446"
     }
    ]
   },

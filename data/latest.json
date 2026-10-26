@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-25T23:16:22Z",
- "since": "2026-10-23T23:16:22Z",
+ "generated_at": "2026-10-26T04:46:28Z",
+ "since": "2026-10-24T04:46:28Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -162,6 +162,17 @@
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
+    {
+     "number": 1372,
+     "title": "DNS lookups IPv6 address of domain while yggdrasil service is up",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-18T17:25:40Z",
+     "updated_at": "2026-10-26T01:43:56Z",
+     "user": "destime224",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1372",
+     "body": "While Yggdrasil service is up `$ ssh -Tv git@codeberg` cannot connect and shows\n```\n...\ndebug1: Connecting to codeberg.org [2a0a:4580:103f:c0de::1] port 22\n...\n```\n[2a0a:...::1] is ipv6 of codeberg.org.\nBut `$ dig codeberg.org` lookups \n```\n...\n;; ANSWER SECTION:\ncodeberg.org.           2066    IN      A       217.197.84.140\n```\n<img width=\"1294\" height=\"471\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/759b9902-9a9b-4306-bce4-4b59f15e5f13\" />\nStopping yggdrasil service fixes the problem\n\n```\nygg0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 65535 qdisc pfifo_fast state UNKNOWN group default qlen 500\n    link/none \n    inet6 200:.../7 scope global \n       valid_lft forever preferred_lft forever\n    inet6 fe80::306f:ba4c:5497:c287/64 scope link stable-privacy proto kernel_ll \n       valid_lft forever preferred_lft forever\n```\n<hr>\nopenSUSE Tumbleweed 20260916\n\nBuild name: yggdrasil\nBuild version: 0.5.14"
+    },
     {
      "number": 1405,
      "title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
@@ -352,6 +363,15 @@
    ],
    "comments": [
     {
+     "id": 6406371659,
+     "issue": 1372,
+     "issue_title": "DNS lookups IPv6 address of domain while yggdrasil service is up",
+     "created_at": "2026-10-26T01:43:56Z",
+     "user": "HeadedBranch",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1372#issuecomment-6406371659",
+     "body": "To get the ipv6 address, you need to use dig AAAA, to query the ipv6 addresses (dig's default is A)\nI assume you don't have a normal ipv6 interface, therefore yggdrasil is your only ipv6, which will cause issues as the programs see you have ipv6 (as that is how yggdrasil routes currently) and tries to connect to the service, but it is unreachable\nI have been able to fix it with some routing config settings but can't remember the exact changes I made, but that is at least why the issue is appearing"
+    },
+    {
      "id": 6401444963,
      "issue": 1405,
      "issue_title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
@@ -518,6 +538,28 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2585,
+     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-06T03:37:09Z",
+     "updated_at": "2026-10-26T02:15:51Z",
+     "user": "CrisRed",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
+     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
+    },
+    {
+     "number": 2616,
+     "title": "Check read and write results for torrent files and reopen a broken stream",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-25T23:16:25Z",
+     "updated_at": "2026-10-25T23:54:41Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2616",
+     "body": "As asked in #dev by orignal and R4SAS.\n\n`TorrentFile::Save` and `Load` did not look at the result of the write or the read, so a failed write was reported as success. Worse, the failure leaves the error flag set on the stream while the file stays open, and `Open` only opens when the file is closed - so every later call failed silently for the life of the object, while `m_LastAccessTime` kept being updated so the file was not closed by inactivity either.\n\nNow both calls check the stream after the operation, log the error with `strerror` and return false, and `Open` closes and clears a stream that is open but in a failed state before reopening it. The periodic flush is checked too, since that is where a buffered write actually reaches the disk.\n\nMeasured with a harness that sets `RLIMIT_FSIZE` to 64 KB and writes past it:\n\n| step | before | after |\n|---|---|---|\n| write at offset 0 | true | true |\n| write past the size limit | true | true (buffered, see below) |\n| write at offset 2048 after the failure | true (nothing written) | false |\n| read at offset 0 | false | true |\n\nThe file on disk holds 1024 bytes in both cases - that is, the second and third writes were lost while reporting success. After the change the lost write is reported, and the stream recovers for the next call instead of staying broken.\n\nOne honest limitation: writes are buffered, so a write that oversteps a limit still returns true at that moment and the error surfaces on the next call or on the flush. Forcing a flush per block would make it immediate, but that is a different trade-off on disk IO, so I left it to you. Build without warnings, unit tests pass."
+    },
+    {
      "number": 2613,
      "title": "Torrent Tunnel Formation Issue",
      "is_pr": false,
@@ -549,17 +591,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2614",
      "body": ""
-    },
-    {
-     "number": 2585,
-     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-06T03:37:09Z",
-     "updated_at": "2026-10-25T21:53:18Z",
-     "user": "CrisRed",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
-     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
     },
     {
      "number": 2324,
@@ -795,6 +826,78 @@
    ],
    "comments": [
     {
+     "id": 6406734694,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T02:15:51Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6406734694",
+     "body": "No problems with openssl 4.0 either."
+    },
+    {
+     "id": 6406374496,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T01:44:13Z",
+     "user": "OlegGirko",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6406374496",
+     "body": "> On the Fedora side it is worth checking the crypto policy rather than i2pd: DSA is disabled there by `crypto-policies`, and the algorithm itself now lives in the OpenSSL legacy provider. `update-crypto-policies --show` tells you what is active; `update-crypto-policies --set LEGACY` (or a local policy module that re-enables DSA signatures) brings it back, and the legacy provider has to be activated in `openssl.cnf` for the algorithm to be available at all.\n\nYes, you're right. I can confirm that after using `update-crypto-policies --set LEGACY` on a server where I run my eepsites as well as on a client I'm connecting from, these eepsites become available. No need to edit `openssl.cnf`. The system I'm using is Fedora 44 for now, I don't know whether this will change in Fedora 45.\n\nHowever, it's important to keep in mind that this altered configuration is not default and is not secure. Also, it's important to realise that you can't rely on OpenSSL to provide DSA and SHA1 anymore."
+    },
+    {
+     "id": 6406124097,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T01:21:23Z",
+     "user": "OlegGirko",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6406124097",
+     "body": "> openssl 3.5 is fine on Debian 13 and Ubuntu 26.04.\n\n1. Providing insecure algorithms is not *fine\" by any definition.\n2. This will be not for a long time. Everybody follows Fedora.\n3. And Fedora 45 (to be released in about week) has already OpenSSL 4.0. All other distros to follow soon.\n\n> We will think about static build for Fedora.\n\nThis is not a solution.\n1. You can't build OpenSSL statically: it requires dynamic linking for loading engines. And you can't statically link a program with a dynamic library.\n2. You still didn't address a question about a person responsible for keeping this other OpenSSL updated. This is a very important question, please don't ignore it.\n3. Very soon OpenSSL will drop support for insecure algorithms. You can't postpone inevitable forever.\n\nWhat you're proposing now is just a temporary unsustainable workaround.\n\nBy relying on insecure algorithms, `i2pd` is already insecure itself. Expect eepsite impersonation attacks in nearby future. A clear upgrade path is needed to allow all owners of eepsites to upgrade their keys and re-register them with eepsite directory services. In the meantime, some other (probably, standalone) DSA and SHA1 implementation is required for this transition period, because OpenSSL can not be relied for providing these algorithms anymore. Please don't dismiss this as \"Fedora-only issue\"."
+    },
+    {
+     "id": 6406044386,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T01:14:27Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6406044386",
+     "body": "On the Fedora side it is worth checking the crypto policy rather than i2pd: DSA is disabled there by `crypto-policies`, and the algorithm itself now lives in the OpenSSL legacy provider. `update-crypto-policies --show` tells you what is active; `update-crypto-policies --set LEGACY` (or a local policy module that re-enables DSA signatures) brings it back, and the legacy provider has to be activated in `openssl.cnf` for the algorithm to be available at all.\n\nI cannot verify this on Fedora myself - this machine is Debian - so please treat it as a direction to check rather than a tested recipe.\n\nWorth saying either way: with the fix merged the router no longer crashes there, but on such a build signing still fails, so a destination with a DSA_SHA1 key will not work until either the policy is changed or the key type is."
+    },
+    {
+     "id": 6405899089,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T01:01:50Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6405899089",
+     "body": "openssl 3.5 is fine on Debian 13 and Ubuntu 26.04.\n\nWe will think about static build for Fedora. \n\nAlso AFAIK you can enable DSA back in the system settings."
+    },
+    {
+     "id": 6405729318,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T00:46:20Z",
+     "user": "OlegGirko",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6405729318",
+     "body": "> Build openssl then build i2pd with that openssl.\n\nI can't just build another OpenSSL: there is already OpenSSL in Fedora, and nobody will allow another package with exactly the same library built with with insecure algorithms enabled.\n\nAnd you didn't address the concern about a maintainer for this library. Who will be responsible for keeping this different OpenSSL updated?\n\n> And no modern OpenSSL is fine, it's Fedora specific issue.\n\n1. Are you absolutely sure that disabling outdated and insecure algorithms in OpenSSL is specific to Fedora only?\n2. Even is it's the case, other Linux distributions usually follow Fedora later. RHEL (Red Hat Enterprise Linux) definitely follows Fedora.\n3. Fedora is a major Linux distribution, so even if a problem is specific to Fedora, it's a major Linux problem, not something to ignore."
+    },
+    {
+     "id": 6405466514,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T00:23:08Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6405466514",
+     "body": "Build openssl then build i2pd with that openssl.\nAnd no modern OpenSSL is fine, it's Fedora specific issue."
+    },
+    {
+     "id": 6405322940,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-10-26T00:11:21Z",
+     "user": "OlegGirko",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6405322940",
+     "body": "> 10\\. Build openssl manually.\n\nI'm trying to package `i2pd` for Fedora, and your suggestion violates quite a lot of packaging guidelines. And these guidelines are there for quote a good reason.\n\nFor example, if I somehow build my own version of OpenSSL and embed it into `i2pd` package, who will be responsible for keeping it updated and having known vulnerabilities fixed? I don't want to become a maintainer of my own modified version of OpenSSL library. I have no time for that. And I doubt that somebody will volunteer for that.\n\nA policy against vendoring and embedding libraries exists exactly for this reason. There is OpenSSL package and it has its own maintainers, and all other packages rely on OpenSSL maintainers to keep it properly updated. Nobody wants to duplicate this effort, especially for security-critical libraries like that.\n\nAlso, your suggestion is not sustainable in a long term. Modern OpenSSL implementations formally have DSA and SHA1, but already refuse to provide them. Hence, `i2pd` became useless with modern OpenSSL already. But I expect these algorithms to be removed completely in upcoming OpenSSL versions, so it will fail to compile. And requiring outdated (and insecure) version of OpenSSL to build `i2pd` is quite dangerous."
+    },
+    {
      "id": 6404705922,
      "issue": 2613,
      "issue_title": "Torrent Tunnel Formation Issue",
@@ -892,6 +995,50 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7249,
+     "title": "Geodata: Update built-in private IP ranges",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T18:09:07Z",
+     "updated_at": "2026-10-26T04:37:55Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249",
+     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
+    },
+    {
+     "number": 7240,
+     "title": "Xray-core v26.10.21  无法转发 127.0.0.1",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-23T06:43:18Z",
+     "updated_at": "2026-10-26T03:43:17Z",
+     "user": "funhunter",
+     "url": "https://github.com/XTLS/Xray-core/issues/7240",
+     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n最新版[Xray-core v26.10.21] 无法连接 127.0.0.1:10068 ssh 端口\n我在服务器端，nc -zv 127.0.0.1 10068\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\n说明127.0.0.1:10068 是正常的\n\n我上一个版本Xray-core v26.3.27,没有这个问题\nconfig.json配置文件没有任何改变\n\n### 重现方式\n\n我想通过xray vless tcp tls vison 连接服务器的10068 ssh 端口，我将转发地址设置为127.0.0.1\n我在本地客户端配置了\n    {\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"127.0.0.1\",\n        \"port\": 10068 ,\n        \"network\": \"tcp\"\n      }\n    }\n服务器通过freedom 发出，测试时，没有其他任何路由规则\n\n然后通过命令  ssh -p 2503 root@127.0.0.1， 2503是我本地dokodemo-door 监听地址\n实际效果是，ssh 连接失败\n\n\n修改客户端配置，127.0.0.1改为服务器实际公网ip，例如 \"address\": \"xxx.xx.x.x\",\n    {\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"xxx.xx.x.x\",\n        \"port\": 22,\n        \"network\": \"tcp\"\n      }\n    }\n然后，还是这条命令， ssh -p 2503 root@127.0.0.1   连接成功\n\n我上一个版本Xray-core v26.3.27,没有这个问题\n\n### 客户端配置\n\n原客户端配置    \n{\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"127.0.0.1\",\n        \"port\": 10068 ,\n        \"network\": \"tcp\"\n      }\n    }\n\n修改后客户端配置    \n{\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"x.x.x.x\",\n        \"port\": 10068 ,\n        \"network\": \"tcp\"\n      }\n    }\n\n### 服务端配置\n\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\"\n    },\n\n### 客户端日志\n\n2026/10/23 14:33:39.242258 [Info] [3883811706] transport/internet/tcp: dialing TCP to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.242262 [Debug] [3883811706] transport/internet: dialing to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.276779 [Info] [3883811706] proxy/vless/outbound: tunneling request to tcp:127.0.0.1:10068 via x.x.x.x:xxxx\n\n### 服务端日志\n\n2026/10/23 14:00:02.512766 [Warning] core: Xray 26.10.21 started\n2026/10/23 14:01:06.327524 [Info] [450590513] proxy/vless/inbound: firstLen = 178\n2026/10/23 14:01:06.327610 [Info] [450590513] proxy/vless/inbound: received request for tcp:127.0.0.1:10068\n2026/10/23 14:01:06.327615 [Debug] app/stats: create new counter user>>>x@y.z>>>traffic>>>uplink\n2026/10/23 14:01:06.327618 [Debug] app/stats: create new counter user>>>x@y.z>>>traffic>>>downlink\n2026/10/23 14:01:06.327664 [Info] [450590513] app/dispatcher: default route for tcp:127.0.0.1:10068\n2026/10/23 14:01:06.327670 [Info] [450590513] proxy/freedom: blocked target: tcp:127.0.0.1:10068, blackholing connection for 49s\n2026/10/23 14:01:06.327729 [Debug] [450590513] proxy: Xtls Unpadding new block, content 41 padding 72 command 0\n\n\n\n2026/10/23 14:01:25.298867 [Info] [552868179] proxy/vless/inbound: firstLen = 243\n2026/10/23 14:01:25.298956 [Info] [552868179] proxy/vless/inbound: received request for tcp:x.x.x.x.:10068\n2026/10/23 14:01:25.298967 [Info] [552868179] app/dispatcher: default route for tcp:x.x.x.x.:10068\n2026/10/23 14:01:25.298971 [Info] [552868179] transport/internet/tcp: dialing TCP to tcpx.x.x.x.:10068\n2026/10/23 14:01:25.298974 [Debug] [552868179] transport/internet: dialing to tcp:x.x.x.x.:10068\n2026/10/23 14:01:25.300731 [Info] [552868179] proxy/freedom: connection opened to tcpx.x.x.x.:10068, local endpoint 192.168.0.81:65330, remote endpoint x.x.x.x.:10068"
+    },
+    {
+     "number": 7238,
+     "title": "Direct/Freedom outbound: Close blocked connections after `blockDelay` (VLESS, Hysteria, etc.)",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-23T01:12:29Z",
+     "updated_at": "2026-10-26T02:24:20Z",
+     "user": "solodecode",
+     "url": "https://github.com/XTLS/Xray-core/pull/7238",
+     "body": "Regression from #6060 (958eb9e). `blackhole` waits for `buf.Copy(input, buf.Discard)` and relies on the `blockDelay` timer calling `common.Interrupt(input)` to end it. That only works for a pipe: VLESS, Hysteria and other inbounds that use `DispatchLink` pass a reader on the client connection, and `Interrupt` does nothing to it. So a blocked connection stays open until the client closes it, whatever `blockDelay` is. In our tests it was still open after 330 s, longer than `connIdle`.\n\nDrain the input in a goroutine and return once the delay has passed or the input has ended. The inbound then closes the connection, as it does after the blackhole outbound.\n\n`TestVlessBlockDelay` covers `blockDelay` 0 and 1 through a VLESS inbound. Both cases fail on main.\n"
+    },
+    {
+     "number": 7257,
+     "title": "Bump docker/login-action from 4.6.0 to 4.7.0",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T00:22:24Z",
+     "updated_at": "2026-10-26T00:22:28Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7257",
+     "body": "Bumps [docker/login-action](https://github.com/docker/login-action) from 4.6.0 to 4.7.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/docker/login-action/releases\">docker/login-action's releases</a>.</em></p>\n<blockquote>\n<h2>v4.7.0</h2>\n<ul>\n<li>Preserve explicit ECR settings in <code>registry-auth</code> by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1089\">docker/login-action#1089</a></li>\n<li>Use registry hosts for scoped credentials by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1088\">docker/login-action#1088</a></li>\n<li>Raise Docker Hub OIDC max expiry to 6 hours by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1068\">docker/login-action#1068</a></li>\n<li>Log Docker Hub OIDC token exchange progress by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1061\">docker/login-action#1061</a></li>\n<li>Bump <code>@​aws-sdk/client-ecr</code> and <code>@​aws-sdk/client-ecr-public</code> to 3.1154.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1093\">docker/login-action#1093</a></li>\n<li>Bump <code>@​docker/actions-toolkit</code> from 0.94.0 to 0.107.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1100\">docker/login-action#1100</a></li>\n<li>Bump <code>@​humanfs/node</code> from 0.16.7 to 0.16.8 in <a href=\"https://redirect.github.com/docker/login-action/pull/1077\">docker/login-action#1077</a></li>\n<li>Bump csv-parse from 7.0.1 to 7.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1078\">docker/login-action#1078</a></li>\n<li>Bump handlebars from 4.7.9 to 4.7.10 in <a href=\"https://redirect.github.com/docker/login-action/pull/1091\">docker/login-action#1091</a></li>\n<li>Bump js-yaml from 5.2.2 to 5.5.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1066\">docker/login-action#1066</a></li>\n<li>Bump postcss from 8.5.22 to 8.5.26 in <a href=\"https://redirect.github.com/docker/login-action/pull/1071\">docker/login-action#1071</a></li>\n<li>Bump postcss-selector-parser from 7.1.1 to 7.1.6 in <a href=\"https://redirect.github.com/docker/login-action/pull/1092\">docker/login-action#1092</a></li>\n<li>Bump source-map-js from 1.2.1 to 1.2.2 in <a href=\"https://redirect.github.com/docker/login-action/pull/1090\">docker/login-action#1090</a></li>\n<li>Bump undici from 6.27.0 to 6.29.1 in <a href=\"https://redirect.github.com/docker/login-action/pull/1085\">docker/login-action#1085</a></li>\n<li>Bump uuid from 14.0.1 to 14.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1096\">docker/login-action#1096</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/docker/login-action/compare/v4.6.0...v4.7.0\">https://github.com/docker/login-action/compare/v4.6.0...v4.7.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/docker/login-action/commit/81c6f93d4bc991e510b342a00b419b3bb4efc5c6\"><code>81c6f93</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1100\">#1100</a> from docker/dependabot/npm_and_yarn/docker/actions-t...</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1b16c8d1815e1d951d87a3522ff48a76d073735a\"><code>1b16c8d</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1096\">#1096</a> from docker/dependabot/npm_and_yarn/uuid-14.0.3</li>\n<li><a href=\"https://github.com/docker/login-action/commit/ac86b5e9e9d2db43b12b2d3afb9140a427d69d65\"><code>ac86b5e</code></a> [dependabot skip] chore: update generated content</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1476d845f08dd8309a938959a280f2e23"
+    },
     {
      "number": 7255,
      "title": "Check file extensions without resolving symlinks",
@@ -1003,17 +1150,6 @@
      "body": "Fixes #7239.\n\nOn Windows, `xray run -c config.json` can fail when its working directory contains a directory junction: opening the file succeeds, but `filepath.EvalSymlinks` returns \"The system cannot find the path specified.\" Reproduced with the official v26.10.21 Windows release and Go 1.27.3 on Windows 11 (build 26100).\n\nResolve the final Windows path from the already opened file handle with `GetFinalPathNameByHandle`, keeping the allowed-extension check on the resolved target. Resolver errors remain fatal. Other platforms retain the existing absolute-path and symlink resolution. The command and regular-file gates are unchanged.\n\nRegression tests use a real directory junction and a child process whose working directory is the junction, covering relative and absolute config paths. Tests also cover UTF-16 buffer growth, closed handles, the extension allowlist, pipe/other-command behavior, and symlink target extensions.\n\nValidation on the submitted commit:\n- Both native Windows junction cases fail on the original implementation and pass with this change. The freshly built CLI reports `Configuration OK` for the physical path and both junction cases.\n- `go test -count=1 ./main/confloader/... ./main/commands/base` and affected `go vet` pass on Windows (Go 1.27.3). The affected suite also passes with `-race` on Linux (Go 1.27.1).\n- Two Windows file-symlink cases skip with error 1314 (symlink privilege unavailable); both target-extension cases run and pass on Linux.\n- Native Windows CLI build, repository format check on the committed LF source bytes, and `git diff --check` pass.\n- The full application suite and macOS runtime tests were not run locally.\n\nAI assistance (OpenAI Codex) was used for implementation, tests, and review; the validation commands above were run locally.\n"
     },
     {
-     "number": 7249,
-     "title": "Geodata: Update built-in private IP ranges",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-24T18:09:07Z",
-     "updated_at": "2026-10-25T12:05:46Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249",
-     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
-    },
-    {
      "number": 6454,
      "title": "tun模式存在dns泄漏",
      "is_pr": false,
@@ -1111,20 +1247,45 @@
      "user": "Katze-942",
      "url": "https://github.com/XTLS/Xray-core/pull/7231",
      "body": "Adds an s3 backend to XDRIVE for transferring data through S3-compatible storage. Requests are signed using AWS Signature V4. The implementation is based on the existing drive.go, so there may be some code duplication.\nTested with Yandex Cloud and VK Cloud S3 storage. Example configuration:\n```json\n\"xdriveSettings\": {\n  \"service\": \"s3\",\n  \"remoteFolder\": \"xdrive\",\n  \"secrets\": [\n    \"ACCESS_KEY_ID\",\n    \"SECRET_ACCESS_KEY\"\n  ],\n  \"s3\": {\n    \"endpoint\": \"https://storage.yandexcloud.net\",\n    \"region\": \"ru-central1\",\n    \"bucket\": \"example-bucket\",\n    \"pathStyle\": true\n  }\n}\n```\n\n`remoteFolder` sets the object prefix within the bucket.\n\n`pathStyle` is enabled by default and adds the bucket name to the URL path. When set to false, the bucket name is added to the hostname instead."
-    },
-    {
-     "number": 7131,
-     "title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-11T19:18:14Z",
-     "updated_at": "2026-10-24T02:55:10Z",
-     "user": "FunLay123",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131",
-     "body": "Xray-core main pins utls aa6edf4, so `fingerprint: \"chrome\"` (also the default and ECH) sends Chrome 133.\nuTLS 6ebdceb (2026-10-06) adds HelloChrome_155 (verified against branded Chrome) and makes it HelloChrome_Auto.\n\nCaptured ClientHellos (JA4):\n- Xray 26.10.10 `chrome`:       t13d1516h2_8daaf6152771_d8a2da3f94cd\n- Xray + utls 6ebdceb:          t13d1517h2_8daaf6152771_cb7bf5808d99\n- Google Chrome 155 (Linux):    t13d1517h2_8daaf6152771_cb7bf5808d99\nAfter the bump, only randomized values differ (GREASE, keys, ECH payload, extension order).\n\nIn Russia the current `chrome` fingerprint appears to be detected and blocked by TSPU.\n\nProposal: bump utls to >= 6ebdceb and add \"hellochrome_155\" to the fingerprint map."
     }
    ],
    "comments": [
+    {
+     "id": 6408351886,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-26T04:37:55Z",
+     "user": "kokoromagic",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6408351886",
+     "body": "Thanks for your explaintion. It's okay for me to block access to reserved IPs by default but there should be a exception.\r\nBlocking `64:ff9b::/96` entirely is not ideal because it is globally routed for IPv4 translation, and doing so would eliminate its core benefit: allowing IPv6-only machines to access IPv4-only services. If `64:ff9b::/96` does allow routing private IPv4 addresses in the future, the subnets `64:ff9b::a00:0/104`, `64:ff9b::6440:0/106`, `64:ff9b::7f00:0/104`, `64:ff9b::a9fe:0/112`, `64:ff9b::ac10:0/108`, and `64:ff9b::c0a8:0/112` will serve as the NAT64 equivalents for their respective private IPv4 ranges\r\n"
+    },
+    {
+     "id": 6407725371,
+     "issue": 7240,
+     "issue_title": "Xray-core v26.10.21  无法转发 127.0.0.1",
+     "created_at": "2026-10-26T03:43:17Z",
+     "user": "EuraGoods",
+     "url": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6407725371",
+     "body": "> 11\\. 这样设置了一下，可以了\n>      需要finalRules\n>      具体放行哪些，后续再优化\n>      感谢！！！！\n>      ```\n>      {\n>        \"protocol\": \"freedom\",\n>        \"settings\": {\n>          \"finalRules\": [\n>            {\n>              \"action\": \"allow\"\n>            }\n>          ]\n>        },\n>        \"tag\": \"direct\"\n>      },\n>      ```\n\n这个是在哪里修改的？"
+    },
+    {
+     "id": 6406832802,
+     "issue": 7238,
+     "issue_title": "Direct/Freedom outbound: Close blocked connections after `blockDelay` (VLESS, Hysteria, etc.)",
+     "created_at": "2026-10-26T02:24:20Z",
+     "user": "solodecode",
+     "url": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6406832802",
+     "body": "> 再回来看看还是觉得很抽象 common.Interrupt 不保证能 Interrupt\r\n\r\nshould I drop the Interrupt call there? it doesnt do anything for these inbounds anyway"
+    },
+    {
+     "id": 6404878582,
+     "issue": 7238,
+     "issue_title": "Direct/Freedom outbound: Close blocked connections after `blockDelay` (VLESS, Hysteria, etc.)",
+     "created_at": "2026-10-25T23:27:30Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6404878582",
+     "body": "再回来看看还是觉得很抽象\r\ncommon.Interrupt 不保证能 Interrupt"
+    },
     {
      "id": 6402569811,
      "issue": 7256,
@@ -1529,47 +1690,22 @@
      "user": "Katze-942",
      "url": "https://github.com/XTLS/Xray-core/pull/7231#issuecomment-6380800930",
      "body": "> Would be so interesting to watch speed results 👀\r\n\r\nYandex Cloud was the most stable. Telegram stayed connected, messages were delivered quickly, and media loaded without issues. Speedtest showed speeds of up to 40 Mbps. Speed tests against my own server averaged 20-30 Mbps.\r\n\r\nVK Cloud sometimes worked very reliably without reconnecting, but at other times it became very slow to process requests. During quieter periods, download speeds were around 5-9 Mbps, with upload speeds of about 2-3 Mbps."
-    },
-    {
-     "id": 6379354994,
-     "issue": 7231,
-     "issue_title": "XDRIVE: Add S3 storage backend",
-     "created_at": "2026-10-24T03:33:03Z",
-     "user": "FunLay123",
-     "url": "https://github.com/XTLS/Xray-core/pull/7231#issuecomment-6379354994",
-     "body": "Would be so interesting to watch speed results 👀"
-    },
-    {
-     "id": 6378998598,
-     "issue": 7131,
-     "issue_title": "Bump uTLS: chrome fingerprint is still Chrome 133",
-     "created_at": "2026-10-24T02:55:10Z",
-     "user": "FunLay123",
-     "url": "https://github.com/XTLS/Xray-core/issues/7131#issuecomment-6378998598",
-     "body": "@RPRX \nHi! Any plans about updating utls fingerprint? I think it would be a good addition for the soon release"
-    },
-    {
-     "id": 6377311822,
-     "issue": 7244,
-     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
-     "created_at": "2026-10-24T00:10:22Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6377311822",
-     "body": "这里的 ctx 一团乱麻，直觉上这么干乐观缓存、并发查询、双栈查询、dns outbound 的至少一项会出问题\r\n而且 lookup 也不接受调用者的 ctx，不值得这么做\r\n\r\n这种情景不是什么热路径，真想优化就维护个长连接，甚至做个小型的池"
-    },
-    {
-     "id": 6376745345,
-     "issue": 7243,
-     "issue_title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
-     "created_at": "2026-10-23T23:24:58Z",
-     "user": "thatssoheil",
-     "url": "https://github.com/XTLS/Xray-core/issues/7243#issuecomment-6376745345",
-     "body": "Reproduced this at `1b1647cd` and tested the patch the report says was not tried yet (dropping the ack in REALITY's server). It clears the failure, and the two targets that work today keep working.\n\nRig is the report's, on loopback with OpenSSL 3.5.5: xray client -> vless + `xtls-rprx-vision` + reality -> v26.10.21 server with `\"show\": true`; targets A (empty EncryptedExtensions), B (`-servername example.test -cert2 ...`, acks SNI), C (`-alpn h2,http/1.1`); `curl -x socks5h://...` to a local `http.server` through the `finalRules` allow rule.\n\n| build | target A | target B | target C |\n|---|---|---|---|\n| v26.10.21, untouched reality pin | 0/2, `padding: -4` x10 | 2/2 | 2/2 |\n| v26.10.21 + the hunk below | 2/2, no padding line | 2/2 | 2/2 |\n\nThe entire change, in XTLS/REALITY `handshake_server_tls13.go` (the block `3c98159` added):\n\n```diff\n-\tif !hs.c.didResume && hs.clientHello.serverName != \"\" {\n-\t\tencryptedExtensions.serverNameAck = true\n-\t}\n```\n\nWith it REALITY's own EncryptedExtensions is 28 bytes and matches an empty target EE; on target B the same record is 4 bytes shorter than the target's, and the mimic pads positively as it always did. Nothing else in the server path reads that field.\n\nClient side is safe for the same reason the reporter gives: `handshake_client_tls13.go` only rejects an ack the client did not ask for (`hs.hello.serverName == \"\"`), an xray REALITY client always sends SNI, and both B and C still complete against the patched server.\n\nI did not touch XTLS/REALITY and have not proposed a parallel fix anywhere: the module pin is `83f621788ca8` and my build used a local `replace`. So landing it means a REALITY commit plus a `go.mod` bump here; the matrix above is what that bump would be validated against.\n"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3113,
+     "title": "fix(import): preserve MTU from vpn:// configurations",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-09-01T10:00:43Z",
+     "updated_at": "2026-10-26T02:17:43Z",
+     "user": "makkoar",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3113",
+     "body": "## Summary\n\nPreserve an explicitly configured non-empty MTU when importing an Amnezia `vpn://` configuration. The WireGuard or AmneziaWG protocol default is now applied only when the imported MTU is missing or empty.\n\n## Problem\n\n`ImportController::processAmneziaConfig()` unconditionally replaced the MTU contained in imported WireGuard and AmneziaWG configurations with the protocol default. As a result, profiles that intentionally specified a custom MTU silently changed during import.\n\n## Changes\n\n- Keep a non-empty imported MTU unchanged.\n- Treat whitespace-only MTU values as empty.\n- Preserve the existing WireGuard/AmneziaWG default fallback for missing or empty values.\n\n## Backward compatibility\n\nProfiles without an MTU continue to receive the same protocol default. The change only affects profiles that already provide an explicit value.\n\n## Verification\n\n- Built the Windows x64 client and service in Release mode against `dev` at [`94b51df2`](https://github.com/amnezia-vpn/amnezia-client/commit/94b51df24790bf52427afe82d81c87a95460bdfd) (`5.0.3.1`) with this change included.\n- Confirmed with `git range-diff` that the rebase preserves the patch without changing its contents.\n- Before this rebase, imported a real `vpn://` profile on Windows and verified that its non-default MTU survives import. The MTU-handling implementation is unchanged.\n\n## Related pull requests\n\n- This is complementary to #3065, which changes the AmneziaWG default MTU value. This PR only changes when the default is applied.\n"
+    },
     {
      "number": 3312,
      "title": "fix: gateway requests on slow or blocked dns",
@@ -1825,7 +1961,19 @@
    ]
   },
   "apernet/hysteria": {
-   "issues": [],
+   "issues": [
+    {
+     "number": 1712,
+     "title": "fix(scripts): start server units after network-online.target",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T01:01:43Z",
+     "updated_at": "2026-10-26T01:01:43Z",
+     "user": "escape0707",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1712",
+     "body": "The systemd units written by `install_server.sh` only order after `network.target`. That target means the network stack is configured, not that the network is up, so on some boots the server starts before DNS works.\n\nThe server resolves hostnames while it loads its config. One example is the realm STUN servers. When that lookup fails at boot, the service exits with:\n\n```\nFATAL failed to load server config {\"error\": \"invalid config: realm.stun: lookup <stun host>: i/o timeout\"}\n```\n\nThe unit has no `Restart=`, so it stays down until someone starts it by hand.\n\nThis change adds `Wants=network-online.target` and `After=network-online.target` to the server unit template, which systemd documents for services that need a working network at startup: https://systemd.io/NETWORK_ONLINE/\n"
+    }
+   ],
    "comments": []
   }
  }

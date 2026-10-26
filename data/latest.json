@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-26T13:01:39Z",
- "since": "2026-10-24T13:01:39Z",
+ "generated_at": "2026-10-26T20:29:02Z",
+ "since": "2026-10-24T20:29:02Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -14,17 +14,6 @@
      "user": "hyperion-cs",
      "url": "https://github.com/net4people/bbs/issues/490",
      "body": "### Problem\nA few weeks ago, a new method of blocking (especially on mobile networks) was introduced in Russia by the censor.\nIt works as follows. So, if:\n1. The client connects to the server via TCP using HTTPS and TLS 1.3 (for example, VLESS/Reality actually mimics HTTPS with TLS 1.3);\n2. The IP address of the server is “suspicious” (it is located **outside** ⚠️ (i.e. not in Russia), is part of the subnet AS which is owned by foreign data centers like Hetzner, Digital Ocean, etc.);\n3. Within one TCP connection (not within one HTTP request/response - this is important) the data size received from the server to the client is more than ≈15-20KB (the value varies depending on the provider) — the MAIN thing.\n\nThis connection is \"frozen\" (i.e. TCP packets from the server within this connection stop arriving after the specified limit on the size of transmitted data has been reached). It is curious to note that, as a rule, the censor (under the pretence of a response from the server) does not send, for example, an RST packet - instead, it simply “freezes” the TCP connection (from the client's point of view), and thus the client simply waits for an error on the timeout of waiting for a response from the server and everything stops working.\n\n**IMPORTANT**: It doesn't matter whether it's \"legitimate\" HTTPS traffic or whether someone is mimicking it. They don't pay attention to that now.\n\n### Do I have these limitations?\nYou can check your “home” ISP with the _RU :: TCP 16-20_ checker from [this](https://github.com/hyperion-cs/dpi-checkers) repository. Works right from your browser, VPN should be disabled during the check.\n\n\n### Notes\nThe good news is that if you fragment the responses from the server into several ≈15-20KB data bundles (if it is large enough) in different TCP connections, everything will work fine. It is important not to confuse this with fragmentation of TCP packets within one connection or splitting of transmitted data into several HTTP requests/responses (in **one** connection) - this is different and it won't help.\n\nYes, it will work noticeably slower than a single connection (especially if we're going to upload/download a large file). For example, it would take ~2560 TCP connections to download a 50MB file - that's a lot and quite suspicious. \n\n---\n\nupd1: TLS 1.2 is also blocked (sometimes there is a different data size limit per TCP connection).\n\nupd2: At the moment it seems that only SSH/sFTP + and sometimes RDP (both on any ports) work within TCP without limitations. Including random data transfer over TCP (without TLS, etc., in raw form) is also limited. It's possible that there are other things within TCP that would work without limitations, I'm not exactly sure about that.\n\nupd3.: Censor has a whitelist (based on SNI in the TLS handshake and possibly an HTTP `Host` header if _plain HTTP_ is used), for more details, including some subset of that list, see [here](https://github.com/hyperion-cs/dpi-checkers/tree/main/ru/tcp-16-20_dwc). For example, this can be used as SNI/dest in xray/vless+reality (with _xtls-rprx-vision_) and it will work.\n\nupd4.: ❗️Censor has also started to apply a whitelist based on the CIDR (IP subnets) of the destination servers. In this case, circumvention is extremely difficult (as a rule, an intermediate node with an IP from the whitelist is required).\n\nupd5.: In fact, the censor typically freezes the connection after 25 packets have been sent in either direction (incoming/outgoing). This applies to both tcp and udp. On average, this equates to approximately 16 KB of payload.\n\n### Related links\n- https://blog.cloudflare.com/russian-internet-users-are-unable-to-access-the-open-internet/\n- https://hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20/\n- https://github.com/XTLS/Xray-core/pull/4835#issuecomment-2988824955\n- https://github.com/XTLS/Xray-core/issues/4846\n- https://ntc.party/t/09062025-%D0%B8%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE-%D0%B1%D0%BB%D0%BE%D0%B"
-    },
-    {
-     "number": 673,
-     "title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-04T12:16:37Z",
-     "updated_at": "2026-10-24T20:28:45Z",
-     "user": "ospab",
-     "url": "https://github.com/net4people/bbs/issues/673",
-     "body": "Yes, this is another AI-assisted protocol (written with a lot of help from\nClaude Code). But it works: it gets my relatives through censorship every day\nand saves them a fair amount of money and nerves. Now I'd like people who know\nDPI better than I do to tell me where the design breaks.\n\nhttps://github.com/ospab/ostp — AGPL-3.0: the protocol, server, CLI, desktop and\nAndroid apps.\n\n### Wire image\n\n- Handshake: `Noise_NNpsk0_25519_ChaChaPoly_BLAKE2s`; data: ChaCha20-Poly1305.\n  Every secret is HKDF-derived from the shared access key. No custom primitives.\n- No cleartext version field or magic byte. The 12-byte outer header (session id\n  + nonce) is XOR-masked with HMAC-SHA256(obfuscation key, first 32 bytes of the\n  packet's ciphertext), so headers are uncorrelated between packets.\n- Handshake padding length is drawn from a range derived from the access key, so\n  different deployments have different size distributions.\n- Optional junk datagrams before the handshake (per-key marker, not a constant)\n  and fragmentation of the first TCP write into small chunks.\n- An unauthenticated peer gets a fallback website or a decoy, not a reset.\n\nSpec: `docs/en/specification.md`, obfuscation: `docs/en/obfuscation.md`.\n\n### Three carriers for the same datagrams\n\n1. **UDP** — random-looking, own ARQ (selective ACK/NACK) and congestion control.\n2. **UoT** — the same datagrams over plain TCP, for networks that throttle unknown UDP.\n3. **TLS on 443** (added recently) — UoT inside real TLS with a real Let's Encrypt\n   certificate on your domain, directly or behind nginx/Caddy on a secret path.\n   Not an imitation: the server is a real website.\n\n### What I've seen in Russia\n\n- **My home (wired) ISP:** almost everything is blocked. OSTP works, and so does\n  a carefully tuned VLESS setup; nothing else I tried does.\n- **Mobile operators differ a lot.** On MegaFon, one of the biggest, VLESS\n  surprisingly isn't blocked, but OSTP over plain UDP and over UoT are blocked\n  readily. With UDP the client's counters show only a few hundred bytes coming\n  back, and the handshake never completes or the session never becomes stable.\n- **TLS works on both** the home ISP and MegaFon.\n\nSo in practice the \"looks like nothing\" carriers are what fails on mobile, and\nthe real-TLS carrier is what survives.\n\n### What I know is weak\n\n- UDP and UoT are fully encrypted protocols by design, so they're exposed to FEP\n  blocking (entropy / \"looks like nothing\" heuristics) and whitelisting — the\n  MegaFon result above is consistent with that.\n- Length padding changes sizes but, as far as I can tell, doesn't hide the\n  direction/count pattern from #363 (client sends ≥3 packets ≥411 bytes while\n  the server talks more often) inside the TLS carrier.\n- One developer, no audit.\n- The repo has a prober (`ostp-prober`) that tries every carrier against a\n  server and estimates where the filtering box is by TTL, but it's rough and\n  prints a lot of noise; it needs work before its output is worth sharing.\n\n### Questions\n\n1. The MegaFon UDP case — a few hundred bytes back, then nothing. Does that match\n   what others see from TSPU against fully encrypted UDP (the first packets pass,\n   then the flow is cut)? Any idea what triggers it: entropy, packet sizes, the\n   destination ASN?\n2. For traffic carried inside TLS: what inner shaping is actually worth doing\n   against encapsulated-handshake fingerprinting?\n3. Decoy responses vs silent drop for unauthenticated probes — which one has\n   held up better against TSPU's active probing in your experience?\n\n\nAll this message also written by Claude. Sorry about that. \n"
     }
    ],
    "comments": [
@@ -36,60 +25,6 @@
      "user": "0zd0",
      "url": "https://github.com/net4people/bbs/issues/490#issuecomment-6395211616",
      "body": "I’m now seeing the same behavior from Singapore when connecting to Europe: traffic freezes after roughly 25 server data packets. It looks like Russian filtering may be spilling over into international transit, although I haven’t confirmed the reverse route.\n\nI left Russia to escape this shit, and now I’m running into the same pattern from Singapore"
-    },
-    {
-     "id": 6130837051,
-     "issue": 673,
-     "issue_title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "created_at": "2026-10-12T19:08:52Z",
-     "user": "ospab",
-     "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6130837051",
-     "body": "Я в своём протоколе к этому и пришел: tls на своём домене, но правда без reality и self-steal. Есть какие-то способы обхода белых списков кроме cdn и русского сервера с ip в белом списке?\n\n*That's what I concluded in my report: tls on my own domain, but without reality and self-steal. Are there any ways to bypass whitelists other than using a cdn or a russian server with a whitelisted ip address?*"
-    },
-    {
-     "id": 6107801347,
-     "issue": 673,
-     "issue_title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "created_at": "2026-10-11T09:56:58Z",
-     "user": "gohoski",
-     "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6107801347",
-     "body": "Использую VLESS + RAW + REALITY со своим доменом ([self-steal](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)) без проблем, так что не понимаю, почему у тебя «не работает». На самом деле у REALITY и других TLS-based протоколов даже плюс того, что это TLS. Я думаю, что полагаться на протоколы, которые пытаются выглядеть как рандомизированное/обфусцированное «ничего» (look-like-nothing), в текущих реалиях не стоит — например, Великий китайский фаерволл [давно блокирует](https://gfw.report/publications/usenixsecurity23/en/) большую часть таких протоколов просто потому что они выглядят как «ничего», и не думаю, что российскому ТСПУ такое реализовать будет сложно (как минимум, логично, что гораздо лучше маскироваться под HTTPS, чем кричать другим рандомным шифрованным трафиком, это даже выглядит как «ключи под ковриком, дверь не открывать»). Когда я использовал AmneziaWG (общающийся практически рандомными байтами по UDP), часто скорость подозрительно падала до 0,2–1 мбит/с, что может конечно был и глюк приложения но в последнее время много людей пишут, что AmneziaWG у них еле работает, скорее всего из-за UDP-блокировок, но тут ничего говорить не буду т. к. не изучал тему UDP-блокировок а AmneziaWG давно не использовал. Из-за того, что REALITY как можно сильнее маскируется под TLS/HTTPS и работает по обычному TCP, его заблокировать сложно не ломая половину рунета в очередной раз, и фактически тут смогут заблокировать/замедлять только по количеству трафика или по IP-диапазонам хостинга, но это не признак TLS-прокси как таковых, и это заденет обычные сайты тоже.\n\nЕсли для REALITY используешь не свой домен или отнюдь господи SNI из туториалов на ютубе (по типу microsoft.com, icloud.com, yahoo.com), то неудивительно, почему не работает. Необходимо либо использовать собственный домен (но его надо покупать) и на том же сервере разворачивать сайт (self-steal), либо использовать сайт из подсети хостинга через [RealiTLScanner](https://github.com/xtls/RealiTLScanner) (желательно самые близкие к IP твоего сервера). Также часто надо менять fingerprint на стороне клиента с дефолтного chrome на другой (например firefox), т. к. ТСПУ иногда блокирует фингерпринт Chrome для малоизвестных сайтов с нероссийским IP.\n\nОбъективно у этого вайбкоденного проекта полезности мало, т. к. не думаю что он решает реальную проблему, которую не решает REALITY, а если Xray не нравится то есть Hysteria 2 (правда он тоже работает по UDP/QUIC), AnyTLS и NaïveProxy. Но всё равно отмечу плюс таких рандомизированных протоколов в моменте, когда цензор будет слишком сильно сосредотачиваться на блокировке TLS-проксей и просто забудет про эти протоколы, такое несколько раз было в Иране (для TCP возможно подойдёт VLESS Encryption / VMess / Shadowsocks 2022), <s>но к тому моменту мы все будем сидеть на чём-то наподобие MasterDnsVPN.</s> Возможно на такой случай действительно стоит иметь как вариант TLS-маскировки так и подобных look-like-nothing-протоколов.\n\n---\n\n*I use VLESS + RAW + REALITY with my own domain ([self-steal](https://computerscot.github.io/vless-xtls-utls-reality-steal-oneself.html)) without any issues, so I don't understand why it \"doesn't work\" for you. In fact, REALITY and other TLS-based protocols even have the added benefit of being TLS. I don't think it's worth relying on protocols that try to look like randomized/obfuscated \"nothing\" (look-like-nothing) in the current reality. For example, the Great Firewall of China [has long been blocking](https://gfw.report/publications/usenixsecurity23/en/) most of these protocols simply because they look like \"nothing\", and I don't think it would be difficult for the Russian TSPU to implement something similar (at the very least, it makes sense that it's much better to disguise yourself as HTTPS than to shout out with other random encrypted traffic. It even looks like \"keys under the rug, don't open the door\"). When I used AmneziaWG (which communicates using practically random bytes over UD"
-    },
-    {
-     "id": 6102419638,
-     "issue": 673,
-     "issue_title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "created_at": "2026-10-10T21:35:04Z",
-     "user": "its0ka",
-     "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6102419638",
-     "body": "сначала разобраться с \"у меня на домашнем провайдере не работает базовый vless, vless + reality и прочие базовые настройки. На мобильной сети работало, но тоже не долго.\", почему не работает\n\n*first, let's figure out why “basic vless, vless + reality, and other basic settings aren't working on my home internet provider. It worked on the mobile network, but not for long.”, why isn't it working?*"
-    },
-    {
-     "id": 6102346520,
-     "issue": 673,
-     "issue_title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "created_at": "2026-10-10T21:26:13Z",
-     "user": "ospab",
-     "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6102346520",
-     "body": "Не отрицаю что это может быть неправильно, интересно было разобраться и сделать что-то своё и рабочее, хотя и косвенно свое. Как правильно поступить по-твоему?\n\n*I won't deny that this might be wrong, but I was curious to figure it out and create something of my own that actually works, even if it's only indirectly my own. What do you think is the right thing to do?*"
-    },
-    {
-     "id": 6101846766,
-     "issue": 673,
-     "issue_title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "created_at": "2026-10-10T20:27:26Z",
-     "user": "its0ka",
-     "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6101846766",
-     "body": "Ну получается \"текущие решения не работают, искать причины не буду, буду писать свой протокол\" что по мне совершенно неправильно\n\n*So it comes down to, \"The current solutions aren't working, I'm not going to look for the reasons, I'll just write my own protocol,\" which, in my opinion, is completely wrong*"
-    },
-    {
-     "id": 6100829472,
-     "issue": 673,
-     "issue_title": "OSTP: an AI-assisted Rust tunnel that works in Russia — UDP gets blocked on mobile, real TLS gets through. Looking for review",
-     "created_at": "2026-10-10T18:32:29Z",
-     "user": "ospab",
-     "url": "https://github.com/net4people/bbs/issues/673#issuecomment-6100829472",
-     "body": "Рад что хоть кто-то прочитал мой нейрослоп. \nЯ переосмыслил подход к созданию проектов и, наверное, ещё не до конца, понял что качественные проекты и тем более в сфере сетей и vpn это не легко. Также понял что это не про одного человека и точно не с 99% помощью ИИ.\nНасчёт проб я опирался на собственные наблюдения, и у меня на домашнем провайдере не работает базовый vless, vless + reality и прочие базовые настройки. На мобильной сети работало, но тоже не долго. Бесплатный варп и proton vpn тоже не особо работает лично у меня, варп подключается к московским серверам, а proton, что комично, подключается только к украинским серверам. \nЭто сподвигло меня написать (в основном навабкодить) свой собственный протокол, я много не понимаю в написанном коде, но могу вкратце изложить как оно вообще работает. Этот пост был скорее про огласку, а не реальные вопросы, получить звёздочки на репо. \n\n*I'm glad that at least someone read my rambling post.\nI've rethought my approach to creating projects and, though I probably haven't fully grasped it yet, I've realized that high-quality projects, especially in the field of networks and VPNs, aren't easy to pull off. I've also realized that this isn't something one person can do alone, and it's definitely not something that can be achieved with 99% AI assistance.\nAs for the tests, I relied on my own observations, and basic VLess, VLess + Reality, and other basic configurations don't work on my home internet provider. It worked on my mobile network, but not for long either. Free warp and proton vpn don't really work for me personally either, warp connects to servers in Moscow, and proton, comically enough, connects only to servers in Ukraine.\nThis prompted me to write (or rather, code) my own protocol. I don't fully understand the code I wrote, but I can briefly explain how it works in general. This post was more for publicity than to address actual questions, just to get some stars on the repo.*\n"
     }
    ]
   },
@@ -215,28 +150,6 @@
      "user": "winchtester",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1404",
      "body": "# Design discussion: privacy and adaptive routing as the network grows\n\nStatus: proposal for discussion · Date: 2026-10-25 · Companion to #1403\n\n## 1. Premise\n\nYggdrasil is pleasant at 10³ nodes and will be asked to behave at 10⁵–10⁶. At that size two\nproperties stop being “nice to have”:\n\n1. **Operators cannot see link quality** (one 4-minute router EWMA, no RTT/loss/queue), so every\n   routing decision — human or automatic — is blind.\n2. **Traffic metadata is fully visible to forwarding nodes** (`source`/`dest` public keys in the\n   `traffic` struct), so “private network” means private from the outside, not from the path.\n\nThis document proposes a staged, opt-in answer to both, with costs measured on a real path\n(v0.5.15, home host ↔ Hetzner VPS, 2026-10-24): overlay ≈ raw TCP (87.2 vs 85.7 Mbit/s), RTT\n55.8 ms both, protocol overhead 2.6%, `IfMTU 1420` costs **−25%**, four parallel streams give no\ngain (path-bound), CPU 16% of one core at 87 Mbit/s.\n\n## 2. Part A — adaptive routing (measured, not guessed)\n\n| Stage | Content | Risk |\n|---|---|---|\n| A1 | Link telemetry: per-peer RTT/jitter/loss/age, additive admin fields (#1403, code linked there) | low: off by default, no routing change |\n| A2 | Peer scoring with **dwell (30 s)** and **hysteresis (20%)**, plus a disjoint-secondary rule; only reorders existing valid candidates | medium: behaviour, needs policy agreement |\n| A3 | Optional multipath for bulk flows (reordering buffer, latency cost) | high: only if A1/A2 prove value |\n\nNon-goals: replacing tree routing; per-packet re-routing in ironwood; promising bandwidth. At\n10⁶ nodes the bottleneck for an individual is still their last mile — our four-stream test shows\nrouting cannot add capacity, only avoid a bad peer.\n\n## 3. Part B — privacy (opt-in, priced)\n\nThreat model first: hide *content and size/timing* from a path observer and from the last mile;\n**not** hide that two nodes talk from a global observer, and not defend against an endpoint that\nis compromised.\n\n| Stage | Content | Cost (measured/modeled) |\n|---|---|---|\n| B1 | Posture and cost accounting in the console (`privacy`), disabled by default | zero |\n| B2 | Fixed-size cells + Poisson release jitter for opted-in flows | +10–60% bandwidth depending on chunk size; +20–75 ms p95 |\n| B3 | Cover traffic with a hard share budget (AGC-style), only with an economic story | ~82 kbit/s per node at 1 cell / 200 ms |\n| B4 | Mixnet transport (external, e.g. Nym-style) for those who need unobservability | latency measured in hundreds of ms |\n\nKey findings that shape the design:\n\n- **Cell size is the expensive decision, not cryptography.** Overhead is set by the chunk\n  distribution: with 2 KiB cells, 1280-byte writes cost +60%, aligned writes ~0. A single\n  “typical” number would be dishonest, so the console computes it from a measured chunk size.\n- **Smaller cells are not automatically cheaper**; fragmentation can beat padding (our calibration\n  picks the cheapest cell within a budget, tie-broken towards fewer packets).\n- **Anonymity is a crowd problem.** Below a minimum observed participant count the strongest\n  profile is refused; the count is a local observation, labelled as such.\n- **Privacy must not write logs.** An enabled posture cannot combine with per-flow logging; this\n  is enforced in code, not documentation.\n- **Padding must not break the path.** Forcing small MTU already costs 25%; profiles therefore pad\n  logical cells, not the TUN MTU, and `bulk` keeps jumbo frames.\n\n## 4. How A and B interact\n\n- Path diversity helps both: fewer nodes see a full flow, and one bad peer cannot carry everything.\n- Padding and jitter cost the same resources routing wants (bandwidth, latency), so both are\n  opt-in and priced before enabling.\n- If privacy is on and the path degrades, the *honest* behaviour is to say so, not to silently\n  disable privacy to keep a number green.\n\n## 5. Compatibility and rollout\n\n- A1/B1 are additive and off by default; A2/B2 need explicit opt-in and"
-    },
-    {
-     "number": 1296,
-     "title": "Isolated network via shared key",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2025-12-05T15:29:23Z",
-     "updated_at": "2026-10-24T13:44:53Z",
-     "user": "Shurik1236",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1296",
-     "body": "Есть в Warpinator \"пароли\", которые позволяют связываться только с устройствами с таким же паролем.\nВозможно ли добавить похожий функционал в yggdrasil, чтобы можно было указать один пароль для узла и тот мог передавать данные только узлам с таким же паролем, чтобы сеть была закрытой, но не потеряла свою расширяемость?\n\n---Google Translate---\nWarpinator has \"passwords\" that allow communication only with devices with the same password.\nIs it possible to add similar functionality to yggdrasil, so that a single password can be specified for a node, and it can only transmit data to nodes with the same password, keeping the network closed but still scalable?"
-    },
-    {
-     "number": 1353,
-     "title": "TestConfigReadFromEmpty: Fails with a runtime error",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-06-20T15:18:40Z",
-     "updated_at": "2026-10-24T13:44:17Z",
-     "user": "artyom-poptsov",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1353",
-     "body": "Hello.\n\nI'm trying to update Yggdrasil from the version 0.5.13 to the version 0.5.14 in GNU Guix and found out that `TestConfigReadFromEmpty` fails with the following error:\n\n```\n=== RUN   TestConfigReadFromEmpty\n=== RUN   TestConfigReadFromEmpty/empty\n    config_test.go:22: ReadFrom must not panic on short input, got: runtime error: slice bounds out of range [:32] with capacity 0\n=== RUN   TestConfigReadFromEmpty/single_byte\n--- FAIL: TestConfigReadFromEmpty (0.00s)\n    --- FAIL: TestConfigReadFromEmpty/empty (0.00s)\n    --- PASS: TestConfigReadFromEmpty/single_byte (0.00s)\n=== RUN   TestConfig_Keys\n--- PASS: TestConfig_Keys (0.00s)\n```\n\nNot sure if the problem lies in the environment, or in the test itself.  I tried to use Go 1.25 explicitly for the build but that didn't help unfortunately."
     }
    ],
    "comments": [
@@ -401,20 +314,66 @@
      "user": "neilalexander",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1403#issuecomment-6389491096",
      "body": "We're aware of the limitations in using the signature response times, it was the easiest way to add in a rough latency metric without breaking the protocol. We'll likely address this in v0.6 with dedicated wire types, but we won't do so in v0.5."
-    },
-    {
-     "id": 6384951626,
-     "issue": 1353,
-     "issue_title": "TestConfigReadFromEmpty: Fails with a runtime error",
-     "created_at": "2026-10-24T13:44:17Z",
-     "user": "neilalexander",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1353#issuecomment-6384951626",
-     "body": "Fixed by 06675c2c2540652011610ee87c640d91d9139578."
     }
    ]
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2389,
+     "title": "contrib: add sysusers.d file and update tmpfiles.d config file",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-24T14:59:12Z",
+     "updated_at": "2026-10-26T20:23:04Z",
+     "user": "bluca",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2389",
+     "body": "sysusers.d/tmpfiles.d config files allow a package to use declarative configuration instead of manually written maintainer scripts.\nThis also allows image-based systems to be created with /usr/ only, and also allows for factory resetting a system and recreating /etc/ on boot.\n\nhttps://www.freedesktop.org/software/systemd/man/latest/sysusers.d.html\nhttps://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html\n\nThey are not specific to debian, so move them to the contrib/ directory.\nAlso rename to the canonical form, which is tmpfiles (plural)."
+    },
+    {
+     "number": 2330,
+     "title": "Threads data races detection",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-02-20T12:44:03Z",
+     "updated_at": "2026-10-26T19:50:56Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2330",
+     "body": "Thread Sanitizer https://github.com/google/sanitizers/wiki/ThreadSanitizerCppManual\n\nSome warnings detected  https://github.com/PurpleI2P/i2pd/issues/1509#issuecomment-3928656874  and below \n\nHow to reproduce\n ------\nDebian 12.13 x86_64 (maybe the same in Debian 13)\nCheck if the packages are installed (maybe only  libtsan2 is needed)\n```\nii  libasan8:amd64                         12.2.0-14+deb12u1                       amd64        AddressSanitizer -- a fast memory error detector\nii  liblsan0:amd64                         12.2.0-14+deb12u1                       amd64        LeakSanitizer -- a memory leak detector (runtime)\nii  libtsan2:amd64                         12.2.0-14+deb12u1                       amd64        ThreadSanitizer -- a Valgrind-based detector of data races (runtime)\nii  libubsan1:amd64                        12.2.0-14+deb12u1                       amd64        UBSan -- undefined behaviour sanitizer (runtime)\n```\nCompile with `-fsanitize=thread -fno-omit-frame-pointer`\nLink with `-ltsan`\nFor example, add these options to the Makefile.linux\n```\nuser@xxxxxx$ git diff\ndiff --git a/Makefile.linux b/Makefile.linux\nindex 4ea39e22..69946d82 100644\n--- a/Makefile.linux\n+++ b/Makefile.linux\n@@ -1,5 +1,5 @@\n # set defaults instead redefine\n-CXXFLAGS ?= ${CXX_DEBUG} -Wall -Wextra -Wno-unused-parameter -pedantic -Wno-psabi\n+CXXFLAGS ?= ${CXX_DEBUG} -Wall -Wextra -Wno-unused-parameter -pedantic -Wno-psabi -fsanitize=thread -fno-omit-frame-pointer\n LDFLAGS ?= ${LD_DEBUG}\n\n ## NOTE: The NEEDED_CXXFLAGS are here so that custom CXXFLAGS can be specified at build time\n@@ -40,7 +40,7 @@ ifeq ($(USE_UPNP),yes)\n endif\n        LDLIBS += -lpthread -ldl\n else\n-       LDLIBS += -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic\n+       LDLIBS += -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -ltsan\n ifeq ($(USE_UPNP),yes)\n        LDLIBS += -lminiupnpc\n endif\n```\nBuild with `make`, еxecutable file i2pd will be generated in working directory\n`xxxxxx# file ./i2pd`\n`./i2pd: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=df85046f1dd4e0a20c50f09fde4c75830ac32509, for GNU/Linux 3.2.0, with debug_info, not stripped`\n\nRun ./i2pd as root \n~with `LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtsan.so.2`~\nand `2>./threads_out.txt`\nand some other options, depending on your system configuration (./i2pd --help),\nfor example \n`root@xxxxxxx# prlimit --core=unlimited --nofile=20000  ./i2pd --conf=/etc/i2pd/i2pd.conf --tunconf=/etc/i2pd/tunnels.conf --logfile=/var/log/i2pd/i2pd.log  --service   2>./threads_out.txt` .\nSignificant RAM usage is expected.\nAfter some runtime stop the i2pd with Ctrl-C, read the threads_out.txt \nor split it  `csplit threads_out.txt  /WARNING/ {*}`   .\nor look inside `grep -E \"Thread\\ T|====|SUMM\"   threads_out.txt  | nl`\n"
+    },
+    {
+     "number": 2265,
+     "title": "contrib/openrc: improve `command_args`",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2025-11-23T21:13:42Z",
+     "updated_at": "2026-10-26T18:30:42Z",
+     "user": "fkobi",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2265",
+     "body": "It looks better now!"
+    },
+    {
+     "number": 2324,
+     "title": "contrib/openrc/i2pd.openrc: remove `name`",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-02-11T16:53:44Z",
+     "updated_at": "2026-10-26T18:25:54Z",
+     "user": "fkobi",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2324",
+     "body": "That variable is no longer used:\r\nhttps://github.com/OpenRC/openrc/blob/master/service-script-guide.md"
+    },
+    {
+     "number": 2613,
+     "title": "Torrent Tunnel Formation Issue",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-25T13:45:06Z",
+     "updated_at": "2026-10-26T14:33:58Z",
+     "user": "absolutep",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2613",
+     "body": "Torrent Tunnel Formation Issue\n\nThe torrent tunnel does not form if the default directory, `torrentsdir = /var/lib/i2pd/torrents`, is changed to a different folder or drive. This issue occurs regardless of HDD permissions or the presence of web files in the specified folder or drive.\n\nEnvironment: Zorin OS 18.1 Core and I2Pd 3.0.0."
+    },
     {
      "number": 2585,
      "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
@@ -436,17 +395,6 @@
      "user": "pobregat0",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2616",
      "body": "As asked in #dev by orignal and R4SAS.\n\n`TorrentFile::Save` and `Load` did not look at the result of the write or the read, so a failed write was reported as success. Worse, the failure leaves the error flag set on the stream while the file stays open, and `Open` only opens when the file is closed - so every later call failed silently for the life of the object, while `m_LastAccessTime` kept being updated so the file was not closed by inactivity either.\n\nNow both calls check the stream after the operation, log the error with `strerror` and return false, and `Open` closes and clears a stream that is open but in a failed state before reopening it. The periodic flush is checked too, since that is where a buffered write actually reaches the disk.\n\nMeasured with a harness that sets `RLIMIT_FSIZE` to 64 KB and writes past it:\n\n| step | before | after |\n|---|---|---|\n| write at offset 0 | true | true |\n| write past the size limit | true | true (buffered, see below) |\n| write at offset 2048 after the failure | true (nothing written) | false |\n| read at offset 0 | false | true |\n\nThe file on disk holds 1024 bytes in both cases - that is, the second and third writes were lost while reporting success. After the change the lost write is reported, and the stream recovers for the next call instead of staying broken.\n\nOne honest limitation: writes are buffered, so a write that oversteps a limit still returns true at that moment and the error surfaces on the next call or on the flush. Forcing a flush per block would make it immediate, but that is a different trade-off on disk IO, so I left it to you. Build without warnings, unit tests pass."
-    },
-    {
-     "number": 2613,
-     "title": "Torrent Tunnel Formation Issue",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-25T13:45:06Z",
-     "updated_at": "2026-10-25T23:10:15Z",
-     "user": "absolutep",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2613",
-     "body": "Torrent Tunnel Formation Issue\n\nThe torrent tunnel does not form if the default directory, `torrentsdir = /var/lib/i2pd/torrents`, is changed to a different folder or drive. This issue occurs regardless of HDD permissions or the presence of web files in the specified folder or drive.\n\nEnvironment: Zorin OS 18.1 Core and I2Pd 3.0.0."
     },
     {
      "number": 2615,
@@ -471,17 +419,6 @@
      "body": ""
     },
     {
-     "number": 2324,
-     "title": "contrib/openrc/i2pd.openrc: remove `name`",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-02-11T16:53:44Z",
-     "updated_at": "2026-10-25T14:04:06Z",
-     "user": "fkobi",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2324",
-     "body": "That variable is no longer used:\r\nhttps://github.com/OpenRC/openrc/blob/master/service-script-guide.md"
-    },
-    {
      "number": 2612,
      "title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
      "is_pr": true,
@@ -491,218 +428,72 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2612",
      "body": "Debian 13, there was Linux build like this: \r\n`g++ -DUSE_UPNP -DGITVER=3.0.0-18-ga646ac2c -Wl,-z,relro -Wl,-z,now  -o i2pd obj/daemon/Daemon.o obj/daemon/HaikuDaemon.o obj/daemon/HTTPServer.o obj/daemon/I2PControl.o obj/daemon/I2PControlHandlers.o obj/daemon/i2pd.o obj/daemon/UnixDaemon.o obj/daemon/UPnP.o libi2pd.a libi2pdclient.a libi2pdlang.a -lboost_json -lboost_url -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -lminiupnpc`\r\n\r\nНа Haiku не проверял.\r\n"
-    },
-    {
-     "number": 2440,
-     "title": "openrc: create needed directories before checkpath",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-25T00:31:43Z",
-     "updated_at": "2026-10-24T18:31:59Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2440",
-     "body": "Fixes a bug in the OpenRC init script where files are created without first creating the parent directories. This can cause the daemon to fail to start after a system reboot."
-    },
-    {
-     "number": 2441,
-     "title": "libi2pd: fix some typos",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-25T00:46:45Z",
-     "updated_at": "2026-10-24T18:31:56Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2441",
-     "body": ""
-    },
-    {
-     "number": 2442,
-     "title": "chore: fix several memory safety issues",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-25T03:19:51Z",
-     "updated_at": "2026-10-24T18:31:53Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2442",
-     "body": "- Adds a missing bounds check to `CreateFamilySignature`, matching the existing one in `VerifyFamily`\r\n- Adds a missing null check in `IsRestrictedPeer`\r\n- Clamps `m_NumInboundHops`/`m_NumOutboundHops` to `MAX_NUM_RECORDS`, fixing an out-of-bounds heap write\r\n- Fixes an off-by-one null terminator write\r\n- Calls `StopAcceptingStreams` before BOB tunnels are deleted, preventing a UAF\r\n- Guards a suffix check so that a hostname under 4 characters can't underflow and throw\r\n- Fixes an operator precedence bug so that `len` actually holds the consumed byte count"
-    },
-    {
-     "number": 2443,
-     "title": "chore: fix more memory safety issues",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-25T16:14:46Z",
-     "updated_at": "2026-10-24T18:31:50Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2443",
-     "body": "- Adds a check to prevent underflows when parsing certificate file names\r\n- Adds a missing buffer check before `memcpy` in `GzipNoCompression`\r\n- Fixes an off-by-one error in `UrlDecode`'s existing bounds check\r\n- Adds a missing length check in `RouterInfo::Update`\r\n- Adds missing checks in `Mapping::{Extract,Write}String`\r\n- Validates that the payload is at least as long as the fields before touching them in `CreateLeaseSetMessageHandler`, preventing an underflow"
-    },
-    {
-     "number": 2445,
-     "title": "chore: fix issues found through static analysis",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-25T20:15:09Z",
-     "updated_at": "2026-10-24T18:31:47Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2445",
-     "body": "Fixes a number of small issues found using `scan-build` and `clang-tidy`."
-    },
-    {
-     "number": 2446,
-     "title": "chore: fix memory leaks",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-25T20:49:57Z",
-     "updated_at": "2026-10-24T18:31:43Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2446",
-     "body": "Fixes two memory leaks found with `valgrind`."
-    },
-    {
-     "number": 2453,
-     "title": "ntcp2: fix memory safety issues",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-29T22:39:40Z",
-     "updated_at": "2026-10-24T18:31:36Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2453",
-     "body": "- Fixes a heap buffer overflow (padding-length check in `SessionCreated` uses the wrong constant)\r\n- Fixes an underflow during the session handshake\r\n- Fixes another potential out-of-bounds heap read when parsing `RouterInfo` blocks"
-    },
-    {
-     "number": 2454,
-     "title": "libi2pd: add missing length checks",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-29T23:08:38Z",
-     "updated_at": "2026-10-24T18:31:31Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2454",
-     "body": "Adds several missing length checks to `libi2pd`, and fixes a faulty one."
-    },
-    {
-     "number": 2455,
-     "title": "libi2pd_client: fix memory safety issues",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-29T23:16:45Z",
-     "updated_at": "2026-10-24T18:31:28Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2455",
-     "body": "- Adds several missing length checks\r\n- Fixes incorrect usage of `snprintf`, potentially causing out-of-bounds reads/writes\r\n- Guards against overflows caused by oversized identities"
-    },
-    {
-     "number": 2456,
-     "title": "chore: fix memory safety issues",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-07-30T16:25:00Z",
-     "updated_at": "2026-10-24T18:31:24Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2456",
-     "body": "- Fixes some incorrect blinding buffer sizes, causing a stack overflow\r\n- Fixes a potential heap overflow in the `I2PControl` response writer\r\n- Mitigates an integer underflow when handling datagrams"
-    },
-    {
-     "number": 2490,
-     "title": "libi2pd: add missing size checks",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-17T17:28:00Z",
-     "updated_at": "2026-10-24T18:31:20Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2490",
-     "body": ""
-    },
-    {
-     "number": 2493,
-     "title": "chore: fix memory safety issues",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-18T12:28:47Z",
-     "updated_at": "2026-10-24T18:31:18Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2493",
-     "body": ""
-    },
-    {
-     "number": 2499,
-     "title": "libi2pd: add missing checks and limits",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-20T01:30:16Z",
-     "updated_at": "2026-10-24T18:31:12Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2499",
-     "body": ""
-    },
-    {
-     "number": 2508,
-     "title": "fix: various security issues and crashes",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-23T03:29:14Z",
-     "updated_at": "2026-10-24T18:31:09Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2508",
-     "body": "Fixes several instances of remote crashes, memory disclosure, underflows, authentication issues, arbitrary file writes, and other memory safety issues."
-    },
-    {
-     "number": 2509,
-     "title": "i2pcontrol: harden authentication logic",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-23T17:13:45Z",
-     "updated_at": "2026-10-24T18:31:04Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2509",
-     "body": ""
-    },
-    {
-     "number": 2510,
-     "title": "libi2pd: fix parsing crashes",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-23T17:27:45Z",
-     "updated_at": "2026-10-24T18:31:00Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2510",
-     "body": ""
-    },
-    {
-     "number": 2511,
-     "title": "torrents: fix path traversal, undefined behaviour",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-23T17:40:10Z",
-     "updated_at": "2026-10-24T18:30:57Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2511",
-     "body": ""
-    },
-    {
-     "number": 2512,
-     "title": "http, i2pcontrol: use thread-safe snapshots for session/tunnel lists",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-08-23T19:58:40Z",
-     "updated_at": "2026-10-24T18:30:54Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2512",
-     "body": ""
-    },
-    {
-     "number": 2557,
-     "title": "fix: missing checks and limits",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-09-16T00:15:00Z",
-     "updated_at": "2026-10-24T18:30:46Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2557",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 6426464958,
+     "issue": 2389,
+     "issue_title": "contrib: add sysusers.d file and update tmpfiles.d config file",
+     "created_at": "2026-10-26T20:23:04Z",
+     "user": "r4sas",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2389#issuecomment-6426464958",
+     "body": "Update links using that file if you are moving it, `/debian/i2pd.tmpfile` for example."
+    },
+    {
+     "id": 6423819249,
+     "issue": 2330,
+     "issue_title": "Threads data races detection",
+     "created_at": "2026-10-26T18:13:28Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2330#issuecomment-6423819249",
+     "body": "i2pd version 3.0.0-27-gab018c7c (0.9.71)\nipv4 = true, ipv6 = false, NTCP2 enabled, SSU2 disabled\nuptime 30 m\n~~Тройка~~ Двойка лидеров не изменилась\n```\n~# grep -E  \"Thread\\ T[0-9]\"   th1.txt | sort | uniq -c | sort -gr\n     25   Thread T12 'Transports' (tid=2494908, running) created by main thread at:\n     21   Thread T10 'NetDB' (tid=2494906, running) created by main thread at:\n     12   Thread T9 'NetDbReq' (tid=2494905, running) created by main thread at:\n     12   Thread T16 'Tunnels' (tid=2494912, running) created by main thread at:\n      7   Thread T14 'NTCP2' (tid=2494910, running) created by main thread at:\n      6   Thread T15 'Webconsole' (tid=2494911, running) created by main thread at:\n      4   Thread T18 'Router' (tid=2494914, running) created by main thread at:\n      4   Thread T17 'TBM' (tid=2494913, running) created by main thread at:\n      2   Thread T480 (tid=2495824, running) created by thread T10 at:\n```\n\nipv4 = true, ipv6 = false, NTCP2 disabled, SSU2 enabled\nuptime 30 m\n```\n~# grep -E  \"Thread\\ T[0-9]\"   th2.txt | sort | uniq -c | sort -gr\n     42   Thread T12 'Transports' (tid=2498363, running) created by main thread at:\n     20   Thread T10 'NetDB' (tid=2498361, running) created by main thread at:\n     17   Thread T13 'SSU2' (tid=2498364, running) created by main thread at:\n     10   Thread T16 'Tunnels' (tid=2498367, running) created by main thread at:\n      5   Thread T17 'TBM' (tid=2498368, running) created by main thread at:\n      4   Thread T553 (tid=2499167, running) created by thread T10 at:\n      4   Thread T18 'Router' (tid=2498369, running) created by main thread at:\n      3   Thread T9 'NetDbReq' (tid=2498360, running) created by main thread at:\n      1   Thread T15 'Webconsole' (tid=2498366, running) created by main thread at:\n```\n"
+    },
+    {
+     "id": 6418659133,
+     "issue": 2613,
+     "issue_title": "Torrent Tunnel Formation Issue",
+     "created_at": "2026-10-26T14:33:58Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2613#issuecomment-6418659133",
+     "body": "I thought it was obvious to disable apparmor first to see if it worked without it. If it did then start change apparmor's settings. "
+    },
+    {
+     "id": 6418231324,
+     "issue": 2613,
+     "issue_title": "Torrent Tunnel Formation Issue",
+     "created_at": "2026-10-26T14:15:29Z",
+     "user": "absolutep",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2613#issuecomment-6418231324",
+     "body": "After an hour with chatgpt solved this via \n\n```\nsudo install -d /etc/apparmor.d/local\n\necho '/mnt/9C573B3077YTB56Q/Movies/ r,\n/mnt/9C573B3077YTB56Q/Movies/** rwk,' \\\n| sudo tee -a /etc/apparmor.d/local/usr.bin.i2pd\n\nsudo apparmor_parser -r /etc/apparmor.d/usr.bin.i2pd\nsudo systemctl restart i2pd\n\nsleep 2\n\nsudo journalctl -k -b --no-pager \\\n  | grep 'profile=\"i2pd\".*9C573B3077YTB56Q/Movies' \\\n  | tail -5\n\nsudo tail -n 30 /var/log/i2pd/i2pd.log \\\n  | grep -iE 'torrents params|permission denied|critical'\n```"
+    },
+    {
+     "id": 6418053355,
+     "issue": 2613,
+     "issue_title": "Torrent Tunnel Formation Issue",
+     "created_at": "2026-10-26T14:07:51Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2613#issuecomment-6418053355",
+     "body": "There is nothing to do with i2pd code. It's your OS settings.\nTry to put it inside your data dir and see if it works. "
+    },
+    {
+     "id": 6417639345,
+     "issue": 2613,
+     "issue_title": "Torrent Tunnel Formation Issue",
+     "created_at": "2026-10-26T13:49:21Z",
+     "user": "absolutep",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2613#issuecomment-6417639345",
+     "body": "This issue is not occurring in windows 10 but I do not know why it occurs in Zorin 18?"
+    },
+    {
+     "id": 6417574862,
+     "issue": 2613,
+     "issue_title": "Torrent Tunnel Formation Issue",
+     "created_at": "2026-10-26T13:46:27Z",
+     "user": "absolutep",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2613#issuecomment-6417574862",
+     "body": "> 2\\. Need more details\n\nsudo -u i2pd ls ... can list the Movies directory.\n\nREAD_OK, TRAVERSE_OK, and WRITE_OK all succeeded.\n\nThe tunnel still logs directory iterator cannot open directory: Permission denied.\n\nYour drive is NTFS, mounted as fuseblk with allow_other.\n\n\n_**Still cannot change directory or folder or drive.**_"
+    },
     {
      "id": 6410517809,
      "issue": 2585,
@@ -901,6 +692,138 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7248,
+     "title": "XHTTP: Add configurable error responses",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-24T15:24:38Z",
+     "updated_at": "2026-10-26T20:23:08Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248",
+     "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
+     "number": 7247,
+     "title": "XHTTP: Add configurable response headers",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-24T14:37:17Z",
+     "updated_at": "2026-10-26T20:21:33Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7247",
+     "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
+     "number": 7268,
+     "title": "VLESS: Add optional device ID to requests and inbound allowlist",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-26T19:34:37Z",
+     "updated_at": "2026-10-26T19:35:41Z",
+     "user": "ComorDev",
+     "url": "https://github.com/XTLS/Xray-core/pull/7268",
+     "body": "## Summary\n\nAdd an optional `deviceId` to VLESS requests and an inbound allowlist for device-level access control. When `enforceDeviceId` is enabled, new connections without an allowed ID are rejected.\n\nThe device ID is configured by the client. It is not tied to hardware or cryptographically verified, so a client that copies an allowed ID can use it.\n\n## Testing\n\n- Unit tests for VLESS account, request encoding, and configuration parsing.\n- Local end-to-end test with real Xray server and client processes: allowed IDs connect; unknown and missing IDs are rejected; removing an ID blocks new connections; restoring it allows new connections again.\n- Confirmed that connections established before an ID is removed remain active."
+    },
+    {
+     "number": 7265,
+     "title": "Geodata: https Max Redirects set to 20",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T15:41:34Z",
+     "updated_at": "2026-10-26T18:31:37Z",
+     "user": "xqzr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7265",
+     "body": "Ref: https://github.com/chromium/chromium/blob/3a1201c8bb9d7d71bc6fbd7d4587a0de7fc65048/net/url_request/url_request.h#L110"
+    },
+    {
+     "number": 7267,
+     "title": "Geodata: Limit download size, file extensions, and update frequency",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T16:58:53Z",
+     "updated_at": "2026-10-26T17:38:50Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267",
+     "body": "限制频率，防止恶意订阅拿来当作低配版 ddos 攻击器\n限制扩展名，防止本地恶意程序利用 tun 下的特权，替换 `*.cmd` 之类的脚本\n限制单文件尺寸纯粹是不可能有那么大的 dat 顺手做了"
+    },
+    {
+     "number": 7243,
+     "title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-23T13:17:30Z",
+     "updated_at": "2026-10-26T16:36:27Z",
+     "user": "yx64",
+     "url": "https://github.com/XTLS/Xray-core/issues/7243",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nSince v26.10.21 (REALITY `83f621788ca8`), every authenticated REALITY connection fails when the target sends an **empty EncryptedExtensions** (no SNI ack, no ALPN, nothing else). With `\"show\": true` the server prints:\n\n```\nhs.handshake() err: payload[0]: 8, padding: -4\n```\n\nv26.9.9 (REALITY `8cdf7bf9c7f0`) works with the same target.\n\nCause:\n\n- XTLS/REALITY `3c98159` (\"Sync upstream Go 1.27+\", #30) added to `handshake_server_tls13.go`:\n  ```go\n  if !hs.c.didResume && hs.clientHello.serverName != \"\" {\n      encryptedExtensions.serverNameAck = true\n  }\n  ```\n  An authenticated connection always carries SNI unless `serverNames` contains `\"\"`, so REALITY's own EncryptedExtensions now always has the 4-byte empty `server_name` extension. Before this commit `encryptedExtensionsMsg` had no such field.\n- `[REALITY] SECTION: mimic recorded handshakeLen` in `conn.go` pads each handshake record to the length recorded from the target and returns `payload[0]: %v, padding: %v` when its own record is longer (`payload[0]: 8` is EncryptedExtensions).\n- REALITY's own EncryptedExtensions has no ALPN, so it is now 4 bytes longer than an empty one. A target whose EncryptedExtensions is empty gives a 28-byte record (including the 5-byte record header) against REALITY's 32, hence padding -4. Any extension on the target side (an SNI ack, ALPN, ...) is at least 4 bytes and absorbs it.\n\nNot setting `serverNameAck` in the REALITY server (the pre-sync behaviour) looks sufficient, since padding then matches any target; I have not tested a patch.\n\nThis is easy to miss: the fallback path does not reach this code, so probing the node without the key looks fine, and without `show` the server logs only an Info line (`REALITY: processed invalid connection ...: handshake did not complete successfully`) while the client gets EOF. We hit it on a production node whose target neither acks SNI nor negotiates ALPN. To check a target, look for any extension besides `supported versions` and `key share`:\n\n```\nopenssl s_client -connect <Domain>:443 -servername <Domain> -tls1_3 -alpn h2,http/1.1 -tlsextdebug </dev/null 2>/dev/null | grep 'TLS server extension'\n```\n\n### Reproduction Method\n\nAll on loopback (Linux, OpenSSL 3.5.5). Three `openssl s_server` targets with the same self-signed certificate for `example.test`:\n\n```\nopenssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout k.pem -out c.pem -days 30 -subj /CN=example.test -addext subjectAltName=DNS:example.test\n# A: empty EncryptedExtensions\nopenssl s_server -accept 127.0.0.1:20443 -cert c.pem -key k.pem -tls1_3 -www -quiet\n# B: acks SNI (s_server acks only when -servername installs its callback and the name matches)\nopenssl s_server -accept 127.0.0.1:20444 -cert c.pem -key k.pem -tls1_3 -www -quiet -servername example.test -cert2 c.pem -key2 k.pem\n# C: no SNI ack, but negotiates ALPN\nopenssl s_server -accept 127.0.0.1:20445 -cert c.pem -key k.pem -tls1_3 -www -quiet -alpn h2,http/1.1\n# something to fetch through the proxy\npython3 -m http.server 18080 --bind 127.0.0.1\n```\n\nStart the server (config below, `target` pointing at A, B or C) and the client (always v26.10.21), then `curl -x socks5h://127.0.0.1:11080 http://127.0.0.1:18080/`:\n\n| server | target | target EE record | result |\n|---|---|---|---|\n| v26.10.21 | A | 28 | curl: (56) Recv failure: Connection reset by peer; `padding: -4` |\n| v26.10.21 | B | 32 | 200 |\n| v26.10"
+    },
+    {
+     "number": 7266,
+     "title": "Check config dir",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-26T16:30:15Z",
+     "updated_at": "2026-10-26T16:33:18Z",
+     "user": "WhiteCyril",
+     "url": "https://github.com/XTLS/Xray-core/pull/7266",
+     "body": ""
+    },
+    {
+     "number": 7264,
+     "title": "Burst staggered initial check",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-26T15:28:51Z",
+     "updated_at": "2026-10-26T16:32:17Z",
+     "user": "WhiteCyril",
+     "url": "https://github.com/XTLS/Xray-core/pull/7264",
+     "body": ""
+    },
+    {
+     "number": 7263,
+     "title": "CI: Enforce stricter checks on generated protobuf files",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T15:18:25Z",
+     "updated_at": "2026-10-26T16:11:06Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263",
+     "body": "用指定的版本全部重新生成一遍强校验，防止...\r\n\r\n代价是每次切 go 版本的时候要重新生成一次，因为不同 go 版本的产物也不一样（着实没想到）"
+    },
+    {
+     "number": 7262,
+     "title": "xdns not responding",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-26T14:29:30Z",
+     "updated_at": "2026-10-26T14:57:26Z",
+     "user": "megasoheilsh",
+     "url": "https://github.com/XTLS/Xray-core/issues/7262",
+     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\nhi. I hadn't used xdns for quite some time, and now I’ve realized it’s not working. what is the problem, and what should I do?\nno requests are reaching the core, even though everything is configured correctly.\n\n\n curl -s \"https://dns.google/resolve?name=t.minxxxxx.com&type=SOA\"\n{\"Status\":3,\"TC\":false,\"RD\":true,\"RA\":true,\"AD\":false,\"CD\":false,\"Question\":[{\"name\":\"t.minxxxxx.com.\",\"type\":6}],\"Comment\":\"Response from 91.1xx.xxx.xxx.\"}root@ubuntu-4gb-nbg1-4:~#\n\nas you can see in the test, the request to the domain receives a response; however, a status 3 indicates that no response was received from the core. The status must be zero for it to be correct.\n\n### 重现方式\n\nnone\n\n### 客户端配置\n\n{\n  \"protocol\": \"vless\",\n  \"settings\": {\n    \"vnext\": [\n      {\n        \"address\": \"91.107.xxx.xxx\",\n        \"port\": 53,\n        \"users\": [\n          {\n            \"id\": \"322f5647-2fb7-48ec-de83-8805fce33ee7\",\n            \"encryption\": \"none\"\n          }\n        ]\n      }\n    ]\n  },\n  \"streamSettings\": {\n    \"network\": \"kcp\",\n    \"kcpSettings\": {\n      \"mtu\": 100,\n      \"tti\": 100,\n      \"uplinkCapacity\": 1,\n      \"downlinkCapacity\": 2,\n      \"congestion\": true,\n      \"readBufferSize\": 1,\n      \"writeBufferSize\": 1\n    },\n    \"finalmask\": {\n      \"udp\": [\n        {\n          \"type\": \"xdns\",\n          \"settings\": {\n            \"domains\": [\n              {\n                \"names\": [\n                  \"t.minxxxxx.com\"\n                ],\n                \"lenLimit\": 255,\n                \"labelLimit\": 63,\n                \"types\": [\n                  1\n                ],\n                \"edns0\": 512\n              }\n            ],\n            \"resolvers\": [\n              {\n                \"addrs\": [\n                  \"udp://8.8.8.8:53\"\n                ]\n              }\n            ]\n          }\n        }\n      ]\n    }\n  }\n}\n\n### 服务端配置\n\n{\n  \"port\": 53,\n  \"listen\": \"\",\n  \"protocol\": \"vless\",\n  \"settings\": {\n    \"decryption\": \"none\",\n    \"encryption\": \"none\"\n  },\n  \"streamSettings\": {\n    \"network\": \"kcp\",\n    \"security\": \"none\",\n    \"externalProxy\": [],\n    \"kcpSettings\": {\n      \"mtu\": 100,\n      \"tti\": 100,\n      \"uplinkCapacity\": 1,\n      \"downlinkCapacity\": 2,\n      \"cwndMultiplier\": 1,\n      \"maxSendingWindow\": 2097152\n    },\n    \"finalmask\": {\n      \"udp\": [\n        {\n          \"type\": \"xdns\",\n          \"settings\": {\n            \"domains\": [\n              {\n                \"names\": [\n                  \"t.minxxxxx.com\"\n                ],\n                \"types\": [\n                  16\n                ],\n                \"edns0\": 1232\n              }\n            ]\n          }\n        }\n      ]\n    }\n  },\n  \"sniffing\": {\n    \"enabled\": true,\n    \"destOverride\": [\n      \"http\",\n      \"tls\",\n      \"quic\",\n      \"fakedns\"\n    ]\n  }\n}\n\n### 客户端日志\n\nnone\n\n### 服务端日志\n\nnone"
+    },
+    {
+     "number": 7185,
+     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-17T06:19:36Z",
+     "updated_at": "2026-10-26T14:05:41Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185",
+     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
+    },
+    {
+     "number": 7255,
+     "title": "Check file extensions without resolving symlinks",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-25T18:48:28Z",
+     "updated_at": "2026-10-26T13:53:41Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7255",
+     "body": "Close #7239\r\n这是由于 https://github.com/golang/go/issues/63703 导致的\r\n\r\n以前做的有点过了又不够，只穿透了软链接没检查硬链接，后者不需要管理员权限就能做到\r\n仔细想了下威胁模型根本不存在，因此直接放弃符号链接的检查才是对的，不应该在这个方向继续堆代码"
+    },
+    {
      "number": 7249,
      "title": "Geodata: Update built-in private IP ranges",
      "is_pr": true,
@@ -921,17 +844,6 @@
      "user": "Sa1ch",
      "url": "https://github.com/XTLS/Xray-core/issues/7259",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nAfter upgrading the REALITY **server** (inbound) from v26.7.28 to v26.9.9 / v26.9.30 / v26.10.21, clients with `fingerprint: edge` can no longer authenticate. The server handles them as a foreign client and proxies to `target`, so the client gets the real certificate:\n\n`REALITY: received real certificate (potential MITM or redirection)`\n\nWith the server on v26.7.28 and the same client/config it works. Only the server version differs.\n\nResults (VLESS + TCP + REALITY, same config and keys, only fingerprint and server version changed):\n\n| client fingerprint | server v26.10.21 | server v26.7.28 |\n|---|---|---|\n| edge | FAIL | OK |\n| ios, qq, random | FAIL | OK |\n| chrome, firefox, safari, randomized | OK | OK |\n| android, 360 | FAIL | FAIL |\n\nThe client version does not matter: a v26.10.21 client with `edge` also fails against a v26.10.21 server, and a v26.7.28 client with `chrome` passes. Server options `minClientVer`, `spiderX` and `fingerprint` do not change the result. v26.9.9, v26.9.30 and v26.10.21 all fail on the server side.\n\nOur guess (not verified in source): since ~v26.9.8 (xtls/reality update, commit 47cfe99) the server accepts a client only if its ClientHello contains an X25519MLKEM768 key share, which the uTLS `edge` profile does not send. The v26.9.x releases have no release notes, so the change is not visible when upgrading. In heavily filtered mobile networks `chrome` is often blocked and `edge` is used instead.\n\n### Reproduction Method\n\n1. Start the server config below with Xray v26.10.21. It needs a local TLS 1.3 site on 127.0.0.1:443 (any web server with a certificate for example.com) as the REALITY target.\n2. Start the client config below with Xray v26.10.21 (fingerprint: edge).\n3. Run curl -x socks5h://127.0.0.1:10808 https://example.com/: the request fails and the client log shows \"received real certificate\".\n4. Start the same server config with Xray v26.7.28 instead: the request goes through.\n5. Change the client to \"fingerprint\": \"chrome\": it works with both server versions.\n\n### Client config\n\n<details><pre><code> { \"log\": { \"loglevel\": \"debug\" }, \"inbounds\": [ { \"listen\": \"127.0.0.1\", \"port\": 10808, \"protocol\": \"socks\", \"settings\": { \"udp\": false } } ], \"outbounds\": [ { \"protocol\": \"vless\", \"settings\": { \"vnext\": [ { \"address\": \"127.0.0.1\", \"port\": 18443, \"users\": [ { \"id\": \"4510f783-de00-4f17-a78b-9d5ecb720186\", \"encryption\": \"none\" } ] } ] }, \"streamSettings\": { \"network\": \"tcp\", \"security\": \"reality\", \"realitySettings\": { \"serverName\": \"example.com\", \"fingerprint\": \"edge\", \"publicKey\": \"AwgI-9jTNNIG-HLC4vUIZZg2mul2xjuC_zs5a_g1ikQ\", \"shortId\": \"0123456789abcdef\" } } } ] } </code></pre></details>\n\n### Server config\n\n<details><pre><code> { \"log\": { \"loglevel\": \"debug\" }, \"inbounds\": [ { \"listen\": \"127.0.0.1\", \"port\": 18443, \"protocol\": \"vless\", \"settings\": { \"clients\": [ { \"id\": \"4510f783-de00-4f17-a78b-9d5ecb720186\" } ], \"decryption\": \"none\" }, \"streamSettings\": { \"network\": \"tcp\", \"security\": \"reality\", \"realitySettings\": { \"target\": \"127.0.0.1:443\", \"serverNames\": [ \"example.com\" ], \"privateKey\": \"GHx6hPZLikyWuhwLwZzl6UVROmuJ1_u7KJLCI7bqjWg\", \"shortIds\": [ \"0123456789abcdef\" ] } } } ], \"outbounds\": [ { \"protocol\": \"freedom\" } ] } </code></pre></details>\n(The keys and UUID are newly generated for this test.)\n\n### Client log\n\n<details><pre><code> 2026/10/26 08:18:57.754550 [Error] [781631315] transport/internet/reality: REALITY: "
-    },
-    {
-     "number": 7243,
-     "title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-23T13:17:30Z",
-     "updated_at": "2026-10-26T11:50:14Z",
-     "user": "yx64",
-     "url": "https://github.com/XTLS/Xray-core/issues/7243",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nSince v26.10.21 (REALITY `83f621788ca8`), every authenticated REALITY connection fails when the target sends an **empty EncryptedExtensions** (no SNI ack, no ALPN, nothing else). With `\"show\": true` the server prints:\n\n```\nhs.handshake() err: payload[0]: 8, padding: -4\n```\n\nv26.9.9 (REALITY `8cdf7bf9c7f0`) works with the same target.\n\nCause:\n\n- XTLS/REALITY `3c98159` (\"Sync upstream Go 1.27+\", #30) added to `handshake_server_tls13.go`:\n  ```go\n  if !hs.c.didResume && hs.clientHello.serverName != \"\" {\n      encryptedExtensions.serverNameAck = true\n  }\n  ```\n  An authenticated connection always carries SNI unless `serverNames` contains `\"\"`, so REALITY's own EncryptedExtensions now always has the 4-byte empty `server_name` extension. Before this commit `encryptedExtensionsMsg` had no such field.\n- `[REALITY] SECTION: mimic recorded handshakeLen` in `conn.go` pads each handshake record to the length recorded from the target and returns `payload[0]: %v, padding: %v` when its own record is longer (`payload[0]: 8` is EncryptedExtensions).\n- REALITY's own EncryptedExtensions has no ALPN, so it is now 4 bytes longer than an empty one. A target whose EncryptedExtensions is empty gives a 28-byte record (including the 5-byte record header) against REALITY's 32, hence padding -4. Any extension on the target side (an SNI ack, ALPN, ...) is at least 4 bytes and absorbs it.\n\nNot setting `serverNameAck` in the REALITY server (the pre-sync behaviour) looks sufficient, since padding then matches any target; I have not tested a patch.\n\nThis is easy to miss: the fallback path does not reach this code, so probing the node without the key looks fine, and without `show` the server logs only an Info line (`REALITY: processed invalid connection ...: handshake did not complete successfully`) while the client gets EOF. We hit it on a production node whose target neither acks SNI nor negotiates ALPN. To check a target, look for any extension besides `supported versions` and `key share`:\n\n```\nopenssl s_client -connect <Domain>:443 -servername <Domain> -tls1_3 -alpn h2,http/1.1 -tlsextdebug </dev/null 2>/dev/null | grep 'TLS server extension'\n```\n\n### Reproduction Method\n\nAll on loopback (Linux, OpenSSL 3.5.5). Three `openssl s_server` targets with the same self-signed certificate for `example.test`:\n\n```\nopenssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout k.pem -out c.pem -days 30 -subj /CN=example.test -addext subjectAltName=DNS:example.test\n# A: empty EncryptedExtensions\nopenssl s_server -accept 127.0.0.1:20443 -cert c.pem -key k.pem -tls1_3 -www -quiet\n# B: acks SNI (s_server acks only when -servername installs its callback and the name matches)\nopenssl s_server -accept 127.0.0.1:20444 -cert c.pem -key k.pem -tls1_3 -www -quiet -servername example.test -cert2 c.pem -key2 k.pem\n# C: no SNI ack, but negotiates ALPN\nopenssl s_server -accept 127.0.0.1:20445 -cert c.pem -key k.pem -tls1_3 -www -quiet -alpn h2,http/1.1\n# something to fetch through the proxy\npython3 -m http.server 18080 --bind 127.0.0.1\n```\n\nStart the server (config below, `target` pointing at A, B or C) and the client (always v26.10.21), then `curl -x socks5h://127.0.0.1:11080 http://127.0.0.1:18080/`:\n\n| server | target | target EE record | result |\n|---|---|---|---|\n| v26.10.21 | A | 28 | curl: (56) Recv failure: Connection reset by peer; `padding: -4` |\n| v26.10.21 | B | 32 | 200 |\n| v26.10"
     },
     {
      "number": 7261,
@@ -1022,17 +934,6 @@
      "body": "Bumps [docker/login-action](https://github.com/docker/login-action) from 4.6.0 to 4.7.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/docker/login-action/releases\">docker/login-action's releases</a>.</em></p>\n<blockquote>\n<h2>v4.7.0</h2>\n<ul>\n<li>Preserve explicit ECR settings in <code>registry-auth</code> by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1089\">docker/login-action#1089</a></li>\n<li>Use registry hosts for scoped credentials by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1088\">docker/login-action#1088</a></li>\n<li>Raise Docker Hub OIDC max expiry to 6 hours by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1068\">docker/login-action#1068</a></li>\n<li>Log Docker Hub OIDC token exchange progress by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1061\">docker/login-action#1061</a></li>\n<li>Bump <code>@​aws-sdk/client-ecr</code> and <code>@​aws-sdk/client-ecr-public</code> to 3.1154.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1093\">docker/login-action#1093</a></li>\n<li>Bump <code>@​docker/actions-toolkit</code> from 0.94.0 to 0.107.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1100\">docker/login-action#1100</a></li>\n<li>Bump <code>@​humanfs/node</code> from 0.16.7 to 0.16.8 in <a href=\"https://redirect.github.com/docker/login-action/pull/1077\">docker/login-action#1077</a></li>\n<li>Bump csv-parse from 7.0.1 to 7.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1078\">docker/login-action#1078</a></li>\n<li>Bump handlebars from 4.7.9 to 4.7.10 in <a href=\"https://redirect.github.com/docker/login-action/pull/1091\">docker/login-action#1091</a></li>\n<li>Bump js-yaml from 5.2.2 to 5.5.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1066\">docker/login-action#1066</a></li>\n<li>Bump postcss from 8.5.22 to 8.5.26 in <a href=\"https://redirect.github.com/docker/login-action/pull/1071\">docker/login-action#1071</a></li>\n<li>Bump postcss-selector-parser from 7.1.1 to 7.1.6 in <a href=\"https://redirect.github.com/docker/login-action/pull/1092\">docker/login-action#1092</a></li>\n<li>Bump source-map-js from 1.2.1 to 1.2.2 in <a href=\"https://redirect.github.com/docker/login-action/pull/1090\">docker/login-action#1090</a></li>\n<li>Bump undici from 6.27.0 to 6.29.1 in <a href=\"https://redirect.github.com/docker/login-action/pull/1085\">docker/login-action#1085</a></li>\n<li>Bump uuid from 14.0.1 to 14.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1096\">docker/login-action#1096</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/docker/login-action/compare/v4.6.0...v4.7.0\">https://github.com/docker/login-action/compare/v4.6.0...v4.7.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/docker/login-action/commit/81c6f93d4bc991e510b342a00b419b3bb4efc5c6\"><code>81c6f93</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1100\">#1100</a> from docker/dependabot/npm_and_yarn/docker/actions-t...</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1b16c8d1815e1d951d87a3522ff48a76d073735a\"><code>1b16c8d</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1096\">#1096</a> from docker/dependabot/npm_and_yarn/uuid-14.0.3</li>\n<li><a href=\"https://github.com/docker/login-action/commit/ac86b5e9e9d2db43b12b2d3afb9140a427d69d65\"><code>ac86b5e</code></a> [dependabot skip] chore: update generated content</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1476d845f08dd8309a938959a280f2e23"
     },
     {
-     "number": 7255,
-     "title": "Check file extensions without resolving symlinks",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-25T18:48:28Z",
-     "updated_at": "2026-10-25T22:01:57Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7255",
-     "body": "Close #7239\r\n这是由于 https://github.com/golang/go/issues/63703 导致的\r\n\r\n以前做的有点过了又不够，只穿透了软链接没检查硬链接，后者不需要管理员权限就能做到\r\n仔细想了下威胁模型根本不存在，因此直接放弃符号链接的检查才是对的，不应该在这个方向继续堆代码"
-    },
-    {
      "number": 7239,
      "title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
      "is_pr": false,
@@ -1088,17 +989,6 @@
      "body": "A numeric `PortList` value bypasses the range check already applied to its string form: `65537` passes configuration validation while `\"65537\"` is rejected. Runtime port-list endpoints are 16-bit, so accepting an oversized value can change the port when it is narrowed.\n\nValidate the numeric branch with the existing `net.PortFromInt` before modifying the list. Preserve the current behavior for numeric zero, string zero, null, empty strings, valid lists/ranges and environment-based values.\n\nValidation:\n- 17 new regression/compatibility cases: four expected failures on the original code, all pass after the fix.\n- Affected configuration, net and routing package suites pass on Windows; the same suites pass with `-race` on Linux (220 test/subtest events each, no test failures or skips).\n- The built CLI accepts numeric/string `65535` and rejects numeric/string `65537`; the official v26.10.21 binary incorrectly accepts numeric `65537`.\n- Native Windows build, repository format check and `git diff --check` pass.\n- Full `go vet` of these packages reports two existing diagnostics, also reproduced on unchanged main: discarded cancellation in `app/router/command/command.go:101` and unreachable code in `infra/conf/xray.go:674`. No new diagnostics; full vet is not reported as green.\n\nAI-assisted implementation and tests; the diff and regression results were independently reviewed before submission.\n"
     },
     {
-     "number": 7185,
-     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-10-25T18:18:12Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185",
-     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
-    },
-    {
      "number": 7250,
      "title": "Fix config loading through Windows directory junctions",
      "is_pr": true,
@@ -1108,64 +998,180 @@
      "user": "Eljees",
      "url": "https://github.com/XTLS/Xray-core/pull/7250",
      "body": "Fixes #7239.\n\nOn Windows, `xray run -c config.json` can fail when its working directory contains a directory junction: opening the file succeeds, but `filepath.EvalSymlinks` returns \"The system cannot find the path specified.\" Reproduced with the official v26.10.21 Windows release and Go 1.27.3 on Windows 11 (build 26100).\n\nResolve the final Windows path from the already opened file handle with `GetFinalPathNameByHandle`, keeping the allowed-extension check on the resolved target. Resolver errors remain fatal. Other platforms retain the existing absolute-path and symlink resolution. The command and regular-file gates are unchanged.\n\nRegression tests use a real directory junction and a child process whose working directory is the junction, covering relative and absolute config paths. Tests also cover UTF-16 buffer growth, closed handles, the extension allowlist, pipe/other-command behavior, and symlink target extensions.\n\nValidation on the submitted commit:\n- Both native Windows junction cases fail on the original implementation and pass with this change. The freshly built CLI reports `Configuration OK` for the physical path and both junction cases.\n- `go test -count=1 ./main/confloader/... ./main/commands/base` and affected `go vet` pass on Windows (Go 1.27.3). The affected suite also passes with `-race` on Linux (Go 1.27.1).\n- Two Windows file-symlink cases skip with error 1314 (symlink privilege unavailable); both target-extension cases run and pass on Linux.\n- Native Windows CLI build, repository format check on the committed LF source bytes, and `git diff --check` pass.\n- The full application suite and macOS runtime tests were not run locally.\n\nAI assistance (OpenAI Codex) was used for implementation, tests, and review; the validation commands above were run locally.\n"
-    },
-    {
-     "number": 7248,
-     "title": "XHTTP: Add configurable error responses",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T15:24:38Z",
-     "updated_at": "2026-10-24T21:50:07Z",
-     "user": "hxehex",
-     "url": "https://github.com/XTLS/Xray-core/pull/7248",
-     "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
-    },
-    {
-     "number": 7247,
-     "title": "XHTTP: Add configurable response headers",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T14:37:17Z",
-     "updated_at": "2026-10-24T21:49:34Z",
-     "user": "hxehex",
-     "url": "https://github.com/XTLS/Xray-core/pull/7247",
-     "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
-    },
-    {
-     "number": 7233,
-     "title": "Sniffer: Don't count reads without new data as attempts",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T19:43:49Z",
-     "updated_at": "2026-10-24T18:22:11Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/pull/7233",
-     "body": "## Problem\n\nTLS sniffing on a VLESS + Vision server almost always fails when the traffic comes through another Xray server with VLESS + Vision (a proxy chain). `routeOnly` gets no domain, and the connection is routed by IP only.\n\n```\nclient → server 1 → server 2 → internet\n```\n\nAll hops use VLESS + REALITY + `xtls-rprx-vision`. Server 2 has sniffing on the inbound and domain rules above an IP rule:\n\n```json\n\"sniffing\": { \"enabled\": true, \"destOverride\": [\"http\", \"tls\", \"quic\"], \"routeOnly\": true }\n```\n```json\n{ \"domain\": [\"geosite:habr\"], \"outboundTag\": \"direct-out\" },\n{ \"ip\": [\"geoip:ru\"], \"outboundTag\": \"block-out\" }\n```\n\nOpening https://habr.com in Chrome is blocked by the `geoip:ru` rule. The server 2 log has no `sniffed domain:` line for any `:443` connection, and the routing decision is made in under a millisecond, without waiting for the 200 ms sniffing deadline:\n\n```\nproxy/vless/inbound: firstLen = 1186\nproxy/vless/inbound: received request for tcp:178.248.237.68:443\nfrom 0.0.0.0:0 accepted tcp:178.248.237.68:443 [vless-tcp-reality-os-in -> block-out]\napp/dispatcher: taking detour [block-out] for [tcp:178.248.237.68:443]\n```\n\nWhen the client connects to server 2 directly, the domain is sniffed.\n\n## Root cause\n\n1. **TLS record size.** `crypto/tls`, uTLS and REALITY use dynamic record sizing: for the first 128 KB of a connection a record is limited to `tcpMSSEstimate = 1208` bytes. In TLS 1.3 that leaves 1208 − 5 (record header) − 16 (AEAD tag) − 1 (inner content type) = **1186 bytes** of plaintext per record, which is the `firstLen = 1186` above.\n2. **Client → server 1.** The client sends the whole ClientHello (~1.7–2 KB with `X25519MLKEM768`) as one Vision frame. The first record carries 44 bytes of VLESS request header, 21 bytes of Vision frame header and the first 1121 bytes of the ClientHello; the second record carries the rest of it plus padding. Server 1 reads the ClientHello as two chunks: 1121 bytes and the remainder.\n3. **Server 1 → server 2.** The VLESS outbound on server 1 writes each chunk as a separate Vision frame with its own padding. For the first frame, 44 + 21 + 1121 = 1186 bytes fill the first record exactly, so the frame's padding goes into a record of its own. With the default testseed `{900, 500, 900, 256}`, content of 900 bytes or more gets 0–255 bytes of padding, so this happens unless the padding is 0, i.e. in about 255 of 256 connections.\n4. **VisionReader on server 2.** For the padding-only record, [`VisionReader.ReadMultiBuffer`](https://github.com/XTLS/Xray-core/blob/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74/proxy/proxy.go#L235-L243) strips the padding and returns an empty `MultiBuffer` with a nil error.\n5. **Sniffer.** `cachedReader.Cache` gets no new data, but the [sniffing loop](https://github.com/XTLS/Xray-core/blob/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74/app/dispatcher/default.go#L392-L421) runs the sniffers again on the same 1121 bytes. `SniffTLS` returns `ErrNoClue` again, because the TLS record is still incomplete, and the second `ErrNoClue` ends sniffing with `errSniffingTimeout`. The rest of the ClientHello arrives with the next read, too late.\n\nWithout server 1 there is no padding-only record between the two parts of the ClientHello, so two reads are enough.\n\n## Reproduction\n\nThe chain was reproduced on one machine:\n\n- Everything runs in an unprivileged network namespace (`unshare -rn`) with loopback MTU 1500.\n- A local HTTPS server plays both `habr.com` and the REALITY target.\n- **Client:** SOCKS inbound with sniffing and `routeOnly`, VLESS + REALITY + Vision outbound to server 1, or directly to server 2.\n- **Server 1:** VLESS + REALITY + Vision inbound without sniffing, VLESS + REALITY + Vision outbound to server 2.\n- **Server 2:** VLESS + REALITY + Vision inbound with sniffing and `routeOnly`. `domain:habr.com` goes to `freedom`, redirected to the local server; `0.0.0.0/0` and `::/0` go to `blackhole`.\n- **ClientHello sources:**\n  - Headless Chrome 156 through `socks4://`, so t"
-    },
-    {
-     "number": 7246,
-     "title": "VLESS inbound: Close a removed user's live connections",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T12:27:51Z",
-     "updated_at": "2026-10-24T18:18:30Z",
-     "user": "ariansharifi",
-     "url": "https://github.com/XTLS/Xray-core/pull/7246",
-     "body": "RemoveUser only dropped the user from the validator, so connections that had already authenticated kept relaying until idle timeout, and Mux sub-connections reused them indefinitely. A panel enforcing a traffic or expiry limit through the API therefore had to restart the whole core to actually stop the user.\n\nThe inbound now tracks each authenticated connection under its exact MemoryUser and RemoveUser closes them; other users and a re-added user with the same email are unaffected. A connection that authenticates while the user is being removed re-checks the validator after registering, so it cannot slip past closeAll."
-    },
-    {
-     "number": 7244,
-     "title": "DNS: honor nameserver timeouts for coalesced lookups",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-23T19:51:29Z",
-     "updated_at": "2026-10-24T15:12:50Z",
-     "user": "eliotcougar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7244",
-     "body": "**Revised implementation:** [6ecd2853](https://github.com/eliotcougar/Xray-core/commit/6ecd2853f4af823312461b673ac733df21ad9754) · [complete focused diff against v26.10.21](https://github.com/eliotcougar/Xray-core/compare/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74...6ecd2853f4af823312461b673ac733df21ad9754).\n\nThis PR was closed before the revised commits were pushed. Its Files changed view still shows the original head; the comparison above contains the implementation described here.\n\n### Problem and practical effect\n\nA foreground lookup can wait beyond its configured nameserver timeout when it joins an existing lookup for the same name and address family. In particular, an optimistic-cache refresh has an eight-second lifetime, while a foreground lookup may have a much shorter timeout. Blocking in `singleflight.Group.Do` delays returning to resolver selection and trying a healthy fallback.\n\nThe fix gives each waiter its own waiting lifetime and separates that from ownership of the shared operation. A short-lived waiter can leave promptly, while work needed by another waiter continues. It also prevents an earlier request's timeout from cancelling a shared query needed by a later request whose budget remains.\n\nThis is a nameserver-timeout correctness fix. The stable `LookupIP` interface remains context-free: closing an application connection does not automatically cancel its native DNS lookup. System-resolver cancellation is unchanged. No bulk-throughput or CPU improvement is claimed.\n\n### Implementation\n\n- Share queries per nameserver, domain and address family, with independent waiter contexts.\n- Give the shared operation a bounded lifetime independent of the first waiter's deadline: eight seconds, extended for an explicitly longer nameserver timeout. Preserve routing context values.\n- Cancel the operation when its last waiter leaves or DNS closes. A background refresh remains a waiter, retaining its existing eight-second policy.\n- Handle A and AAAA independently, retaining a completed family when the other times out.\n- Interrupt an owned TCP DNS connection on cancellation.\n- Preserve single-family response TTLs and existing dual-stack TTL aggregation. Public interfaces and JSON configuration stay unchanged.\n\n### Normal-configuration reproduction\n\nUse an ordinary HTTP inbound and a freedom outbound with `streamSettings.sockopt.domainStrategy: \"UseIPv4\"`. The relevant DNS settings are:\n\n```json\n{\n  \"dns\": {\n    \"queryStrategy\": \"UseIPv4\",\n    \"enableParallelQuery\": false,\n    \"servers\": [\n      {\n        \"address\": \"tcp+local://127.0.0.1:15353\",\n        \"timeoutMs\": 300,\n        \"serveStale\": true,\n        \"serveExpiredTTL\": 1\n      },\n      {\n        \"address\": \"tcp+local://127.0.0.1:15354\",\n        \"timeoutMs\": 300,\n        \"disableCache\": true\n      }\n    ]\n  }\n}\n```\n\nTwo controlled loopback DNS-over-TCP peers and a loopback HTTP origin make the sequence repeatable:\n\n1. The primary returns the origin's IP with TTL 1, priming the cache.\n2. After 1.15 seconds, an HTTP request receives the stale answer and starts a refresh. The primary delays this refresh by six seconds, then returns SERVFAIL; the fallback remains healthy.\n3. After another 1.2 seconds, the stale answer is no longer eligible. A new request joins the refresh, despite having only a 300 ms nameserver budget.\n\nFresh Windows amd64 builds from the unmodified v26.10.21 base and the revised head produced these foreground completion times:\n\n| Native configuration path | Unmodified | Revised |\n| --- | ---: | ---: |\n| Serial DNS, HTTP request | 4,804 ms | 328 ms |\n| Parallel DNS, HTTP request | 4,813 ms | 326 ms |\n| Serial DNS, UDP DNS outbound request | 4,805 ms | 304 ms |\n| Parallel DNS, UDP DNS outbound request | 4,800 ms | 301 ms |\n\nThe parallel cases use distinct primary/fallback policy tags. All original refreshes completed; the primary received only priming plus refresh. These are controlled reproduction timings, not general network-performance estimates. No custom ca"
     }
    ],
    "comments": [
+    {
+     "id": 6426466365,
+     "issue": 7248,
+     "issue_title": "XHTTP: Add configurable error responses",
+     "created_at": "2026-10-26T20:23:08Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248#issuecomment-6426466365",
+     "body": "> 此类问题都是先出现再想办法处理\r\n\r\nplease stop replying in chinese when I'm writing in English, my CDN account (turboflare.ru) was banned 3 hours ago, and these patches could help make xhttp less obvious. I already used vless enc on top of it + other stuff, won't tell it since I don't remember"
+    },
+    {
+     "id": 6426434013,
+     "issue": 7247,
+     "issue_title": "XHTTP: Add configurable response headers",
+     "created_at": "2026-10-26T20:21:33Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7247#issuecomment-6426434013",
+     "body": "@RPRX please look into this"
+    },
+    {
+     "id": 6426427277,
+     "issue": 7248,
+     "issue_title": "XHTTP: Add configurable error responses",
+     "created_at": "2026-10-26T20:21:13Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248#issuecomment-6426427277",
+     "body": "@RPRX please look into this"
+    },
+    {
+     "id": 6425504790,
+     "issue": 7268,
+     "issue_title": "VLESS: Add optional device ID to requests and inbound allowlist",
+     "created_at": "2026-10-26T19:35:40Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7268#issuecomment-6425504790",
+     "body": "使用vlessroute不就行了么？"
+    },
+    {
+     "id": 6424193897,
+     "issue": 7265,
+     "issue_title": "Geodata: https Max Redirects set to 20",
+     "created_at": "2026-10-26T18:31:37Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7265#issuecomment-6424193897",
+     "body": "在网页看的默认没展示出下面部分，我印象中也只有一次最大跳转次数检查\r\n没注意到 #6371 之后又多了一次"
+    },
+    {
+     "id": 6423094445,
+     "issue": 7267,
+     "issue_title": "Geodata: Limit download size, file extensions, and update frequency",
+     "created_at": "2026-10-26T17:38:50Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267#issuecomment-6423094445",
+     "body": "100 限制确实要加，否则频率不起作用\r\n世界充满了恶意"
+    },
+    {
+     "id": 6422303738,
+     "issue": 7265,
+     "issue_title": "Geodata: https Max Redirects set to 20",
+     "created_at": "2026-10-26T17:04:42Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7265#issuecomment-6422303738",
+     "body": "135行还有 两个人没一个注意到么\r\n顺便觉得没什么必要"
+    },
+    {
+     "id": 6422286465,
+     "issue": 7267,
+     "issue_title": "Geodata: Limit download size, file extensions, and update frequency",
+     "created_at": "2026-10-26T17:04:08Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267#issuecomment-6422286465",
+     "body": "> 限制单文件尺寸纯粹是不可能有那么大的 dat 顺手做了"
+    },
+    {
+     "id": 6422260234,
+     "issue": 7267,
+     "issue_title": "Geodata: Limit download size, file extensions, and update frequency",
+     "created_at": "2026-10-26T17:03:15Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267#issuecomment-6422260234",
+     "body": "一个25GB的不能下 下100个256MB的东西不也是一样的吗"
+    },
+    {
+     "id": 6421518450,
+     "issue": 7243,
+     "issue_title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
+     "created_at": "2026-10-26T16:36:26Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7243#issuecomment-6421518450",
+     "body": "能发现这个bug总得是遇到可以触发的目标服务器吧\n如果这种实现多就修一下 没有就算了"
+    },
+    {
+     "id": 6420395891,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-26T15:47:39Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6420395891",
+     "body": "行吧"
+    },
+    {
+     "id": 6420356672,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-26T15:46:00Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6420356672",
+     "body": "这个东西是固定版本，缓存的话似乎没必要纳入 assets-cache 管理，直接原地做？"
+    },
+    {
+     "id": 6420295653,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-26T15:43:21Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6420295653",
+     "body": "> 这玩意需要缓存吗\r\n\r\n可以，也可以不用\r\n除非这玩意很容易卡住"
+    },
+    {
+     "id": 6420161966,
+     "issue": 7243,
+     "issue_title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
+     "created_at": "2026-10-26T15:37:35Z",
+     "user": "yx64",
+     "url": "https://github.com/XTLS/Xray-core/issues/7243#issuecomment-6420161966",
+     "body": "> 4\\. 空的EncryptedExtensions是常见的流量吗？\n\n我不确定这属不属于常见流量 目前的设计似乎把这种流量排除在外"
+    },
+    {
+     "id": 6420022925,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-26T15:31:34Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6420022925",
+     "body": "@KobeArthurScofield 这玩意需要缓存吗"
+    },
+    {
+     "id": 6419212549,
+     "issue": 7262,
+     "issue_title": "xdns not responding",
+     "created_at": "2026-10-26T14:57:26Z",
+     "user": "megasoheilsh",
+     "url": "https://github.com/XTLS/Xray-core/issues/7262#issuecomment-6419212549",
+     "body": "> 1. [@megasoheilsh](https://github.com/megasoheilsh)I never imagined that anyone would still be using KCP for transmission.\n\nTo use xdns, we are required to use kcp."
+    },
+    {
+     "id": 6419137259,
+     "issue": 7262,
+     "issue_title": "xdns not responding",
+     "created_at": "2026-10-26T14:54:15Z",
+     "user": "Raymond520888",
+     "url": "https://github.com/XTLS/Xray-core/issues/7262#issuecomment-6419137259",
+     "body": "@megasoheilsh 至今还有人用kcp传输，我是没想到的"
+    },
+    {
+     "id": 6418002584,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-26T14:05:40Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6418002584",
+     "body": "tibo 大善人又重置了，我让 ai 改吧\r\nai 从头开始写的能力不太行，需要人~指明方向~\r\n修补还是可以的"
+    },
+    {
+     "id": 6417817498,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-26T13:57:32Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6417817498",
+     "body": "> 麻烦就算，谁需要谁 PR\r\n\r\n已经安排上了，也不麻烦， ~就是没文档的情况下还是得反应一下~\r\n~就是不想再加文档了，谁发现谁加吧，文档用词的前后一致性都要变成问题了~"
+    },
     {
      "id": 6416429794,
      "issue": 7249,
@@ -1606,111 +1612,109 @@
      "user": "hxehex",
      "url": "https://github.com/XTLS/Xray-core/pull/7247#issuecomment-6389959772",
      "body": "@RPRX "
-    },
-    {
-     "id": 6388862979,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in private IP ranges",
-     "created_at": "2026-10-24T19:59:03Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6388862979",
-     "body": "不是完全遵从 IANA SPECIAL，备忘：\r\n\r\n- 两个 IETF Protocol Assignments 只是占坑没有实际用途，不代表不能出现在公网，AS112 就是个例子\r\n- AS112 用来反查 IP 的\r\n- 192.88.99.0/24 2001:10::/28 已废弃\r\n- ::ffff:0:0/96 核心实现会把他转为 IPv4 因此不需要\r\n\r\n- 64:ff9b::/96 草案即将允许它访问 IPv4 私网\r\n- 64:ff9b:1::/48 本就允许访问 IPv4 私网"
-    },
-    {
-     "id": 6387869112,
-     "issue": 7233,
-     "issue_title": "Sniffer: Don't count reads without new data as attempts",
-     "created_at": "2026-10-24T18:22:10Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7233#issuecomment-6387869112",
-     "body": "dynamic record size 以后很可能会被手动禁用掉 让我想想"
-    },
-    {
-     "id": 6387848646,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-24T18:20:12Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6387848646",
-     "body": "apple-cn 和 google-cn 砍掉了。剩下的都是扩充表，包含 cn 和 ru 的黑名单表，以及 ir 的本地扩充表。\r\n\r\n> 他们本意是为了解决 tiktok 归抖音，最终归 cn 的问题，然而 tk 本就不该归抖音，强行关联没有意义\r\n\r\n~~强行按关系划分而不是按实际运营实体划分害死人~~\r\n估计要他们重新整理的话最后也不知道会怎样\r\n\r\n至于黑白名单的话，我认为白名单制对 site 的准确度要求比黑名单要高很多\r\n黑名单的话覆盖不到后果不一定会非常严重，但是白名单覆盖少了或者多了都有可能有明显的副作用，而且加上 dns 位置查询还有别的，最终体验和后果都很 emmm"
-    },
-    {
-     "id": 6387830980,
-     "issue": 7246,
-     "issue_title": "VLESS inbound: Close a removed user's live connections",
-     "created_at": "2026-10-24T18:18:29Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7246#issuecomment-6387830980",
-     "body": "not for now"
-    },
-    {
-     "id": 6387821637,
-     "issue": 7248,
-     "issue_title": "XHTTP: Add configurable error responses",
-     "created_at": "2026-10-24T18:17:35Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7248#issuecomment-6387821637",
-     "body": "此类问题都是先出现再想办法处理"
-    },
-    {
-     "id": 6385915967,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-24T15:18:21Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6385915967",
-     "body": "支持砍掉，不背历史债\r\n而且他们这块处理的比较随意，本来约定的还算清楚\r\n\r\n比如 apple 默认就在国外\r\napple@cn 属于特例\r\n\r\n在构建 geosite:cn 的时候遍历，把 @cn 的都拉进来，称之为 `cn`、`-cn`\r\n而 apple-cn 就明显破坏约定了\r\n\r\n---\r\n\r\n话说回来，他们现在搞的从 cn 中剔除 @!cn 我只赞同一半\r\n因为有点太粗暴了，比如建行国际，你可能仍然想用中国 ip 访问\r\n他们本意是为了解决 tiktok 归抖音，最终归 cn 的问题，然而 tk 本就不该归抖音，强行关联没有意义\r\n\r\n现在粗暴地砍掉，也没弄出来新的 cn-oversea 之类的分类\r\n也没办法 geosite:cn@!cn 走 direct\r\n最终结果就是用户还是没法一键控制\r\n\r\n---\r\n\r\n在我看来纯靠 site 分流，只能用黑名单走代理，其它全直连策略\r\n而做那种直连白名单，其它走代理是不靠谱的，不可能穷尽，每天都在冒出新域名\r\n每天都有新的白名单中域名被 block\r\n\r\n最后的结果就是上游维护负担越来越重，越来越不准\r\n\r\nsite 必须结合 dns 实时解析结果，这样此时的 site 用途就变成了特殊目的分流比如解锁流媒体啥的\r\n只要黑名单足够准确，保证解析不泄露给 isp 就行了"
-    },
-    {
-     "id": 6385858531,
-     "issue": 7244,
-     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
-     "created_at": "2026-10-24T15:12:50Z",
-     "user": "eliotcougar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6385858531",
-     "body": "> 我个人意见是算了吧，接收它的缺陷，等我重写 现在这样弄变得更复杂了没法 review 屎山代码最好就是不要碰，除非问题非常大\r\n\r\nAlright, I'll keep it local to my app (still in development) for now. I wanted to avoid modification of bundled xray core, but I guess It's not a crime if I do...\r\nThe necessity for this fix appeared as a result of implementing the ability to run a separate core for Windows ICS routing independently of the main routing. It required a shared LocalDNS and FakeDNS service. That's where this DNS request stalling was encountered.\r\n\r\nI have an almost working Shared FakeDNS implementation in the works: https://github.com/eliotcougar/Xray-core/tree/feature/fakedns-mapping-api"
-    },
-    {
-     "id": 6385576317,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-24T14:45:44Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6385576317",
-     "body": "> build 的时候拉入 domain-list-community 做并集容易实现吗\r\n\r\n可以做，虽然我一般倾向于不动原来的数据\r\n\r\n> 个人建议不要兼容 apple-cn google-cn 这种写法\r\n\r\n刚刚清点了一下，我认为应该把这两个引进来的表砍了\r\n虽然上游也有几个非分类下的 -cn 但是不得不说这和茴字有几种写法一样"
-    },
-    {
-     "id": 6385078995,
-     "issue": 7244,
-     "issue_title": "DNS: honor nameserver timeouts for coalesced lookups",
-     "created_at": "2026-10-24T13:57:06Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7244#issuecomment-6385078995",
-     "body": "我个人意见是算了吧，接收它的缺陷，等我重写\r\n现在这样弄变得更复杂了没法 review\r\n屎山代码最好就是不要碰，除非问题非常大"
-    },
-    {
-     "id": 6385068660,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-24T13:56:06Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6385068660",
-     "body": "个人建议不要兼容 apple-cn google-cn 这种写法\r\n会导致用户不得不这样写 `domain: google@cn, google-cn` `domain: google, google-cn`\r\nbuild 的时候拉入 domain-list-community 做并集容易实现吗"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
     {
+     "number": 3327,
+     "title": "feat: follow server IP changes behind the host name without a manual reconnect",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T11:37:22Z",
+     "updated_at": "2026-10-26T19:04:38Z",
+     "user": "justSunny12",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3327",
+     "body": "### Problem\n\nA WireGuard/AWG config can name the server by host name (`Endpoint = vpn.example.com:443`). The client resolves that name **once per connection** and keeps using the resulting IP. When the address behind the name changes, every connected device keeps sending to the old IP and stays offline until the user toggles the tunnel by hand.\n\nThis happens in practice when:\n\n- a self-hosted server fails over to a standby: the DNS record is switched to the standby, which has the same keys;\n- a server is moved to another hosting or region and the DNS record is updated;\n- the server has a dynamic IP behind DDNS;\n- the provider changes the server's IP during maintenance.\n\nIn all these cases the server side cannot fix it, and the user often doesn't understand why \"the VPN is connected but nothing works\".\n\nWhy nothing recovers today (checked against `dev` @ 3121775 and `amneziawg-apple` @ bdaf0b3):\n\n| Platform | Where the name is resolved | What happens later |\n|---|---|---|\n| Windows / Linux / macOS (daemon) | `WireguardProtocol::startMzImpl()` overwrites `hostName` in `m_rawConfig` with the IP | Reconnects on `networkChanged` / `wakeup` call `start()` again, but the config already holds the IP, so they reuse the old address |\n| Android | `parseInetAddress()` in `Wireguard.configWireguard()` | `reconnectVpn()` reuses the saved `WireguardConfig` with the resolved address |\n| iOS | `WireGuardAdapter.start()` → `resolvePeers()` | `didReceivePathUpdate()` → `endpointUapiConfiguration()` re-resolves the **already resolved IP** (`resolvedEndpoints`) for NAT64 synthesis, not the host name |\n| macOS (NE) | same as iOS | path updates only call `wgBumpSockets()` |\n\nThe engine cannot recover on its own either:\n\n- **No re-resolution.** `amneziawg-go` never resolves names. After `MaxHandshakeAttempts` it gives up until the next outgoing packet.\n- **No roaming.** Android and iOS call `DisableSomeRoamingForBrokenMobileSemantics()`, so a packet from a new source address doesn't move the endpoint. Even without that, stateful NAT drops packets from an address the device didn't contact.\n\n### Related issues\n\n- #801 asked to connect by host name, for servers behind DDNS. It was closed after #814, which resolves the name once before connecting. The comments posted after the close describe the part that is still missing: a server IP that changes every few days, and moving a server to a new IP without touching every client. Connecting by name works today; following the name after the address changes does not. This PR adds that.\n- #1712 asks for a domain instead of an IP so the server IP can be changed seamlessly. A later comment there describes a server whose IP was changed after it was blocked: all clients stayed on the old address.\n- #2808 proposes failover across a self-hoster's own servers through a signed config endpoint. This PR covers the simpler part of that need and adds no config fields: when the operator moves the DNS record, connected devices follow it.\n\n### Solution\n\nDetect a tunnel that is up on the device but no longer reaches its server, then resolve the configured host name again. The detection rule is the one from wireguard-tools' [`contrib/reresolve-dns`](https://git.zx2c4.com/wireguard-tools/tree/contrib/reresolve-dns/reresolve-dns.sh): **the latest handshake is older than a rekey cycle while the device keeps sending to the peer.**\n\nA live session with traffic or PersistentKeepalive renews its handshake every 120 s (`REKEY_AFTER_TIME`); a failed renewal is retried for 90 s more (`REKEY_ATTEMPT_TIME`). So \"no handshake for 180 s and tx grew during that window\" means the server is unreachable.\n\nAn idle tunnel without keepalive never handshakes and sends nothing, so it is never treated as stale. Before the first handshake, the age is counted from the tunnel start.\n\nThe same small state machine is implemented on every platform. It is pure logic with no I/O, and the C++ version is unit-tested:\n\n- `client/core/utils/endpointWatchdog.{h,cpp"
+    },
+    {
+     "number": 3334,
+     "title": "Feat/non systemd support",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T18:44:20Z",
+     "updated_at": "2026-10-26T18:44:20Z",
+     "user": "Werko1a",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3334",
+     "body": "Non-systemd compatibility layer for AmneziaVPN: init scripts (OpenRC, runit, s6, dinit, SysVinit) and D-Bus DNS bridge.\n(https://github.com/amnezia-vpn/amnezia-client/issues/3329)"
+    },
+    {
+     "number": 2943,
+     "title": "Deleted",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-08-05T23:45:44Z",
+     "updated_at": "2026-10-26T17:58:54Z",
+     "user": "abramgildish4-commits",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2943",
+     "body": "Deleted"
+    },
+    {
+     "number": 3333,
+     "title": "fix: restore xhttp modes and keep device-only xray settings local",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T16:36:23Z",
+     "updated_at": "2026-10-26T16:36:23Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3333",
+     "body": ""
+    },
+    {
+     "number": 3332,
+     "title": "fix: restore xhttp modes and keep device-only xray settings local",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-26T15:33:02Z",
+     "updated_at": "2026-10-26T16:35:29Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3332",
+     "body": ""
+    },
+    {
+     "number": 3330,
+     "title": "fix: minor fixes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T13:26:07Z",
+     "updated_at": "2026-10-26T16:14:22Z",
+     "user": "vkamn",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3330",
+     "body": ""
+    },
+    {
      "number": 3328,
      "title": "feat: separated ui models and controllers tests",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-26T13:00:39Z",
-     "updated_at": "2026-10-26T13:00:39Z",
+     "updated_at": "2026-10-26T16:04:22Z",
      "user": "MrMirDan",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3328",
      "body": ""
+    },
+    {
+     "number": 3331,
+     "title": "[iOS][standalone AmneziaWG 3.1.4] Initial Endpoint DNS lookup fails with a system DoH profile while ordinary getaddrinfo succeeds",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-26T14:32:11Z",
+     "updated_at": "2026-10-26T14:32:11Z",
+     "user": "isillion22",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3331",
+     "body": "## Summary\n\nThis concerns the **standalone AmneziaWG iOS app, version 3.1.4 (0)**, not the main AmneziaVPN app.\n\nOn an iPhone reported as running iOS 27, a hostname available only through a selected system DNS-over-HTTPS profile resolves successfully from an ordinary app, but activating an AmneziaWG tunnel with that hostname as its Endpoint fails with the DNS-resolution error. Is this setup supported for the initial Endpoint lookup, or is there a known limitation/workaround?\n\nThe root cause is not established: this could involve the app's initial resolver, system DNS selection, or iOS policy. We are reporting the observed difference, not claiming that AmneziaWG necessarily bypasses the profile.\n\n## Setup\n\n- Device: iPhone; model and exact iOS build were not recorded.\n- OS: iOS 27, as reported by the device owner.\n- App: standalone AmneziaWG 3.1.4 (0).\n- Network for the comparison: cellular/LTE, Wi-Fi disabled, VPN initially off. Cellular data permission for AmneziaWG is enabled.\n- A self-hosted DoH service returns the intended IPv4 address for one owned test hostname. Public DNS does not publish A/AAAA/CNAME answers for that hostname (NOERROR/NODATA).\n- The system DNS profile is installed, selected, and scoped to that test hostname. It specifies HTTPS, a working ServerURL, explicit IPv4 ServerAddresses for the DoH service, and AllowFailover=false.\n- Both the legacy DNS settings payload and the iOS 27 local declarative DNS settings format were tried. With the current declarative profile, the ordinary-app lookup succeeds and AmneziaWG activation still fails.\n- The tunnel uses that same fully qualified hostname as Endpoint, port 443. Its interface DNS is the numeric resolver 1.1.1.1, MTU 1280, with IPv4 and IPv6 default AllowedIPs.\n\nInfrastructure addresses, actual hostnames, resolver access URLs, keys, and full client configurations are intentionally omitted. Names below are placeholders.\n\n## Reproduction and observed results\n\n1. With VPN off, select the system DoH profile for the private test hostname.\n2. On LTE with Wi-Fi off, run this in the already-installed LibTerm app:\n\n```python\nimport socket as s\nprint([a[4][0] for a in s.getaddrinfo(\n    'vpn.example.net', 443,\n    s.AF_UNSPEC, s.SOCK_DGRAM, s.IPPROTO_UDP, s.AI_ALL\n)])\n```\n\nThe actual owned test hostname is used in place of `vpn.example.net`. This returns the expected current VPN IPv4 address.\n\n3. Under the same selected profile and cellular network, activate the existing AmneziaWG tunnel whose Endpoint is that hostname on port 443.\n4. AmneziaWG fails with the DNS-resolution error before the tunnel connects. The current profile has not produced a successful private-hostname activation.\n\nEarlier tests included closing/reopening the app, airplane mode, and a full phone reboot; they did not make the private-hostname setup work. An earlier numeric-Endpoint control with the same test peer did connect and pass internet traffic. The ordinary lookup was also repeated successfully after the server address changed; this was not merely an old-address result.\n\n## Sanitized earlier log excerpt\n\nThese lines are from an earlier failure of the same private-hostname tunnel, not a new log capture from the latest declarative-profile attempt. Only the hostname has been replaced here; no full config or keys are attached.\n\n```text\n[NET] Adapter start requested\n[NET] DNS resolution failed for the following hostnames: vpn.example.net\n[NET] Path update state: state=stopped everHadHandshake=false lastNetworkSettingsUpdateAt=nil\n```\n\nThe latest attempt with the declarative profile produced the same DNS error in the app UI. We do not have mDNSResponder policy diagnostics, a fresh binary attestation, or a wire capture proving whether that attempt used DoH, cache, or another resolver path.\n\n## Expected behavior / clarification requested\n\nIf a selected system encrypted-DNS profile is supported for the initial Endpoint lookup, the hostname should resolve before the tunnel starts, as it does in the ord"
+    },
+    {
+     "number": 3329,
+     "title": "[Feature Request] Support for non-systemd Linux distributions (OpenRC, runit, dinit, s6, SysVinit)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-26T13:04:09Z",
+     "updated_at": "2026-10-26T13:05:10Z",
+     "user": "Werko1a",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3329",
+     "body": "I recently encountered a major problem: when I tried running AmneziaVPN on Gentoo Linux with OpenRC, the client immediately failed and crashed. When I reached out to official support, they couldn't help since non-systemd distributions are not officially supported. ( This relates to the problems discussed in #775 and #3000)\n\nSo I decided to investigate what was actually causing the failure and built a working solution myself.\nAfter digging into the logs and daemon behavior, I found that `AmneziaVPN-service` itself is a standard Qt process and doesn't actually need systemd. The failures come down to three specific external dependencies:\n1. The installer hardcodes `systemctl`, failing on any alternative init system.\n2. Strict reliance on `systemd-resolved` via D-Bus (`org.freedesktop.resolve1`): when Amnezia connects, it applies `iptables` drop rules for port 53, but because `systemd-resolved` doesn't exist, the DNS configuration fails completely. The result is a connected tunnel with zero working Internet.\n3. Improper lifecycle and socket handling: killing the process leaves stale Unix sockets in `/tmp/`, causing immediate `EADDRINUSE` crash loops on restart, while stopping the daemon leaves orphaned `amnvpn.*` chains cluttering the firewall.\n\nTo solve this for Gentoo, Artix, Void, and other non-systemd distros, I created a universal compatibility layer with a lightweight D-Bus DNS bridge and supervised service scripts:\nRepo: https://github.com/Werko1a/amneziavpn-non-systemd\n\nIt has been thoroughly tested and verified on an Artix Linux VM (OpenRC):\n- Service cleanly survives `kill -9` without stale socket deadlocks;\n- DNS resolves properly through the tunnel via the D-Bus shim;\n- Firewall rules are completely purged across all tables on service stop.\n\n*(The initial scaffolding was assisted by AI tools, but every script, template, and fix has been manually verified, debugged, and tested on an Artix Linux OpenRC environment).*"
     },
     {
      "number": 3321,
@@ -1722,17 +1726,6 @@
      "user": "wBaob",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3321",
      "body": "Fixes #3261.\n\nSelect the numerically highest peer IPv4 address instead of the last entry to prevent duplicate IP allocation when peers are reordered.\n\nValidation: standalone Qt 6 harness, 1010 checks. Previous logic: 972 failures. Patched logic: 0 failures. git diff --check passed.\n\nFull application build and live VPN validation were not run."
-    },
-    {
-     "number": 3327,
-     "title": "feat: follow server IP changes behind the host name without a manual reconnect",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T11:37:22Z",
-     "updated_at": "2026-10-26T11:37:22Z",
-     "user": "justSunny12",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3327",
-     "body": "### Problem\n\nA WireGuard/AWG config can name the server by host name (`Endpoint = vpn.example.com:443`). The client resolves that name **once per connection** and keeps using the resulting IP. When the address behind the name changes, every connected device keeps sending to the old IP and stays offline until the user toggles the tunnel by hand.\n\nThis happens in practice when:\n\n- a self-hosted server fails over to a standby: the DNS record is switched to the standby, which has the same keys;\n- a server is moved to another hosting or region and the DNS record is updated;\n- the server has a dynamic IP behind DDNS;\n- the provider changes the server's IP during maintenance.\n\nIn all these cases the server side cannot fix it, and the user often doesn't understand why \"the VPN is connected but nothing works\".\n\nWhy nothing recovers today (checked against `dev` @ 3121775 and `amneziawg-apple` @ bdaf0b3):\n\n| Platform | Where the name is resolved | What happens later |\n|---|---|---|\n| Windows / Linux / macOS (daemon) | `WireguardProtocol::startMzImpl()` overwrites `hostName` in `m_rawConfig` with the IP | Reconnects on `networkChanged` / `wakeup` call `start()` again, but the config already holds the IP, so they reuse the old address |\n| Android | `parseInetAddress()` in `Wireguard.configWireguard()` | `reconnectVpn()` reuses the saved `WireguardConfig` with the resolved address |\n| iOS | `WireGuardAdapter.start()` → `resolvePeers()` | `didReceivePathUpdate()` → `endpointUapiConfiguration()` re-resolves the **already resolved IP** (`resolvedEndpoints`) for NAT64 synthesis, not the host name |\n| macOS (NE) | same as iOS | path updates only call `wgBumpSockets()` |\n\nThe engine cannot recover on its own either:\n\n- **No re-resolution.** `amneziawg-go` never resolves names. After `MaxHandshakeAttempts` it gives up until the next outgoing packet.\n- **No roaming.** Android and iOS call `DisableSomeRoamingForBrokenMobileSemantics()`, so a packet from a new source address doesn't move the endpoint. Even without that, stateful NAT drops packets from an address the device didn't contact.\n\n### Solution\n\nDetect a tunnel that is up on the device but no longer reaches its server, then resolve the configured host name again. The detection rule is the one from wireguard-tools' [`contrib/reresolve-dns`](https://git.zx2c4.com/wireguard-tools/tree/contrib/reresolve-dns/reresolve-dns.sh): **the latest handshake is older than a rekey cycle while the device keeps sending to the peer.**\n\nA live session with traffic or PersistentKeepalive renews its handshake every 120 s (`REKEY_AFTER_TIME`); a failed renewal is retried for 90 s more (`REKEY_ATTEMPT_TIME`). So \"no handshake for 180 s and tx grew during that window\" means the server is unreachable.\n\nAn idle tunnel without keepalive never handshakes and sends nothing, so it is never treated as stale. Before the first handshake, the age is counted from the tunnel start.\n\nThe same small state machine is implemented on every platform. It is pure logic with no I/O, and the C++ version is unit-tested:\n\n- `client/core/utils/endpointWatchdog.{h,cpp}` — desktop, with `client/tests/testEndpointWatchdog.cpp`\n- `client/android/wireguard/.../EndpointWatchdog.kt`\n- `client/platforms/ios/EndpointWatchdog.swift`\n\nIt also rate-limits refreshes: the delay doubles after each attempt and resets on the next successful handshake.\n\n#### Desktop (Windows, Linux, macOS with daemon)\n\n- `WireguardProtocol` keeps the host names exactly as configured and resolves them on **every** `start()`. This alone makes the existing reconnects on network change and wakeup follow DNS changes.\n- If resolution fails at start, the last address that worked is used, so a short DNS outage right after the old tunnel went down (e.g. with the kill switch on) doesn't break the reconnect.\n- While the tunnel is up and the endpoint is a host name, `WireguardProtocol` polls `checkStatus()` every 20 s.\n- The daemon's `status` reply gets an optional `lastHandshake` field"
     },
     {
      "number": 3286,
@@ -1854,53 +1847,18 @@
      "user": "yar101",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3323",
      "body": "### Bug Report: KillSwitch deadlocks network and client on suspend/resume on Linux\n\n  Environment:\n\n  • OS: Linux (Debian 13, kernel 6.12, Wayland/Sway / any DE)\n  • Amnezia version: 4.x / latest\n  • Protocol: AmneziaWG (AWG) with KillSwitch enabled\n\n  Steps to reproduce:\n\n  1. Connect to any server using AmneziaWG with KillSwitch (route all traffic) enabled.\n  2. Put laptop to sleep (suspend / close lid) for ~15 seconds.\n  3. Wake up the laptop (open lid).\n\n  Actual behavior:\n\n  1. Wi-Fi reconnects to the local network, but there is zero internet access on the\n  entire system.\n  2. Amnezia GUI enters an infinite loop: \"Reconnecting...\" (Переподключение...).\n  3. Killing the GUI process (pkill -9 AmneziaVPN) immediately clears the KillSwitch\n  and restores network connectivity.\n\n  Root cause analysis from logs:\n\n  1. In AmneziaVPN-service, LinuxNetworkWatcherWorker detects NM interface property\n  changes on wake, but completely ignores the link drop because the AP didn't change:\n    [DEBUG] AmneziaVPN LinuxNetworkWatcherWorker : Properties changed for interface org.freedesktop.NetworkManager.Device.Wireless\n    [DEBUG] AmneziaVPN LinuxNetworkWatcherWorker : Access point did not changed. Ignoring the changes\n\n  2. The GUI client attempts to activate the VPN tunnel immediately upon resume before\n  DHCP lease / default gateway on Wi-Fi is ready (which takes 3–5 seconds).\n  3. The daemon inserts KillSwitch iptables rules (amnvpn.100.blockAll, amnvpn.310.blockDNS), but the handshake packets to the VPN endpoint fail because there is no\n  route yet.\n  4. The client's Qt state machine gets stuck in a handshake wait loop (polling every\n  250ms), while the KillSwitch blocks all traffic and DNS on the machine.\n\n  Suggested fix:\n\n  1. Implement support for org.freedesktop.login1.Manager.PrepareForSleep (systemd\n  inhibitor lock) to cleanly suspend/pause the tunnel before sleep.\n  2. On resume, wait for default route / network gateway availability before re-\n  engaging KillSwitch and handshake attempts.\n  3. Add a timeout / reset logic in the GUI client to avoid unrecoverable\n  \"Reconnecting...\" state."
-    },
-    {
-     "number": 3322,
-     "title": "ошибка 1100 у российского пользователя",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-24T13:59:34Z",
-     "updated_at": "2026-10-24T20:06:04Z",
-     "user": "dvorfvoldatran-wq",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3322",
-     "body": "**Describe the bug**\nI’m a user from Russia and I wanted to use Amnezia Free, but no matter how many times I try, I get error 1100. I can’t log in to Telegram as the instructions suggest.\n\n**To Reproduce**\nSteps to reproduce the behavior:\nI click on the Amnezia VPN, then I click on Amnezia Free Russia, then I click “Continue,” and immediately error 1100 appears.\n\n**Expected behavior**\nIt should work, but it doesn’t.\n\n**Log files**\nI don’t know where the logs are.\n\n**Screenshots**\n<img width=\"374\" height=\"712\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/379d08b0-675c-4e71-9af6-a6c51c856de7\" />\n\n**Desktop (please complete the following information):**\n - OS: [e.g. Windows 10]\n - Version 5.0.4.2 , I tried 5.0.3.0, and it’s the same thing.\n\n"
-    },
-    {
-     "number": 3317,
-     "title": "XRay clear profile won't clear the profile",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-23T06:33:50Z",
-     "updated_at": "2026-10-24T19:59:50Z",
-     "user": "skumbria1",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3317",
-     "body": "**Describe the bug**\nClear profile button in xray settings is not deleting xray protocol from server protocol list\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Go to xray protocol settings\n2. Click on clear profile\n3. Click on continue\n4. See xray cached profile cleared but xray settings are still available\n\n**Expected behavior**\nxray's Clear profile button will clear the xray profile\n\n**Desktop (please complete the following information):**\n - OS: windows 11\n - Version 26h2\n\n**Server (please complete the following information):**\n - OS: Ubuntu 26.04\n"
-    },
-    {
-     "number": 2081,
-     "title": "AmneziaVPN service stuck at 6% load, can't close it or restart / VPN \"connecting\" in GUI circling indefinitely.",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-12-19T04:02:05Z",
-     "updated_at": "2026-10-24T17:50:51Z",
-     "user": "IntegerIsOverflowed",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2081",
-     "body": "<img width=\"687\" height=\"625\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/0b0543b9-6c57-4477-a2c9-ade1f87bc495\" />\n\nSometimes when Windows is just started (Win11, just regular one, without anything cut from it, updated)\nAmnezia not working properly, \"connecting\" is circling infinitely, and AmneziaVPN service, is stuck on 6% CPU load\nit can't be closed, it can't be restarted. there only one thread in process explorer, and it won't let me suspend it or kill\n\nit also cause issues in system - as example, I was able to launch process explorer only from CMD, launching it from Explorer cause it to hung, without \"not responding\" option, just stuck, until you kill task manually.\nit also caused issues with internet browser, when I've tried to open sites of Amnezia from GUI, while Service in this state. I think browser wont open anything at all after that.\n\nAnd I found only one way to temporarily resolve it - restart. Until next day, when I start my PC at morning, this service hung happens again.\n\nIt's above my knowledge, but Gemini said that it's \"read is waiting on a Kernel Object\" so it's some issue on Kernel level, or might be it's hallucinated all thing, but I'm giving up resolving it by myself."
-    },
-    {
-     "number": 1996,
-     "title": "Зависание в драйвере раздельного туннелирования при установке соединения (вызов WindowsSplitTunnel::excludeApps)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-11-17T16:07:16Z",
-     "updated_at": "2026-10-24T17:49:35Z",
-     "user": "u07",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1996",
-     "body": "\n<details>\n\n<summary> In ENGLISH: click to show</summary>\n\n**Hang inside wintun during connection setup (WindowsSplitTunnel::excludeApps)**\n\nSeeing this on two different PCs, Win11 23H2 and 25H2. The service/daemon hangs on connect, randomly, about 1 time out of 10. And once it hangs, only a reboot helps.\n\n* Hit “connect”\n* Infinite loading spinner…\n* CPU load of `AmneziaVPN-service.exe` jumps to ~10%\n* The service becomes non-responsive, can’t kill it via Task Manager, the process stays stuck until reboot\n\nIt hangs inside a syscall, in the kernel (`NtDeviceIoControlFile`). Here:\n\n<img width=\"2559\" height=\"1599\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d3dc739f-dd92-44b1-aa72-63ece2d57ca5\" />\n\nAnd we get into it from here:\n\n<img width=\"1280\" height=\"799\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7fd66762-5dcd-4492-9ea5-45984b2f3b30\" />\n\nThis is the exact spot in the code, line 292 — and the call never returns:\n\n\nhttps://github.com/amnezia-vpn/amnezia-client/blob/3d6339e2dd257d9b5d68abe6a77c8007d96dace6/client/platforms/windows/daemon/windowssplittunnel.cpp#L292\n\n```cpp\nbool WindowsSplitTunnel::excludeApps(const QStringList& appPaths) {\n  auto state = getState();\n  if (state != STATE_READY && state != STATE_RUNNING) {\n    logger.warning() << \"Driver is not in the right State to set Rules\"\n                     << state;\n    return false;\n  }\n\n  logger.debug() << \"Pushing new Ruleset for Split-Tunnel \" << state;\n  auto config = generateAppConfiguration(appPaths);\n\n  DWORD bytesReturned;\n  auto ok = DeviceIoControl(m_driver, IOCTL_SET_CONFIGURATION, &config[0],    <------- ЗДЕСЬ\n                            (DWORD)config.size(), nullptr, 0, &bytesReturned,\n                            nullptr);\n  if (!ok) {\n    auto err = GetLastError();\n    WindowsUtils::windowsLog(\"Set Config Failed:\");\n    logger.error() << \"Failed to set Config err code \" << err;\n    return false;\n  }\n  logger.debug() << \"New Configuration applied: \" << stateString();\n  return true;\n}\n```\n\nThis uploads the WG config into the driver — more specifically, it pushes the app whitelist for split-tunneling. That’s why AmneziaWG works fine with the same Warp configs: there’s no split-tunnel exclusion logic there.\n\nSo the driver hangs, and the service calling it hangs right after.\n\nNow the question is what exactly the driver doesn’t like in the config buffer so it gets stuck sometimes. \n\nI didn’t dive deep, but maybe the `config` buffer needs alignment, or the driver expects a null terminator?\n\nFeels like a big chunk of “Windows won’t connect / spinner forever” issues might be the same root cause.\n\n\n\n\n---------------\n\n\n\n\n</details>\n\nНаблюдаю такое независимо на двух компьютерах Win11 23h2 и 25h2. Служба-демон зависает при подключении рандомно 1 раз из 10. И если зависла, помогает только перезагрузка.\n\n- Жмём подключиться, \n- Наблюдаем бесконечное колесо загрузки...\n- Нагрузка на процессор от AmneziaVPN-service.exe возрастает до 10%\n- Служба становится неотзывчивой, прибить её через диспетчер нельзя, процесс остаётся висеть в памяти, снимается только перезагрузкой.\n\nЗависает внутри syscall, в ядре (NtDeviceIOControlFile). Вот здесь:\n\n<img width=\"2559\" height=\"1599\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d3dc739f-dd92-44b1-aa72-63ece2d57ca5\" />\n\nПриходим мы в него отсюда:\n\n<img width=\"1280\" height=\"799\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7fd66762-5dcd-4492-9ea5-45984b2f3b30\" />\n\nВот это место в исходниках, строка 292, из которой мы уже не возвращаемся:\n\nhttps://github.com/amnezia-vpn/amnezia-client/blob/3d6339e2dd257d9b5d68abe6a77c8007d96dace6/client/platforms/windows/daemon/windowssplittunnel.cpp#L292\n\n```cpp\nbool WindowsSplitTunnel::excludeApps(const QStringList& appPaths) {\n  auto state = getState();\n  if (state != STATE_READY && state != STATE_RUNNING) {\n    logger.warning() << \"Driver is not in the right State to set Rules\"\n                     << state;\n    return false;\n  }\n\n  logger."
     }
    ],
    "comments": [
+    {
+     "id": 6416706094,
+     "issue": 3329,
+     "issue_title": "[Feature Request] Support for non-systemd Linux distributions (OpenRC, runit, dinit, s6, SysVinit)",
+     "created_at": "2026-10-26T13:05:10Z",
+     "user": "Werko1a",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3329#issuecomment-6416706094",
+     "body": "Also, when I find some free time, I'm planning to write a native C++ patch for DnsUtilsLinux (to handle openresolv / /etc/resolv.conf fallback natively)"
+    },
     {
      "id": 6416411056,
      "issue": 3321,
@@ -1918,24 +1876,6 @@
      "user": "AndreiKud",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3304#issuecomment-6399166725",
      "body": "Same, manual reconnection is needed after idle. but I use AWG 2.0"
-    },
-    {
-     "id": 6388934189,
-     "issue": 3322,
-     "issue_title": "ошибка 1100 у российского пользователя",
-     "created_at": "2026-10-24T20:06:04Z",
-     "user": "Vitalik93",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3322#issuecomment-6388934189",
-     "body": "Free давно под блокировками и ошибка 1100 как раз на это указывает https://docs.amnezia.org/ru/troubleshooting/error-codes/"
-    },
-    {
-     "id": 6388870704,
-     "issue": 3317,
-     "issue_title": "XRay clear profile won't clear the profile",
-     "created_at": "2026-10-24T19:59:50Z",
-     "user": "Vitalik93",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3317#issuecomment-6388870704",
-     "body": "Насколько я знаю,эта опция и не должна удалять протокол с сервера. Вроде она очищает пользовательские настройки, т.е. сбрасывает настройки по умолчанию. Но это не точно..."
     }
    ]
   },

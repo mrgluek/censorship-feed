@@ -1,35 +1,24 @@
 {
- "generated_at": "2026-10-27T00:25:36Z",
- "since": "2026-10-25T00:25:36Z",
+ "generated_at": "2026-10-27T08:59:00Z",
+ "since": "2026-10-25T08:59:00Z",
  "repos": {
   "net4people/bbs": {
-   "issues": [
-    {
-     "number": 490,
-     "title": "[Russia] Censor has a new method of blocking",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-06-27T19:37:48Z",
-     "updated_at": "2026-10-25T08:06:49Z",
-     "user": "hyperion-cs",
-     "url": "https://github.com/net4people/bbs/issues/490",
-     "body": "### Problem\nA few weeks ago, a new method of blocking (especially on mobile networks) was introduced in Russia by the censor.\nIt works as follows. So, if:\n1. The client connects to the server via TCP using HTTPS and TLS 1.3 (for example, VLESS/Reality actually mimics HTTPS with TLS 1.3);\n2. The IP address of the server is “suspicious” (it is located **outside** ⚠️ (i.e. not in Russia), is part of the subnet AS which is owned by foreign data centers like Hetzner, Digital Ocean, etc.);\n3. Within one TCP connection (not within one HTTP request/response - this is important) the data size received from the server to the client is more than ≈15-20KB (the value varies depending on the provider) — the MAIN thing.\n\nThis connection is \"frozen\" (i.e. TCP packets from the server within this connection stop arriving after the specified limit on the size of transmitted data has been reached). It is curious to note that, as a rule, the censor (under the pretence of a response from the server) does not send, for example, an RST packet - instead, it simply “freezes” the TCP connection (from the client's point of view), and thus the client simply waits for an error on the timeout of waiting for a response from the server and everything stops working.\n\n**IMPORTANT**: It doesn't matter whether it's \"legitimate\" HTTPS traffic or whether someone is mimicking it. They don't pay attention to that now.\n\n### Do I have these limitations?\nYou can check your “home” ISP with the _RU :: TCP 16-20_ checker from [this](https://github.com/hyperion-cs/dpi-checkers) repository. Works right from your browser, VPN should be disabled during the check.\n\n\n### Notes\nThe good news is that if you fragment the responses from the server into several ≈15-20KB data bundles (if it is large enough) in different TCP connections, everything will work fine. It is important not to confuse this with fragmentation of TCP packets within one connection or splitting of transmitted data into several HTTP requests/responses (in **one** connection) - this is different and it won't help.\n\nYes, it will work noticeably slower than a single connection (especially if we're going to upload/download a large file). For example, it would take ~2560 TCP connections to download a 50MB file - that's a lot and quite suspicious. \n\n---\n\nupd1: TLS 1.2 is also blocked (sometimes there is a different data size limit per TCP connection).\n\nupd2: At the moment it seems that only SSH/sFTP + and sometimes RDP (both on any ports) work within TCP without limitations. Including random data transfer over TCP (without TLS, etc., in raw form) is also limited. It's possible that there are other things within TCP that would work without limitations, I'm not exactly sure about that.\n\nupd3.: Censor has a whitelist (based on SNI in the TLS handshake and possibly an HTTP `Host` header if _plain HTTP_ is used), for more details, including some subset of that list, see [here](https://github.com/hyperion-cs/dpi-checkers/tree/main/ru/tcp-16-20_dwc). For example, this can be used as SNI/dest in xray/vless+reality (with _xtls-rprx-vision_) and it will work.\n\nupd4.: ❗️Censor has also started to apply a whitelist based on the CIDR (IP subnets) of the destination servers. In this case, circumvention is extremely difficult (as a rule, an intermediate node with an IP from the whitelist is required).\n\nupd5.: In fact, the censor typically freezes the connection after 25 packets have been sent in either direction (incoming/outgoing). This applies to both tcp and udp. On average, this equates to approximately 16 KB of payload.\n\n### Related links\n- https://blog.cloudflare.com/russian-internet-users-are-unable-to-access-the-open-internet/\n- https://hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20/\n- https://github.com/XTLS/Xray-core/pull/4835#issuecomment-2988824955\n- https://github.com/XTLS/Xray-core/issues/4846\n- https://ntc.party/t/09062025-%D0%B8%D0%BD%D1%84%D0%BE%D1%80%D0%BC%D0%B0%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE-%D0%B1%D0%BB%D0%BE%D0%B"
-    }
-   ],
-   "comments": [
-    {
-     "id": 6395211616,
-     "issue": 490,
-     "issue_title": "[Russia] Censor has a new method of blocking",
-     "created_at": "2026-10-25T08:06:49Z",
-     "user": "0zd0",
-     "url": "https://github.com/net4people/bbs/issues/490#issuecomment-6395211616",
-     "body": "I’m now seeing the same behavior from Singapore when connecting to Europe: traffic freezes after roughly 25 server data packets. It looks like Russian filtering may be spilling over into international transit, although I haven’t confirmed the reverse route.\n\nI left Russia to escape this shit, and now I’m running into the same pattern from Singapore"
-    }
-   ]
+   "issues": [],
+   "comments": []
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
+    {
+     "number": 1407,
+     "title": "Title: Feature request: Allow disabling automatic TUN prefix routes on Linux",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-27T08:50:47Z",
+     "updated_at": "2026-10-27T08:50:47Z",
+     "user": "redeye-engineer",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1407",
+     "body": "**Problem**\n\nOn Linux, Yggdrasil automatically creates a connected route for the TUN interface's IPv6 prefix. For example:\n\n```200::/7 dev ygg0 proto kernel metric 256 pref medium```\n\nI run multiple Yggdrasil-go instances (v0.5.15) using Docker with network_mode: host. Each instance has a different GroupPassword, and I want to route traffic to specific Yggdrasil subnet prefixes (e.g. 300:...::/64) through the corresponding TUN interface.\n\nBecause all instances share the host's network namespace and routing table, I would like to manage these routes explicitly instead of relying on the automatically created 200::/7 route.\n\n**Proposed solution**\n\nCould you add an optional configuration parameter, for example:\n\n```IfNoPrefixRoute: true```\n\nOn Linux, when enabled, Yggdrasil would set the IFA_F_NOPREFIXROUTE flag when assigning the TUN IPv6 address. This would prevent the kernel from automatically creating the connected route for that address prefix.\n\nThe default value should remain false to preserve existing behavior.\n\n**Expected behavior**\n\nThe TUN interface and its IPv6 address are created normally.\n\nWith IfNoPrefixRoute: true, the kernel does not automatically install the connected route for the TUN address prefix.\n\nAdministrators can add explicit routes to selected Yggdrasil subnets through the appropriate TUN interfaces.\n\nExisting behavior remains unchanged when the option is not enabled.\n\n**Use case**\n\nRunning multiple Yggdrasil instances with different GroupPassword values in Docker using host networking, while routing selected 300:...::/64 subnet prefixes through specific instances.\n\nI can manage the routes manually using Linux ip -6 route commands. The goal is to make this setup possible without maintaining a custom Yggdrasil build.\n\nWould this feature be appropriate for upstream?"
+    },
     {
      "number": 1406,
      "title": "yggdrasil stops passing traffic after a while on an unreliable internet connection, and only a restart brings it back",
@@ -488,33 +477,6 @@
      "user": "LLE8",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2612#issuecomment-6396105161",
      "body": "При более внимательном рассмотрении ничем не мешает. Меньший размер файла i2pd получался по другой причине.\r\n"
-    },
-    {
-     "id": 6392248314,
-     "issue": 2585,
-     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "created_at": "2026-10-25T02:03:37Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6392248314",
-     "body": "The crash itself is fixed in the openssl branch since b31431ba (PR #2606): `DSASigner::Sign` now checks the result of `EVP_DigestSignInit`/`EVP_DigestSign` and of `d2i_DSA_SIG`, logs an error and leaves the signature zeroed instead of passing the NULL `DSA_SIG` to `DSA_SIG_get0`. The non-EVP branch got the same check for `DSA_do_sign`.\n\nVerified both ways with a harness that takes the key away from the signer, which puts the code in the same state as a provider refusing DSA: without the change a segmentation fault (exit code 139), with it the call returns and the signature stays all zeros; with the key in place the signature is still produced in full.\n\nNote this only removes the crash - on such a build signing still fails, so a destination with a DSA_SHA1 key will not work there. If that is the case for the hidden services in question, the key type has to change."
-    },
-    {
-     "id": 6391651391,
-     "issue": 2612,
-     "issue_title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
-     "created_at": "2026-10-25T00:54:57Z",
-     "user": "orignal",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2612#issuecomment-6391651391",
-     "body": "Вообще если хочешь по фэншую, так перенеси в отдельную директорию Haiku по аналогии с  Win32. Этот HaikuDaemon.cpp тоже следует разделить на собственно демон и UI компоненты."
-    },
-    {
-     "id": 6391513746,
-     "issue": 2612,
-     "issue_title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
-     "created_at": "2026-10-25T00:39:07Z",
-     "user": "orignal",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2612#issuecomment-6391513746",
-     "body": "А чем мешает то? Не вижу смысла усложнять, тем более что скорее всего будет вынесен в отдельную директорию."
     }
    ]
   },
@@ -524,6 +486,138 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7271,
+     "title": "FakeDNS: Expose pool occupancy in metrics",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-27T08:18:52Z",
+     "updated_at": "2026-10-27T08:18:52Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7271",
+     "body": "Add an optional occupancy capability without changing the existing FakeDNS engine contract. Publish used slots and capacity through metrics without disclosing mappings. Release the allocator lock before invoking log callbacks.\nUseful for verifying FakeDNS operation."
+    },
+    {
+     "number": 7249,
+     "title": "Geodata: Update built-in private IP ranges",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T18:09:07Z",
+     "updated_at": "2026-10-27T07:30:30Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249",
+     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
+    },
+    {
+     "number": 7270,
+     "title": "common/signal: ActivityTimer.SetTimeout must not deadlock on its firs…",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-27T03:54:37Z",
+     "updated_at": "2026-10-27T07:19:07Z",
+     "user": "mwnydev",
+     "url": "https://github.com/XTLS/Xray-core/pull/7270",
+     "body": "…t check\n\nPeriodic.Start runs Execute once synchronously while SetTimeout holds t.mu. If a check of the task being replaced is still running it can consume the token posted by Update; the synchronous check then calls finish, which locks t.mu again and deadlocks, leaking the connection's handler (goroutines and the socket). Make the synchronous first run only drain the token.\n\nFound by the akari-agent soak test (77 stuck handlers in one hour).\n\n"
+    },
+    {
+     "number": 7240,
+     "title": "Xray-core v26.10.21  无法转发 127.0.0.1",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-23T06:43:18Z",
+     "updated_at": "2026-10-27T06:43:16Z",
+     "user": "funhunter",
+     "url": "https://github.com/XTLS/Xray-core/issues/7240",
+     "body": "### 完整性要求 / Integrity Requirements\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n- [x] I have read all the notes in the issue template and ensured my submission meets the requirements.\n- [x] I guarantee that I have read the documentation and understand the meaning of all the configuration file entries I have written, rather than simply stacking a large number of potentially useful options or defaults.\n- [x] I have provided the complete configuration file and logs, rather than just providing snippets based on my own judgment.\n- [x] I have searched the issues and have not found a similar issue already reported.\n- [x] The issue can be successfully reproduced in the latest Release version.\n\n### 描述 / Description\n\n最新版[Xray-core v26.10.21] 无法连接 127.0.0.1:10068 ssh 端口\n我在服务器端，nc -zv 127.0.0.1 10068\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\n说明127.0.0.1:10068 是正常的\n\n我上一个版本Xray-core v26.3.27,没有这个问题\nconfig.json配置文件没有任何改变\n\nThe latest version [Xray-core v26.10.21] is unable to connect to the 127.0.0.1:10068 SSH port.\nOn the server side, running `nc -zv 127.0.0.1 10068` yields:\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\nThis indicates that 127.0.0.1:10068 is functioning correctly.\n\nI did not have this problem in the previous version, Xray-core v26.3.27.\nThe config.json configuration file has not been changed.\n\n### 重现方式 / Steps to Reproduce\n\n我想通过xray vless tcp tls vison 连接服务器的10068 ssh 端口，我将转发地址设置为127.0.0.1\n我在本地客户端配置了\n\nI want to connect to the server's 10068 SSH port via xray vless tcp tls vision, and I have set the forwarding address to 127.0.0.1.\nI configured the local client as follows:\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"127.0.0.1\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n服务器通过freedom 发出，测试时，没有其他任何路由规则\n\n然后通过命令 ssh -p 2503 root@127.0.0.1， 2503是我本地dokodemo-door 监听地址\n实际效果是，ssh 连接失败\n\n修改客户端配置，127.0.0.1改为服务器实际公网ip，例如 \"address\": \"xxx.xx.x.x\",\n\nThe server sends traffic via freedom, and there are no other routing rules during testing.\n\nThen, I run the command `ssh -p 2503 root@127.0.0.1`, where 2503 is the address my local dokodemo-door is listening on.\nThe actual result is that the SSH connection fails.\n\nModifying the client configuration by changing 127.0.0.1 to the server's actual public IP, e.g., \"address\": \"xxx.xx.x.x\":\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"xxx.xx.x.x\",\n    \"port\": 22,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n然后，还是这条命令， ssh -p 2503 root@127.0.0.1 连接成功\n\n我上一个版本Xray-core v26.3.27,没有这个问题\n\nThen, using the same command, `ssh -p 2503 root@127.0.0.1`, the connection succeeds.\n\nI did not have this problem in the previous version, Xray-core v26.3.27.\n\n### 客户端配置 / Client Configuration\n\n原客户端配置\n\nOriginal client configuration\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"127.0.0.1\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n修改后客户端配置\n\nModified client configuration\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"x.x.x.x\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n### 服务端配置 / Server Configuration\n\n```json\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\"\n    },\n```\n\n### 客户端日志 / Client Logs\n\n```log\n2026/10/23 14:33:39.242258 [Info] [3883811706] transport/internet/tcp: dialing TCP to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.242262 [Debug] [3883811706] transport/internet: dialing to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.276779 [Info] [3883811706] proxy/vless/outbound: tunneling request to tcp:127.0.0.1:10068 via x.x.x.x:xxxx\n```\n\n### 服务端日志 / Server Logs\n\n```log\n2026/10/23 14:00:02.512766 [Warning] core: Xray 26.10.21 started\n2026/10/23 14:01:06.327524 [Info] [450590513] "
+    },
+    {
+     "number": 7237,
+     "title": "Bump github.com/pires/go-proxyproto from 0.15.0 to 0.16.0",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-23T00:12:49Z",
+     "updated_at": "2026-10-27T04:31:56Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7237",
+     "body": "Bumps [github.com/pires/go-proxyproto](https://github.com/pires/go-proxyproto) from 0.15.0 to 0.16.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/pires/go-proxyproto/releases\">github.com/pires/go-proxyproto's releases</a>.</em></p>\n<blockquote>\n<h2>v0.16.0</h2>\n<h2>Breaking changes</h2>\n<p>Not really breaking changes to the lib users but rather folks who adopted our HTTP2 helper/examples code. Upgrading <code>golang.org/x/net to 0.61.0</code> required adopting the new API for HTTP2.</p>\n<h2>What's Changed</h2>\n<ul>\n<li>fix: WriteTo empty buffer handling by <a href=\"https://github.com/mymmrac\"><code>@​mymmrac</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/182\">pires/go-proxyproto#182</a></li>\n<li>fix(ci): drop Go 1.25, add 1.27 by <a href=\"https://github.com/pires\"><code>@​pires</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/185\">pires/go-proxyproto#185</a></li>\n<li>deps,ci: bump Go and fix CI validations by <a href=\"https://github.com/pires\"><code>@​pires</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/188\">pires/go-proxyproto#188</a></li>\n<li>deps,http2: bump golang.org/x/next from 0.58.0 to 0.61.0 by <a href=\"https://github.com/pires\"><code>@​pires</code></a> in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/189\">pires/go-proxyproto#189</a></li>\n</ul>\n<h2>New Contributors</h2>\n<ul>\n<li><a href=\"https://github.com/mymmrac\"><code>@​mymmrac</code></a> made their first contribution in <a href=\"https://redirect.github.com/pires/go-proxyproto/pull/182\">pires/go-proxyproto#182</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/pires/go-proxyproto/compare/v0.15.0...v0.16.0\">https://github.com/pires/go-proxyproto/compare/v0.15.0...v0.16.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/32ab3555fc278d55ee172d3b201a88dc5bfd689f\"><code>32ab355</code></a> deps,http2: bump golang.org/x/next from 0.58.0 to 0.61.0</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/c7268feb5ae6af7216b15b74c10f978721666b13\"><code>c7268fe</code></a> ci: validate GHA config before anything else</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/4331312552125793c1418044c7ef5bbf3d484374\"><code>4331312</code></a> ci: explicitly set GHA workflow permissions</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/2d70a5ab2d169f8e95022cf589fdcd3c86c4c363\"><code>2d70a5a</code></a> deps,ci: bump Go and fix CI validations</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/ec43bde09eff6f1d1173c07e2412366f7b5101e0\"><code>ec43bde</code></a> fix(ci): drop Go 1.25, add 1.27</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/c435999ef4e81a3be420c6f1ceac9a33fe4b05e8\"><code>c435999</code></a> build(deps): bump golang.org/x/net from 0.57.0 to 0.58.0</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/a9aa477883d1248ec70971003f04df6bdd9fdb58\"><code>a9aa477</code></a> fix: WriteTo empty buffer handling (<a href=\"https://redirect.github.com/pires/go-proxyproto/issues/182\">#182</a>)</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/b9877208baf4fffe3e2d267ae9b5b3ddb5f86968\"><code>b987720</code></a> build(deps): bump golang.org/x/net from 0.55.0 to 0.57.0</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/88dff81d0a25dd975b227d99278dec8b3dd3dc91\"><code>88dff81</code></a> fix dependabot for Go</li>\n<li><a href=\"https://github.com/pires/go-proxyproto/commit/86099fba92f4d2ac7198f3062c4f4ebc48d5399e\"><code>86099fb</code></a> enable dependabot</li>\n<li>Additional commits viewable in <a href=\"https://github.com/pires/go-proxyproto/compare/v0.15.0...v0.16.0\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=github.com/pires"
+    },
+    {
+     "number": 7257,
+     "title": "Bump docker/login-action from 4.6.0 to 4.7.0",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-26T00:22:24Z",
+     "updated_at": "2026-10-27T04:31:41Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7257",
+     "body": "Bumps [docker/login-action](https://github.com/docker/login-action) from 4.6.0 to 4.7.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/docker/login-action/releases\">docker/login-action's releases</a>.</em></p>\n<blockquote>\n<h2>v4.7.0</h2>\n<ul>\n<li>Preserve explicit ECR settings in <code>registry-auth</code> by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1089\">docker/login-action#1089</a></li>\n<li>Use registry hosts for scoped credentials by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1088\">docker/login-action#1088</a></li>\n<li>Raise Docker Hub OIDC max expiry to 6 hours by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1068\">docker/login-action#1068</a></li>\n<li>Log Docker Hub OIDC token exchange progress by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1061\">docker/login-action#1061</a></li>\n<li>Bump <code>@​aws-sdk/client-ecr</code> and <code>@​aws-sdk/client-ecr-public</code> to 3.1154.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1093\">docker/login-action#1093</a></li>\n<li>Bump <code>@​docker/actions-toolkit</code> from 0.94.0 to 0.107.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1100\">docker/login-action#1100</a></li>\n<li>Bump <code>@​humanfs/node</code> from 0.16.7 to 0.16.8 in <a href=\"https://redirect.github.com/docker/login-action/pull/1077\">docker/login-action#1077</a></li>\n<li>Bump csv-parse from 7.0.1 to 7.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1078\">docker/login-action#1078</a></li>\n<li>Bump handlebars from 4.7.9 to 4.7.10 in <a href=\"https://redirect.github.com/docker/login-action/pull/1091\">docker/login-action#1091</a></li>\n<li>Bump js-yaml from 5.2.2 to 5.5.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1066\">docker/login-action#1066</a></li>\n<li>Bump postcss from 8.5.22 to 8.5.26 in <a href=\"https://redirect.github.com/docker/login-action/pull/1071\">docker/login-action#1071</a></li>\n<li>Bump postcss-selector-parser from 7.1.1 to 7.1.6 in <a href=\"https://redirect.github.com/docker/login-action/pull/1092\">docker/login-action#1092</a></li>\n<li>Bump source-map-js from 1.2.1 to 1.2.2 in <a href=\"https://redirect.github.com/docker/login-action/pull/1090\">docker/login-action#1090</a></li>\n<li>Bump undici from 6.27.0 to 6.29.1 in <a href=\"https://redirect.github.com/docker/login-action/pull/1085\">docker/login-action#1085</a></li>\n<li>Bump uuid from 14.0.1 to 14.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1096\">docker/login-action#1096</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/docker/login-action/compare/v4.6.0...v4.7.0\">https://github.com/docker/login-action/compare/v4.6.0...v4.7.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/docker/login-action/commit/81c6f93d4bc991e510b342a00b419b3bb4efc5c6\"><code>81c6f93</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1100\">#1100</a> from docker/dependabot/npm_and_yarn/docker/actions-t...</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1b16c8d1815e1d951d87a3522ff48a76d073735a\"><code>1b16c8d</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1096\">#1096</a> from docker/dependabot/npm_and_yarn/uuid-14.0.3</li>\n<li><a href=\"https://github.com/docker/login-action/commit/ac86b5e9e9d2db43b12b2d3afb9140a427d69d65\"><code>ac86b5e</code></a> [dependabot skip] chore: update generated content</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1476d845f08dd8309a938959a280f2e23"
+    },
+    {
+     "number": 7132,
+     "title": "Lua: Support inline scripts; Add `./xray base64 encode/decode [-gzip]` command",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-11T20:45:54Z",
+     "updated_at": "2026-10-27T04:02:33Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7132",
+     "body": "- 支持在配置直接内联 lua 脚本以方便分享 https://github.com/XTLS/Xray-core/pull/7124#issuecomment-6110557806\r\n- 为此提供了命令 `./xray base64 encode` 和 `./xray base64 decode`\r\n- 杂项：`router:PickOutbound` 改名为 `router.Pickoutbound` 因为它不是对象的成员函数\r\n- 杂项：路由和 DNS 冲突字段检查"
+    },
+    {
+     "number": 7265,
+     "title": "Geodata: https Max Redirects set to 20",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T15:41:34Z",
+     "updated_at": "2026-10-27T04:01:56Z",
+     "user": "xqzr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7265",
+     "body": "Ref: https://github.com/chromium/chromium/blob/3a1201c8bb9d7d71bc6fbd7d4587a0de7fc65048/net/url_request/url_request.h#L110"
+    },
+    {
+     "number": 7267,
+     "title": "Geodata: Limit download size, file extensions, and update frequency",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T16:58:53Z",
+     "updated_at": "2026-10-27T04:00:06Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267",
+     "body": "限制频率，防止恶意订阅拿来当作低配版 ddos 攻击器\n限制扩展名，防止本地恶意程序利用 tun 下的特权，替换 `*.cmd` 之类的脚本\n限制单文件尺寸纯粹是不可能有那么大的 dat 顺手做了"
+    },
+    {
+     "number": 7269,
+     "title": "common/signal: ActivityTimer.SetTimeout must not deadlock on its firs…",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-27T03:22:02Z",
+     "updated_at": "2026-10-27T03:48:05Z",
+     "user": "mwnydev",
+     "url": "https://github.com/XTLS/Xray-core/pull/7269",
+     "body": "…t check\n\nPeriodic.Start runs Execute once synchronously while SetTimeout holds t.mu. If a check of the task being replaced is still running it can consume the token posted by Update; the synchronous check then calls finish, which locks t.mu again and deadlocks, leaking the connection's handler (goroutines and the socket). Make the synchronous first run only drain the token.\n\nFound by the akari-agent soak test (77 stuck handlers in one hour).\n\n\n"
+    },
+    {
+     "number": 7263,
+     "title": "CI: Enforce stricter checks on generated protobuf files",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T15:18:25Z",
+     "updated_at": "2026-10-27T03:26:11Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263",
+     "body": "用指定的版本全部重新生成一遍强校验，防止...\r\n\r\n代价是每次切 go 版本的时候要重新生成一次，因为不同 go 版本的产物也不一样（着实没想到）"
+    },
+    {
+     "number": 7243,
+     "title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-23T13:17:30Z",
+     "updated_at": "2026-10-27T03:14:50Z",
+     "user": "yx64",
+     "url": "https://github.com/XTLS/Xray-core/issues/7243",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nSince v26.10.21 (REALITY `83f621788ca8`), every authenticated REALITY connection fails when the target sends an **empty EncryptedExtensions** (no SNI ack, no ALPN, nothing else). With `\"show\": true` the server prints:\n\n```\nhs.handshake() err: payload[0]: 8, padding: -4\n```\n\nv26.9.9 (REALITY `8cdf7bf9c7f0`) works with the same target.\n\nCause:\n\n- XTLS/REALITY `3c98159` (\"Sync upstream Go 1.27+\", #30) added to `handshake_server_tls13.go`:\n  ```go\n  if !hs.c.didResume && hs.clientHello.serverName != \"\" {\n      encryptedExtensions.serverNameAck = true\n  }\n  ```\n  An authenticated connection always carries SNI unless `serverNames` contains `\"\"`, so REALITY's own EncryptedExtensions now always has the 4-byte empty `server_name` extension. Before this commit `encryptedExtensionsMsg` had no such field.\n- `[REALITY] SECTION: mimic recorded handshakeLen` in `conn.go` pads each handshake record to the length recorded from the target and returns `payload[0]: %v, padding: %v` when its own record is longer (`payload[0]: 8` is EncryptedExtensions).\n- REALITY's own EncryptedExtensions has no ALPN, so it is now 4 bytes longer than an empty one. A target whose EncryptedExtensions is empty gives a 28-byte record (including the 5-byte record header) against REALITY's 32, hence padding -4. Any extension on the target side (an SNI ack, ALPN, ...) is at least 4 bytes and absorbs it.\n\nNot setting `serverNameAck` in the REALITY server (the pre-sync behaviour) looks sufficient, since padding then matches any target; I have not tested a patch.\n\nThis is easy to miss: the fallback path does not reach this code, so probing the node without the key looks fine, and without `show` the server logs only an Info line (`REALITY: processed invalid connection ...: handshake did not complete successfully`) while the client gets EOF. We hit it on a production node whose target neither acks SNI nor negotiates ALPN. To check a target, look for any extension besides `supported versions` and `key share`:\n\n```\nopenssl s_client -connect <Domain>:443 -servername <Domain> -tls1_3 -alpn h2,http/1.1 -tlsextdebug </dev/null 2>/dev/null | grep 'TLS server extension'\n```\n\n### Reproduction Method\n\nAll on loopback (Linux, OpenSSL 3.5.5). Three `openssl s_server` targets with the same self-signed certificate for `example.test`:\n\n```\nopenssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout k.pem -out c.pem -days 30 -subj /CN=example.test -addext subjectAltName=DNS:example.test\n# A: empty EncryptedExtensions\nopenssl s_server -accept 127.0.0.1:20443 -cert c.pem -key k.pem -tls1_3 -www -quiet\n# B: acks SNI (s_server acks only when -servername installs its callback and the name matches)\nopenssl s_server -accept 127.0.0.1:20444 -cert c.pem -key k.pem -tls1_3 -www -quiet -servername example.test -cert2 c.pem -key2 k.pem\n# C: no SNI ack, but negotiates ALPN\nopenssl s_server -accept 127.0.0.1:20445 -cert c.pem -key k.pem -tls1_3 -www -quiet -alpn h2,http/1.1\n# something to fetch through the proxy\npython3 -m http.server 18080 --bind 127.0.0.1\n```\n\nStart the server (config below, `target` pointing at A, B or C) and the client (always v26.10.21), then `curl -x socks5h://127.0.0.1:11080 http://127.0.0.1:18080/`:\n\n| server | target | target EE record | result |\n|---|---|---|---|\n| v26.10.21 | A | 28 | curl: (56) Recv failure: Connection reset by peer; `padding: -4` |\n| v26.10.21 | B | 32 | 200 |\n| v26.10"
+    },
     {
      "number": 7248,
      "title": "XHTTP: Add configurable error responses",
@@ -558,39 +652,6 @@
      "body": "## Summary\n\nAdd an optional `deviceId` to VLESS requests and an inbound allowlist for device-level access control. When `enforceDeviceId` is enabled, new connections without an allowed ID are rejected.\n\nThe device ID is configured by the client. It is not tied to hardware or cryptographically verified, so a client that copies an allowed ID can use it.\n\n## Testing\n\n- Unit tests for VLESS account, request encoding, and configuration parsing.\n- Local end-to-end test with real Xray server and client processes: allowed IDs connect; unknown and missing IDs are rejected; removing an ID blocks new connections; restoring it allows new connections again.\n- Confirmed that connections established before an ID is removed remain active."
     },
     {
-     "number": 7265,
-     "title": "Geodata: https Max Redirects set to 20",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T15:41:34Z",
-     "updated_at": "2026-10-26T18:31:37Z",
-     "user": "xqzr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7265",
-     "body": "Ref: https://github.com/chromium/chromium/blob/3a1201c8bb9d7d71bc6fbd7d4587a0de7fc65048/net/url_request/url_request.h#L110"
-    },
-    {
-     "number": 7267,
-     "title": "Geodata: Limit download size, file extensions, and update frequency",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T16:58:53Z",
-     "updated_at": "2026-10-26T17:38:50Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7267",
-     "body": "限制频率，防止恶意订阅拿来当作低配版 ddos 攻击器\n限制扩展名，防止本地恶意程序利用 tun 下的特权，替换 `*.cmd` 之类的脚本\n限制单文件尺寸纯粹是不可能有那么大的 dat 顺手做了"
-    },
-    {
-     "number": 7243,
-     "title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-23T13:17:30Z",
-     "updated_at": "2026-10-26T16:36:27Z",
-     "user": "yx64",
-     "url": "https://github.com/XTLS/Xray-core/issues/7243",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nSince v26.10.21 (REALITY `83f621788ca8`), every authenticated REALITY connection fails when the target sends an **empty EncryptedExtensions** (no SNI ack, no ALPN, nothing else). With `\"show\": true` the server prints:\n\n```\nhs.handshake() err: payload[0]: 8, padding: -4\n```\n\nv26.9.9 (REALITY `8cdf7bf9c7f0`) works with the same target.\n\nCause:\n\n- XTLS/REALITY `3c98159` (\"Sync upstream Go 1.27+\", #30) added to `handshake_server_tls13.go`:\n  ```go\n  if !hs.c.didResume && hs.clientHello.serverName != \"\" {\n      encryptedExtensions.serverNameAck = true\n  }\n  ```\n  An authenticated connection always carries SNI unless `serverNames` contains `\"\"`, so REALITY's own EncryptedExtensions now always has the 4-byte empty `server_name` extension. Before this commit `encryptedExtensionsMsg` had no such field.\n- `[REALITY] SECTION: mimic recorded handshakeLen` in `conn.go` pads each handshake record to the length recorded from the target and returns `payload[0]: %v, padding: %v` when its own record is longer (`payload[0]: 8` is EncryptedExtensions).\n- REALITY's own EncryptedExtensions has no ALPN, so it is now 4 bytes longer than an empty one. A target whose EncryptedExtensions is empty gives a 28-byte record (including the 5-byte record header) against REALITY's 32, hence padding -4. Any extension on the target side (an SNI ack, ALPN, ...) is at least 4 bytes and absorbs it.\n\nNot setting `serverNameAck` in the REALITY server (the pre-sync behaviour) looks sufficient, since padding then matches any target; I have not tested a patch.\n\nThis is easy to miss: the fallback path does not reach this code, so probing the node without the key looks fine, and without `show` the server logs only an Info line (`REALITY: processed invalid connection ...: handshake did not complete successfully`) while the client gets EOF. We hit it on a production node whose target neither acks SNI nor negotiates ALPN. To check a target, look for any extension besides `supported versions` and `key share`:\n\n```\nopenssl s_client -connect <Domain>:443 -servername <Domain> -tls1_3 -alpn h2,http/1.1 -tlsextdebug </dev/null 2>/dev/null | grep 'TLS server extension'\n```\n\n### Reproduction Method\n\nAll on loopback (Linux, OpenSSL 3.5.5). Three `openssl s_server` targets with the same self-signed certificate for `example.test`:\n\n```\nopenssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout k.pem -out c.pem -days 30 -subj /CN=example.test -addext subjectAltName=DNS:example.test\n# A: empty EncryptedExtensions\nopenssl s_server -accept 127.0.0.1:20443 -cert c.pem -key k.pem -tls1_3 -www -quiet\n# B: acks SNI (s_server acks only when -servername installs its callback and the name matches)\nopenssl s_server -accept 127.0.0.1:20444 -cert c.pem -key k.pem -tls1_3 -www -quiet -servername example.test -cert2 c.pem -key2 k.pem\n# C: no SNI ack, but negotiates ALPN\nopenssl s_server -accept 127.0.0.1:20445 -cert c.pem -key k.pem -tls1_3 -www -quiet -alpn h2,http/1.1\n# something to fetch through the proxy\npython3 -m http.server 18080 --bind 127.0.0.1\n```\n\nStart the server (config below, `target` pointing at A, B or C) and the client (always v26.10.21), then `curl -x socks5h://127.0.0.1:11080 http://127.0.0.1:18080/`:\n\n| server | target | target EE record | result |\n|---|---|---|---|\n| v26.10.21 | A | 28 | curl: (56) Recv failure: Connection reset by peer; `padding: -4` |\n| v26.10.21 | B | 32 | 200 |\n| v26.10"
-    },
-    {
      "number": 7266,
      "title": "Check config dir",
      "is_pr": true,
@@ -611,17 +672,6 @@
      "user": "WhiteCyril",
      "url": "https://github.com/XTLS/Xray-core/pull/7264",
      "body": ""
-    },
-    {
-     "number": 7263,
-     "title": "CI: Enforce stricter checks on generated protobuf files",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T15:18:25Z",
-     "updated_at": "2026-10-26T16:11:06Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263",
-     "body": "用指定的版本全部重新生成一遍强校验，防止...\r\n\r\n代价是每次切 go 版本的时候要重新生成一次，因为不同 go 版本的产物也不一样（着实没想到）"
     },
     {
      "number": 7262,
@@ -655,17 +705,6 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7255",
      "body": "Close #7239\r\n这是由于 https://github.com/golang/go/issues/63703 导致的\r\n\r\n以前做的有点过了又不够，只穿透了软链接没检查硬链接，后者不需要管理员权限就能做到\r\n仔细想了下威胁模型根本不存在，因此直接放弃符号链接的检查才是对的，不应该在这个方向继续堆代码"
-    },
-    {
-     "number": 7249,
-     "title": "Geodata: Update built-in private IP ranges",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-24T18:09:07Z",
-     "updated_at": "2026-10-26T12:56:18Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249",
-     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
     },
     {
      "number": 7259,
@@ -745,28 +784,6 @@
      "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n在 Windows 11 上使用 Xray-core 连接 VLESS + REALITY + Vision 节点时，发现 TCP 下载吞吐量在部分网络条件下明显低于 Linux 和 Android。\n\n本地宽带约为 100 Mbps。在网络条件较差、可能存在拥堵或丢包的时段，Windows 原生 Xray 的下载速度通常只有 10～30 Mbps，最近一次测试甚至只有约 10 Mbps。\n\n但在同一时段：\n\n- Android v2rayNG 连接同一节点，可以达到约 90 Mbps。\n- 同一台 Windows 电脑通过 WSL2 Linux 运行相同版本的 Xray-core，可以达到约 90 Mbps。\n- 在 Windows 原生 Xray 的 TCP 出站中显式设置 `SO_RCVBUF = 2 MiB` 后，下载速度可以从约 10 Mbps 提升至约 85 Mbps。\n\nWindows 和 WSL2 Linux 使用完全相同的 Xray-core 版本。\n\n因此，这个问题并不依赖于 v2rayN 的运行逻辑，更可能与 Windows 原生 Xray 建立的 TCP 连接、Socket 缓冲区行为或 Go/Windows 网络实现有关。\n\n不过，目前还无法确定根本原因属于 Xray-core、Go 运行时还是 Windows TCP 协议栈。\n\n#### 测试环境\n\n| 项目 | 信息 |\n|---|---|\n| Windows 系统 | Windows 11 26H2 |\n| Windows OS Build | 26300.9711 |\n| Windows 运行方式 | 命令行直接运行 `xray.exe`，不使用图形客户端 |\n| Windows Xray-core | v26.10.21 |\n| WSL2 Linux Xray-core | v26.10.21 |\n| Android 客户端 | v2rayNG 2.3.13 (xray v26.10.21) |\n| 协议 | VLESS |\n| 传输 | TCP |\n| 安全协议 | REALITY |\n| Flow | xtls-rprx-vision |\n| VPS TCP 拥塞控制 | BBR |\n| RTT | 约 140～180 ms |\n| 本地宽带 | 约 100 Mbps |\n\nMux 和 Fragment 均未启用。\n\n此前分别使用有线以太网和 Wi-Fi 测试，均出现过相同问题。\n\n#### 最新的同一时段对照测试\n\n在网络条件较差的同一时段，使用相同 Reality 节点进行了以下测试：\n\n| 测试方式 | 下载速度 |\n|---|---|\n| Android v2rayNG | 约 90 Mbps |\n| Windows 原生 Xray，默认 Socket 配置 | 约 10 Mbps |\n| Windows 原生 Xray，设置 `SO_RCVBUF = 2 MiB` | 约 85 Mbps |\n| WSL2 Linux Xray，相同核心版本 | 约 90 Mbps |\n\n\n两次测试使用相同的 Reality 节点和相同的出站配置，主要变化是 TCP Socket 的 `SO_RCVBUF` 设置。\n\n在相近的网络条件下，添加该设置后，Windows Xray 下载速度从约 10 Mbps 提升到了约 85 Mbps。\n\n此前还尝试将 `SO_RCVBUF` 从 2 MiB 增加到 4 MiB，但没有观察到明显的额外性能提升。\n\n#### Windows 电脑通过 Android 代理的交叉验证\n\n此前还进行了另一组测试：\n\n让 Android v2rayNG 建立 Reality 出站连接，并在 Android 上提供 SOCKS5 代理。\n\n同一台 Windows 电脑上的浏览器及 `curl` 通过该 SOCKS5 代理下载，可以达到接近 90～100 Mbps 的速度。\n\n例如，下载相同的 Cloudflare 测试文件时，曾观察到：\n\n- Windows 原生 Xray：约 2 MB/s。\n- Windows 通过 Android 的 SOCKS5 代理：约 12 MB/s。\n\n因此，Windows 浏览器、下载工具以及电脑本身的网络接入能力，并不能解释吞吐量差距。\n\n#### 问题与网络条件有关\n\n这个问题并不是全天持续存在。\n\n在深夜网络条件较好时，即使完全删除 `SO_RCVBUF` 自定义设置，Windows 原生 Xray 也能够达到约 85～90 Mbps。\n\n因此，这不是 Windows Xray 始终被限制在 10～30 Mbps 的固定性能瓶颈。\n\n更准确地说：\n\n**在某些网络条件下，Windows 原生 Xray 的 TCP 吞吐量明显低于 Linux/Android，而显式设置较大的 SO_RCVBUF 后，性能下降得到显著缓解。**\n\n#### VPS 端的 TCP 状态观察\n\n此前在 VPS 上使用以下命令观察测速期间的 TCP 状态：\n\n```bash\nss -tin state established '( sport = :443 )'\n```\n\n发现以下现象：\n\n**Windows 原生 Xray 下载速度较低时：**\n\n- 部分主要数据连接的 `snd_wnd` 约为 128～256 KiB。\n- 部分连接存在一定比例的 `rwnd_limited` 时间。\n- 能观察到 TCP 重传、乱序等现象。\n\n**Android v2rayNG 下载速度正常时：**\n\n- 部分主要数据连接的 `snd_wnd` 可以达到约 4 MiB。\n- 同样存在 TCP 重传，部分连接的重传字节数并不少。\n- 尽管存在重传，仍然能够保持较高下载吞吐量。\n\n#### 已尝试的排查\n\n1. **排除图形客户端影响**\n\n   Windows 测试直接运行 `xray.exe`，不用 v2rayN。\n\n2. **排除 Xray-core 版本差异**\n\n   Windows 原生 Xray 和 WSL2 Linux Xray 使用完全相同的 v26.10.21。\n\n   在相同时段，Linux 版能够达到约 90 Mbps，而 Windows 默认 Socket 配置只有约 10 Mbps。\n\n3. **排除浏览器及下载工具**\n\n   使用不同浏览器代理方式和 `curl --socks5-hostname` 测试，均观察到原生 Windows Xray 速度偏低。\n\n4. **排除网卡连接方式**\n\n   Windows 使用有线以太网和 Wi-Fi 均曾复现问题。\n\n5. **Windows TCP 自动调优**\n\n   Windows TCP 接收窗口自动调优原本为 `Normal`。\n\n   曾临时修改为 `Experimental`，没有明显改善，之后已经恢复 `Normal`。\n\n6. **测试 VPS 拥塞控制**\n\n   VPS 原本使用 BBR。\n\n   曾临时切换至 CUBIC，Windows 下载速度反而进一步下降至个位数 Mbps，随后恢复 BBR。\n\n7. **测试更大的 SO_RCVBUF**\n\n   设置 2 MiB 后，Windows 吞吐量明显改善。\n\n   进一步增加至 4 MiB，没有观察到明显的额外提升。\n\n### 重现方式\n\n**前提：**\n\n该问题在本人网络条件较差的时段更容易复现。网络状况良好时，默认配置也可能达到满速。\n\n**1. 使用默认 Socket 配置运行 Windows Xray**\n\nWindows 系统：\n\n```text\nWindows 11 26H2\nOS Build 26300.9711\n```\n\nXray-core：\n\n```text\nv26.10.21\n```\n\n通过命令行直接启动：\n\n```powershell\n.\\xray.exe run -config .\\config.json\n```\n\n使用 VLESS + REALITY + `xtls-rprx-vision` 出站，未设置 `SO_RCVBUF`。\n\n通过本地 SOCKS5 代理进行下载测速。\n\n在问题出现时，下载速度约为 10～30 Mbps，最近一次测试约为 10 Mbps。\n\n**2. 添加 SO_RCVBUF 设置**\n\n关闭 Windows Xray，在 VLESS 出站的 `streamSettings.sockopt` 中添加以下内容：\n\n```json\n{\n  \"customSockopt\": [\n    {\n      \"system\": \"windows\",\n      \"network\": \"tcp\",\n      \"type\": \"int\",\n      \"level\": \"65535\",\n      \"opt\": \"4098\",\n      \"value\": \"2097152\"\n    }\n  ]\n}\n```\n\n其中：\n\n- `level = 65"
     },
     {
-     "number": 7240,
-     "title": "Xray-core v26.10.21  无法转发 127.0.0.1",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-23T06:43:18Z",
-     "updated_at": "2026-10-26T03:43:17Z",
-     "user": "funhunter",
-     "url": "https://github.com/XTLS/Xray-core/issues/7240",
-     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n最新版[Xray-core v26.10.21] 无法连接 127.0.0.1:10068 ssh 端口\n我在服务器端，nc -zv 127.0.0.1 10068\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\n说明127.0.0.1:10068 是正常的\n\n我上一个版本Xray-core v26.3.27,没有这个问题\nconfig.json配置文件没有任何改变\n\n### 重现方式\n\n我想通过xray vless tcp tls vison 连接服务器的10068 ssh 端口，我将转发地址设置为127.0.0.1\n我在本地客户端配置了\n    {\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"127.0.0.1\",\n        \"port\": 10068 ,\n        \"network\": \"tcp\"\n      }\n    }\n服务器通过freedom 发出，测试时，没有其他任何路由规则\n\n然后通过命令  ssh -p 2503 root@127.0.0.1， 2503是我本地dokodemo-door 监听地址\n实际效果是，ssh 连接失败\n\n\n修改客户端配置，127.0.0.1改为服务器实际公网ip，例如 \"address\": \"xxx.xx.x.x\",\n    {\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"xxx.xx.x.x\",\n        \"port\": 22,\n        \"network\": \"tcp\"\n      }\n    }\n然后，还是这条命令， ssh -p 2503 root@127.0.0.1   连接成功\n\n我上一个版本Xray-core v26.3.27,没有这个问题\n\n### 客户端配置\n\n原客户端配置    \n{\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"127.0.0.1\",\n        \"port\": 10068 ,\n        \"network\": \"tcp\"\n      }\n    }\n\n修改后客户端配置    \n{\n      \"listen\": \"127.0.0.1\",\n      \"port\": 2503,\n      \"protocol\": \"dokodemo-door\",\n      \"settings\": {\n        \"address\": \"x.x.x.x\",\n        \"port\": 10068 ,\n        \"network\": \"tcp\"\n      }\n    }\n\n### 服务端配置\n\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\"\n    },\n\n### 客户端日志\n\n2026/10/23 14:33:39.242258 [Info] [3883811706] transport/internet/tcp: dialing TCP to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.242262 [Debug] [3883811706] transport/internet: dialing to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.276779 [Info] [3883811706] proxy/vless/outbound: tunneling request to tcp:127.0.0.1:10068 via x.x.x.x:xxxx\n\n### 服务端日志\n\n2026/10/23 14:00:02.512766 [Warning] core: Xray 26.10.21 started\n2026/10/23 14:01:06.327524 [Info] [450590513] proxy/vless/inbound: firstLen = 178\n2026/10/23 14:01:06.327610 [Info] [450590513] proxy/vless/inbound: received request for tcp:127.0.0.1:10068\n2026/10/23 14:01:06.327615 [Debug] app/stats: create new counter user>>>x@y.z>>>traffic>>>uplink\n2026/10/23 14:01:06.327618 [Debug] app/stats: create new counter user>>>x@y.z>>>traffic>>>downlink\n2026/10/23 14:01:06.327664 [Info] [450590513] app/dispatcher: default route for tcp:127.0.0.1:10068\n2026/10/23 14:01:06.327670 [Info] [450590513] proxy/freedom: blocked target: tcp:127.0.0.1:10068, blackholing connection for 49s\n2026/10/23 14:01:06.327729 [Debug] [450590513] proxy: Xtls Unpadding new block, content 41 padding 72 command 0\n\n\n\n2026/10/23 14:01:25.298867 [Info] [552868179] proxy/vless/inbound: firstLen = 243\n2026/10/23 14:01:25.298956 [Info] [552868179] proxy/vless/inbound: received request for tcp:x.x.x.x.:10068\n2026/10/23 14:01:25.298967 [Info] [552868179] app/dispatcher: default route for tcp:x.x.x.x.:10068\n2026/10/23 14:01:25.298971 [Info] [552868179] transport/internet/tcp: dialing TCP to tcpx.x.x.x.:10068\n2026/10/23 14:01:25.298974 [Debug] [552868179] transport/internet: dialing to tcp:x.x.x.x.:10068\n2026/10/23 14:01:25.300731 [Info] [552868179] proxy/freedom: connection opened to tcpx.x.x.x.:10068, local endpoint 192.168.0.81:65330, remote endpoint x.x.x.x.:10068"
-    },
-    {
-     "number": 7257,
-     "title": "Bump docker/login-action from 4.6.0 to 4.7.0",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T00:22:24Z",
-     "updated_at": "2026-10-26T00:22:28Z",
-     "user": "dependabot[bot]",
-     "url": "https://github.com/XTLS/Xray-core/pull/7257",
-     "body": "Bumps [docker/login-action](https://github.com/docker/login-action) from 4.6.0 to 4.7.0.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/docker/login-action/releases\">docker/login-action's releases</a>.</em></p>\n<blockquote>\n<h2>v4.7.0</h2>\n<ul>\n<li>Preserve explicit ECR settings in <code>registry-auth</code> by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1089\">docker/login-action#1089</a></li>\n<li>Use registry hosts for scoped credentials by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1088\">docker/login-action#1088</a></li>\n<li>Raise Docker Hub OIDC max expiry to 6 hours by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1068\">docker/login-action#1068</a></li>\n<li>Log Docker Hub OIDC token exchange progress by <a href=\"https://github.com/crazy-max\"><code>@​crazy-max</code></a> in <a href=\"https://redirect.github.com/docker/login-action/pull/1061\">docker/login-action#1061</a></li>\n<li>Bump <code>@​aws-sdk/client-ecr</code> and <code>@​aws-sdk/client-ecr-public</code> to 3.1154.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1093\">docker/login-action#1093</a></li>\n<li>Bump <code>@​docker/actions-toolkit</code> from 0.94.0 to 0.107.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1100\">docker/login-action#1100</a></li>\n<li>Bump <code>@​humanfs/node</code> from 0.16.7 to 0.16.8 in <a href=\"https://redirect.github.com/docker/login-action/pull/1077\">docker/login-action#1077</a></li>\n<li>Bump csv-parse from 7.0.1 to 7.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1078\">docker/login-action#1078</a></li>\n<li>Bump handlebars from 4.7.9 to 4.7.10 in <a href=\"https://redirect.github.com/docker/login-action/pull/1091\">docker/login-action#1091</a></li>\n<li>Bump js-yaml from 5.2.2 to 5.5.0 in <a href=\"https://redirect.github.com/docker/login-action/pull/1066\">docker/login-action#1066</a></li>\n<li>Bump postcss from 8.5.22 to 8.5.26 in <a href=\"https://redirect.github.com/docker/login-action/pull/1071\">docker/login-action#1071</a></li>\n<li>Bump postcss-selector-parser from 7.1.1 to 7.1.6 in <a href=\"https://redirect.github.com/docker/login-action/pull/1092\">docker/login-action#1092</a></li>\n<li>Bump source-map-js from 1.2.1 to 1.2.2 in <a href=\"https://redirect.github.com/docker/login-action/pull/1090\">docker/login-action#1090</a></li>\n<li>Bump undici from 6.27.0 to 6.29.1 in <a href=\"https://redirect.github.com/docker/login-action/pull/1085\">docker/login-action#1085</a></li>\n<li>Bump uuid from 14.0.1 to 14.0.3 in <a href=\"https://redirect.github.com/docker/login-action/pull/1096\">docker/login-action#1096</a></li>\n</ul>\n<p><strong>Full Changelog</strong>: <a href=\"https://github.com/docker/login-action/compare/v4.6.0...v4.7.0\">https://github.com/docker/login-action/compare/v4.6.0...v4.7.0</a></p>\n</blockquote>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/docker/login-action/commit/81c6f93d4bc991e510b342a00b419b3bb4efc5c6\"><code>81c6f93</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1100\">#1100</a> from docker/dependabot/npm_and_yarn/docker/actions-t...</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1b16c8d1815e1d951d87a3522ff48a76d073735a\"><code>1b16c8d</code></a> Merge pull request <a href=\"https://redirect.github.com/docker/login-action/issues/1096\">#1096</a> from docker/dependabot/npm_and_yarn/uuid-14.0.3</li>\n<li><a href=\"https://github.com/docker/login-action/commit/ac86b5e9e9d2db43b12b2d3afb9140a427d69d65\"><code>ac86b5e</code></a> [dependabot skip] chore: update generated content</li>\n<li><a href=\"https://github.com/docker/login-action/commit/1476d845f08dd8309a938959a280f2e23"
-    },
-    {
      "number": 7239,
      "title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
      "is_pr": false,
@@ -834,6 +851,150 @@
     }
    ],
    "comments": [
+    {
+     "id": 6436255779,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T07:29:54Z",
+     "user": "kokoromagic",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6436255779",
+     "body": "I wil repeat twice\r\n\r\n> This is not all about DNS64 + NAT64\r\n\r\n And I am not using IPv6-only VPS"
+    },
+    {
+     "id": 6436093884,
+     "issue": 7270,
+     "issue_title": "common/signal: ActivityTimer.SetTimeout must not deadlock on its firs…",
+     "created_at": "2026-10-27T07:19:06Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7270#issuecomment-6436093884",
+     "body": "我需要想想"
+    },
+    {
+     "id": 6435168200,
+     "issue": 7240,
+     "issue_title": "Xray-core v26.10.21  无法转发 127.0.0.1",
+     "created_at": "2026-10-27T06:14:44Z",
+     "user": "funhunter",
+     "url": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6435168200",
+     "body": "> 17\\. > 11. 这样设置了一下，可以了\n>      > 需要finalRules\n>      > 具体放行哪些，后续再优化\n>      > 感谢！！！！\n>      > `{ \"protocol\": \"freedom\", \"settings\": { \"finalRules\": [ { \"action\": \"allow\" } ] }, \"tag\": \"direct\" },`\n>      \n>      \n>      这个是在哪里修改的？\n\n再服务器端的出口，outbounding 里，原来只有\n```json\n{\n  \"protocol\": \"freedom\",\n  \"tag\": \"direct\"\n},\n```\n现在改为\n```json\n{\n  \"protocol\": \"freedom\",\n  \"settings\": {\n    \"finalRules\": [\n      {\n        \"action\": \"allow\"\n      }\n    ]\n  },\n  \"tag\": \"direct\"\n},\n```\n我这样测试成功，实际使用中，可以根据ip或者端口等进行精确放行，具体参数，可以看文档"
+    },
+    {
+     "id": 6435114782,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T06:10:49Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6435114782",
+     "body": "geoip:private 一直都是 bogon 语义，以后可以考虑给 geodata 搞个 alias\r\n但为了符合用户习惯，不能将 private 真的变成那几个局域网段，会出非预期行为的\r\n\r\n两边仓库的代码注释都有 IANA 连接便于追踪，特意注释掉豁免 IP 段而不是删了也是为了好管理\r\n\r\n64:ff9b::/96 本质就是一内网服务，和其它非公网 ip 段没任何区别，只是 rfc 建议把它当作 nat64，它只是“知名前缀”\r\n\r\n真到了哪天它需要被移出 geoip:private 那么一定是成为唯一事实标准，几乎所有 ipv6 内网全部提供此服务，且都用它作为前缀\r\n网站们也拿他做 aaaa 解析，那时候不得不一并处理 IPMatcher\r\n\r\n几乎不可能的事情\r\n这就是为什么我说 @kokoromagic 在浪费时间，把一个不是问题，没有真实场景，自己没试过，自己也不了解 RFC 相关标准的情况下 bb 那么久浪费精力\r\n\r\n很大概率是他可能花了几块钱买了个 ipv6 only 的 vps 觉得多写一行 finalrules 费事儿了"
+    },
+    {
+     "id": 6434775331,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T05:46:12Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6434775331",
+     "body": "> 旧版 xray 和其它项目也不兼容就没提\r\n\r\n说不定还真可以试试，下游更换数据源估计还没那么快（而且也不一定会跟着换），一般来说目前知道新上的 geodata 的估计已经自己手动下载使用或者用官方脚本下载的\r\n\r\n> 保持 xray 行为自洽一致肯定是要拦的，否则现在就得改 IPMatcher\r\n\r\n我持保留态度吧，因为 IPv4-IPv6 过渡机制有关的东西有时候确实处理起来很模糊\r\n现在这样处理的话建议注释和文档都说明一下，利于排查和后续调整"
+    },
+    {
+     "id": 6433817145,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T04:32:53Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6433817145",
+     "body": "> But I have a question: if an address like `64:ff9b::/96`, `2001:db8::/32`, ... never exists under normal circumstances, why would we still want to block it? If you force a context that isn't real, aren't you perhaps \"overkilling\" it?\r\n\r\nhttps://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391494484\r\n\r\nIn terms of security, this follows the principle of least privilege; in terms of design, it provides clear boundaries and responsibilities, as well as consistency in the internal design of the software."
+    },
+    {
+     "id": 6433617099,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T04:16:50Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6433617099",
+     "body": "> 或许可以在语义的层面上包一个作为兼容层\r\n\r\n的确需要，处理 geoip-lite in-cn 兼容、geosite apple-cn 的时候也想到过\r\n觉得有点费事，旧版 xray 和其它项目也不兼容就没提，以后类似情况多了再说\r\n\r\n> 默认要拦截哪些的话我会更倾向于不给未来留大坑的处理\r\n\r\n保持 xray 行为自洽一致肯定是要拦的，否则现在就得改 IPMatcher"
+    },
+    {
+     "id": 6433433266,
+     "issue": 7132,
+     "issue_title": "Lua: Support inline scripts; Add `./xray base64 encode/decode [-gzip]` command",
+     "created_at": "2026-10-27T04:02:33Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6433433266",
+     "body": "本来早该改的，杂活干多了就 delay 了。。。"
+    },
+    {
+     "id": 6433425340,
+     "issue": 7265,
+     "issue_title": "Geodata: https Max Redirects set to 20",
+     "created_at": "2026-10-27T04:01:56Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7265#issuecomment-6433425340",
+     "body": "下面那个 httpClient 理论上来说不可能被用到，可以顺手注释掉或者删掉"
+    },
+    {
+     "id": 6433402078,
+     "issue": 7267,
+     "issue_title": "Geodata: Limit download size, file extensions, and update frequency",
+     "created_at": "2026-10-27T04:00:06Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267#issuecomment-6433402078",
+     "body": "随手给了 100\r\n基本不可能用到那么多，正常人 10 个都够呛"
+    },
+    {
+     "id": 6433192643,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T03:42:54Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6433192643",
+     "body": "~~考虑到我们已经不用考虑 mmdb 的事，或许可以在语义的层面上包一个作为兼容层，当然这里面内部改成正确命名也没问题~~\r\n如果说默认要拦截哪些的话我会更倾向于不给未来留大坑的处理"
+    },
+    {
+     "id": 6433141659,
+     "issue": 7267,
+     "issue_title": "Geodata: Limit download size, file extensions, and update frequency",
+     "created_at": "2026-10-27T03:38:46Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7267#issuecomment-6433141659",
+     "body": "> 100 限制确实要加，否则频率不起作用\r\n\r\n20 或者 30 或者 50 或者 80？感觉分类多了可能还不如直接下拉取大的"
+    },
+    {
+     "id": 6432842131,
+     "issue": 7243,
+     "issue_title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
+     "created_at": "2026-10-27T03:14:50Z",
+     "user": "yx64",
+     "url": "https://github.com/XTLS/Xray-core/issues/7243#issuecomment-6432842131",
+     "body": "用 Tranco 榜单抽样, 对每个域名以 `openssl s_client -tls1_3 -alpn h2,http/1.1` (SNI 即域名) 握一次, 统计 EncryptedExtensions 为空 (既不确认 SNI 也不选 ALPN) 的数量. 分母是样本里的全部域名, 握手失败的也计入:\n\n| 样本 | 域名数 | 空 EE | 占比 |\n|---|---|---|---|\n| 排名 1-3000 | 3000 | 31 | 1.0% |\n| 3000 名以后随机抽样 | 6000 | 35 | 0.6% |\n\n另外挑了 4 个 EE 为空的真实站点做 target, 端到端对照 (服务端 `show: true`): v26.10.21 每条连接都 `padding: -4`; 去掉 `serverNameAck` 那三行后全部正常; 换成确认 SNI 的 target, 两个版本都正常.\n\n我个人认为不算罕见: 配置里只对少数几类域名给出警告, 其余的普通站点里约 0.6%-1% 是空 EE; 一旦用上, 每条连接都失败, 不开 `show` 时只有一条 Info 级日志, 无密钥的探测走回落也照常通过, 使用者很难自己定位; 而且同样的 target 在 26.9.9 上正常, 已在用的节点升级后会直接断掉.\n\n算不算罕见, 要不要修, 最终由你决定.\n\n*AI-assisted (Claude); the numbers above were measured, not estimated.*\n"
+    },
+    {
+     "id": 6432479212,
+     "issue": 7132,
+     "issue_title": "Lua: Support inline scripts; Add `./xray base64 encode/decode [-gzip]` command",
+     "created_at": "2026-10-27T02:46:33Z",
+     "user": "j2rong4cn",
+     "url": "https://github.com/XTLS/Xray-core/pull/7132#issuecomment-6432479212",
+     "body": "文档还是router:PickOutbound 😅\r\n<img width=\"1333\" height=\"312\" alt=\"image\" src=\"https://github.com/user-attachments/assets/6b49f21f-45bc-412f-89f2-24efc01eec48\" />\r\n"
+    },
+    {
+     "id": 6432051757,
+     "issue": 7249,
+     "issue_title": "Geodata: Update built-in private IP ranges",
+     "created_at": "2026-10-27T02:13:55Z",
+     "user": "vincentng295",
+     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6432051757",
+     "body": "@kokoromagic is correct in terms of pure theory and concepts, but @Meo597 is correct in terms of the practical operation of the software. But I have a question: if an address like `64:ff9b::/96`, `2001:db8::/32`, ... never exist under normal circumstances, why would we still want to block it? If you force a context that isn't real, aren't you perhaps \"overkilling\" it?"
+    },
+    {
+     "id": 6431455838,
+     "issue": 7265,
+     "issue_title": "Geodata: https Max Redirects set to 20",
+     "created_at": "2026-10-27T01:28:45Z",
+     "user": "xqzr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7265#issuecomment-6431455838",
+     "body": "> 135行还有 两个人没一个注意到么\r\n\r\n有的。下面没有 Chrome 相关的，所以没改"
+    },
     {
      "id": 6426466365,
      "issue": 7248,
@@ -1364,56 +1525,22 @@
      "user": "brookwko",
      "url": "https://github.com/XTLS/Xray-core/issues/6454#issuecomment-6397288429",
      "body": "FreeBSD is covered now: #7123 adds `autoSystemDnsToGateway` on FreeBSD (same gateway approach as Linux), included since v26.10.21."
-    },
-    {
-     "id": 6395116094,
-     "issue": 7243,
-     "issue_title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
-     "created_at": "2026-10-25T07:55:56Z",
-     "user": "bumfuzzleme",
-     "url": "https://github.com/XTLS/Xray-core/issues/7243#issuecomment-6395116094",
-     "body": "I had the same bug on 26.10.21 with some camouflage target. As soon as I installed version 26.3.27 instead of the latest version, everything started to work fine. Didn't test it on other versions or targets though."
-    },
-    {
-     "id": 6393537079,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in private IP ranges",
-     "created_at": "2026-10-25T04:40:46Z",
-     "user": "kokoromagic",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6393537079",
-     "body": "Non-routable does not mean `private`, ~that's why there should be `geoip:reserved`~\r\n~Considering all non-routable IPs on public as `private` will only lead people to misunderstand the nature of these IP ranges.~"
-    },
-    {
-     "id": 6391494484,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in private IP ranges",
-     "created_at": "2026-10-25T00:36:54Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391494484",
-     "body": "总之用户连接到 xray 服务器端，默认不允许访问到公网不可能出现的 ip\r\n反之不该发往公网的流量，默认也不应发给 xray 服务器"
-    },
-    {
-     "id": 6391438595,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in private IP ranges",
-     "created_at": "2026-10-25T00:30:38Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391438595",
-     "body": "并不，核心要考虑得更多\r\n\r\n例如 6to4、example addr\r\n都可能在一些奇怪的局域网中被使用，必须把它们纳入进来"
-    },
-    {
-     "id": 6391414442,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in private IP ranges",
-     "created_at": "2026-10-25T00:27:56Z",
-     "user": "kokoromagic",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6391414442",
-     "body": "Actually block `127.0.0.1/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `::/127`, `fe80::/10`, `fc00::/7` is enough to prevent LAN access"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 2407,
+     "title": "Не скачивайте, программа потом не удаляется",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-03-25T04:58:25Z",
+     "updated_at": "2026-10-27T08:08:42Z",
+     "user": "hargohargohargo",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2407",
+     "body": "Решил удалить амнезию так как давно ей не пользовался, но постоянно выбивает ошибку что файл открыт в какой-то другой программе. В самой папке нет файла uninstall, решил просто удалить все файлы. По итогу остался 1 файл - mullvad-split-tunnel.sys. Который НИКАК не удалялся. Постоянно вылазила ошибка что файл открыт в какой-то другой программе, хотя я прогнал файл через 5 софтов и все показали что файл не открыт нигде. Он просто намертво застрял в системе. По итогу смог его удалить только через безопасный режим. Не знаю какие криворукие писали код для этого софта, но устанавливать на свой страх и риск"
+    },
     {
      "number": 3327,
      "title": "feat: follow server IP changes behind the host name without a manual reconnect",
@@ -1648,6 +1775,15 @@
    ],
    "comments": [
     {
+     "id": 6436838378,
+     "issue": 2407,
+     "issue_title": "Не скачивайте, программа потом не удаляется",
+     "created_at": "2026-10-27T08:08:42Z",
+     "user": "Asqwert1",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2407#issuecomment-6436838378",
+     "body": "Проблема актуальна\n\n1. установщик версии 5.0.3, то бишь самый актуальный сейчас, не заносит сведения о программе в реестр или заносит некорректно. Из-за этого панель управления и программы-деинсталляторы не видят факт установки AmneziaVPN, и деинсталлировать через них нельзя (по какой то причине даже product code в дереве реестра Uninstall нет, поэтому траблшутер от windows не поможет)\n\n2. встроенный деинсталлятор НЕ деинсталлирует запущенный на уровне ядра mullvad-split-tunnel.sys. Пришлось удалять через безопасный режим. Выше упомянули о Process Hacker, и если этот способ работает, то становится еще интересней, почему эту механику нельзя включить в оригинальный деинсталлятор.\n\nМайнеры и трояны по моему опыту удаляются проще. Такое себе развлечение"
+    },
+    {
      "id": 6416706094,
      "issue": 3329,
      "issue_title": "[Feature Request] Support for non-systemd Linux distributions (OpenRC, runit, dinit, s6, SysVinit)",
@@ -1679,12 +1815,23 @@
   "apernet/hysteria": {
    "issues": [
     {
+     "number": 1706,
+     "title": "feat(tun): add an L3 TUN that carries whole IP packets",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-17T00:56:29Z",
+     "updated_at": "2026-10-27T02:12:01Z",
+     "user": "wizd",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1706",
+     "body": "## Summary\r\n\r\nAdds an optional `l3tun` mode that copies whole IP packets between a local TUN device and QUIC datagrams. It does not terminate TCP or UDP. The intended use is to run VXLAN (or any other IP protocol) between the two TUNs, so the overlay keeps a normal 1500-byte inner MTU instead of squeezing VXLAN through `udpForwarding` and a reduced MTU.\r\n\r\nBoth ends opt in. The client sends `Hysteria-L3: true` on the existing auth request only when `l3tun` is configured, and the server grants it only when it has `l3tun` as well. The header is also sent as `false` otherwise; an older peer ignores the unknown header. L3 datagrams use session id 0 and a zero address-length byte, which `ParseUDPMessage` already rejects, so an older peer drops them.\r\n\r\n## How packets are carried\r\n\r\nOne IP packet is sent as one QUIC datagram. If that datagram is larger than the peer's current payload limit (`quic.DatagramTooLargeError`), it is split into evenly sized fragments.\r\n\r\nThe datagram prefix is 11 bytes:\r\n\r\n```\r\nSessionID u32 = 0 | PacketID low 16 | FragID u8 | FragCount u8 | 0x00 | PacketID high 16 | IP packet\r\n```\r\n\r\nFragments of different packets may interleave and are reassembled by the 32-bit packet id. A missing fragment drops the whole packet. There is no fragment retransmission; an inner TCP retransmits. Reassembly gives up after 200 ms. The largest IP packet is 1600 bytes. A 1600-byte packet under the usual 1200-byte datagram frame is two fragments of about 800 bytes.\r\n\r\nThe server keeps one L3 peer: the latest authenticated client that requested L3 replaces the previous one. Packets read from the local TUN while no peer is connected are discarded. Before a received packet is written into the local TUN, its source address must equal the configured `peer`.\r\n\r\nThe client L3 device stays up across QUIC reconnects. Traffic is counted with the existing `TrafficLogger`, in the same direction as UDP proxying.\r\n\r\n`l3tun` is supported on Linux, Darwin, Windows, and Android (sing-tun). Creating the device needs root or `CAP_NET_ADMIN`. Hysteria creates and addresses `hytun0` only. The operator adds the VXLAN interface after the TUN exists. VXLAN's UDP port stays inside the tunnel, so it does not need a public firewall opening.\r\n\r\n## Configuration\r\n\r\nClient:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.2/30\r\n  peer: 10.200.0.1\r\n```\r\n\r\nServer:\r\n\r\n```yaml\r\nl3tun:\r\n  name: hytun0\r\n  mtu: 1600\r\n  address: 10.200.0.1/30\r\n  peer: 10.200.0.2\r\n```\r\n\r\n`mtu` defaults to 1600 and cannot be higher. `address` is a prefix; `peer` must be the same IP version. A `/30` gives a connected route, so this tunnel does not need IP forwarding and does not capture the path back to the server's public address.\r\n\r\nOperator notes, including the VXLAN commands, are in `VXLAN.md` (currently written in Chinese). For an inner MTU of 1500 the outer packet is about 1550 bytes (Ethernet 14 + VXLAN 8 + UDP 8 + IPv4 20), which fits in the 1600-byte TUN without kernel fragmentation:\r\n\r\n```bash\r\nping -M do -s 1472 -c 3 10.201.0.1\r\n```\r\n\r\n## Test results\r\n\r\nMeasured on this branch, Linux amd64 at both ends. `hytun0` MTU 1600. VXLAN between the two TUN addresses. Path: a residential PPPoE link (uplink about 40 Mbps) to a Tokyo VPS, then to a second Tokyo host running iperf3 3.16. The iperf3 client is 3.9. Brutal limits on the client were 90 Mbps up and 200 Mbps down, with loss compensation disabled. The QUIC max datagram frame size is 1200 bytes.\r\n\r\nSame-region control, VPS to the iperf3 host, 8 seconds: 4374 Mbps up, 4441 Mbps down. The iperf3 server is not the bottleneck.\r\n\r\nTunnel RTT to that host, 10/10: min / avg / max 60.4 / 66.3 / 97.9 ms.\r\n\r\nEach VXLAN MTU below is one 10-second single TCP stream in each direction. Numbers are receiver goodput. Retransmissions are the sender's 10-second total. \"Outer IP\" is `vx MTU + 50`. A packet becomes two QUIC datagrams once the outer IP plus the 11-byte L3 header no longer fits in the 1200-byte frame; 1140 (outer"
+    },
+    {
      "number": 1712,
      "title": "fix(scripts): start server units after network-online.target",
      "is_pr": true,
-     "state": "open",
+     "state": "closed",
      "created_at": "2026-10-26T01:01:43Z",
-     "updated_at": "2026-10-26T23:43:30Z",
+     "updated_at": "2026-10-27T00:46:01Z",
      "user": "escape0707",
      "url": "https://github.com/HyNetworks/hysteria/pull/1712",
      "body": "The systemd units written by `install_server.sh` only order after `network.target`. That target means the network stack is configured, not that the network is up, so on some boots the server starts before DNS works.\n\nThe server resolves hostnames while it loads its config. One example is the realm STUN servers. When that lookup fails at boot, the service exits with:\n\n```\nFATAL failed to load server config {\"error\": \"invalid config: realm.stun: lookup <stun host>: i/o timeout\"}\n```\n\nThe unit has no `Restart=`, so it stays down until someone starts it by hand.\n\nThis change adds `Wants=network-online.target` and `After=network-online.target` to the server unit template, which systemd documents for services that need a working network at startup: https://systemd.io/NETWORK_ONLINE/\n"

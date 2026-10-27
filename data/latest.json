@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-27T15:21:17Z",
- "since": "2026-10-25T15:21:17Z",
+ "generated_at": "2026-10-27T22:13:51Z",
+ "since": "2026-10-25T22:13:51Z",
  "repos": {
   "net4people/bbs": {
    "issues": [],
@@ -40,17 +40,6 @@
      "user": "destime224",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1372",
      "body": "While Yggdrasil service is up `$ ssh -Tv git@codeberg` cannot connect and shows\n```\n...\ndebug1: Connecting to codeberg.org [2a0a:4580:103f:c0de::1] port 22\n...\n```\n[2a0a:...::1] is ipv6 of codeberg.org.\nBut `$ dig codeberg.org` lookups \n```\n...\n;; ANSWER SECTION:\ncodeberg.org.           2066    IN      A       217.197.84.140\n```\n<img width=\"1294\" height=\"471\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/759b9902-9a9b-4306-bce4-4b59f15e5f13\" />\nStopping yggdrasil service fixes the problem\n\n```\nygg0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 65535 qdisc pfifo_fast state UNKNOWN group default qlen 500\n    link/none \n    inet6 200:.../7 scope global \n       valid_lft forever preferred_lft forever\n    inet6 fe80::306f:ba4c:5497:c287/64 scope link stable-privacy proto kernel_ll \n       valid_lft forever preferred_lft forever\n```\n<hr>\nopenSUSE Tumbleweed 20260916\n\nBuild name: yggdrasil\nBuild version: 0.5.14"
-    },
-    {
-     "number": 1405,
-     "title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-25T12:10:45Z",
-     "updated_at": "2026-10-25T18:25:37Z",
-     "user": "krivonosoff161",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405",
-     "body": "Should Yggdrasil start QUIC links with 1200-byte packets to support paths with IP MTU 1280, or should this remain entirely a quic-go fallback policy?\n\nI reproduced a connection problem on `develop` at `2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35` (quic-go v0.64.1, Go 1.26.9). A proposed application-level change and regression test are available in [commit b37b195](https://github.com/krivonosoff161/yggdrasil-go/commit/b37b19588936020682f3c442c9d963d84211040b). I would like to confirm the intended behaviour and whether that change belongs here.\n\n### Small reproducible example\n\nUse the production QUIC link listener, dialler and TLS configuration, with a local UDP relay between them. The relay forwards datagrams in both directions but drops those exceeding the path's payload limit. It does not return a local send error or fabricate QUIC responses.\n\n| Path | UDP payload limit | Current configuration | InitialPacketSize=1200 on both endpoints |\n| --- | --- | --- | --- |\n| IPv4, IP MTU 1500 | 1472 bytes | connection and transfer pass | pass |\n| IPv4, IP MTU 1280 | 1252 bytes | handshake timeout | 4096-byte request and reply pass |\n| IPv6, IP MTU 1280 | 1232 bytes | handshake timeout | 4096-byte request and reply pass |\n\nThe [regression test](https://github.com/krivonosoff161/yggdrasil-go/blob/b37b19588936020682f3c442c9d963d84211040b/src/core/link_quic_test.go) is included in that commit. With the test added to the base code, the two low-MTU cases fail; with the three-line production change, all cases pass. Run it with:\n\n```sh\ngo test -count=1 -v -run TestQUICLinkThroughLimitedPath ./src/core\n```\n\nThe proposed change is in the shared listener/dialler configuration in `src/core/link_quic.go`:\n\n```go\n// Inside the existing quic.Config:\nInitialPacketSize: 1200,\n```\n\nThe default initial UDP payload is 1280 bytes, which becomes 1308 bytes with IPv4/UDP headers or 1328 with IPv6/UDP headers. If the smaller MTU is on an intermediate router, a local write can succeed while the packet is dropped further along the path. The local `EMSGSIZE` fallback added in quic-go 0.64 does not cover that silent-drop case. Path MTU discovery remains enabled with the proposed setting.\n\n### Routed failure and recovery\n\nI also tested actual Yggdrasil processes across two Linux kernel routers in isolated network namespaces:\n\n1. Establish the QUIC link with path MTU 1500 and successfully request a roughly 12 KiB NodeInfo response.\n2. Lower the intermediate link MTU to 1280 while keeping the endpoint links at 1500.\n3. Request the same response again.\n\nBefore the change, the large request fails, the peer goes down, and no recovery is observed during 85 seconds at MTU 1280. Restoring MTU 1500 restores communication. With 1200 configured on both endpoints, the first large request still fails, but the following small and large requests succeed while the path remains at MTU 1280. This was observed both with ICMP fragmentation-needed messages delivered and with them blocked, with packet-header captures and router counters checked.\n\nThis does **not** establish that the change fixes every PMTU decrease on an existing connection. The initial failed request remains, mixed-version peers may still send larger initial packets, and throughput impact has not been benchmarked. The established-connection black-hole problem is already tracked in [quic-go#5914](https://github.com/quic-go/quic-go/issues/5914). Related work includes the merged [local-error fallback #5911](https://github.com/quic-go/quic-go/pull/5911) and closed [handshake retry proposal #5936](https://github.com/quic-go/quic-go/pull/5936); I am not proposing to duplicate that library work here.\n\nLocal validation: Windows full Go test suite and `go vet` pass; all seven Linux test-package binaries were executed successfully in an isolated network namespace, including IPv6. NAT state loss, translated-port change and conntrack expiry also recovered with the candidate. GitHub CI has not run.\n\nWould starting at QUIC's 1200-byte"
     }
    ],
    "comments": [
@@ -89,29 +78,77 @@
      "user": "HeadedBranch",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1372#issuecomment-6406371659",
      "body": "To get the ipv6 address, you need to use dig AAAA, to query the ipv6 addresses (dig's default is A)\nI assume you don't have a normal ipv6 interface, therefore yggdrasil is your only ipv6, which will cause issues as the programs see you have ipv6 (as that is how yggdrasil routes currently) and tries to connect to the service, but it is unreachable\nI have been able to fix it with some routing config settings but can't remember the exact changes I made, but that is at least why the issue is appearing"
-    },
-    {
-     "id": 6401444963,
-     "issue": 1405,
-     "issue_title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
-     "created_at": "2026-10-25T18:25:37Z",
-     "user": "majestrate",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405#issuecomment-6401444963",
-     "body": "I suspect the right play is to let quic-go detect PMTU however it decides to internally. This shouldn't be our place to work around. "
-    },
-    {
-     "id": 6400991491,
-     "issue": 1405,
-     "issue_title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
-     "created_at": "2026-10-25T17:44:23Z",
-     "user": "krivonosoff161",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405#issuecomment-6400991491",
-     "body": "Fair point about the length — sorry. I'll keep follow-ups shorter.\n\nThis changes the initial UDP payload size to 1200 bytes, not stream limits. quic-go still rejects Initial datagrams below 1200 bytes.\n\nI ran separate local before/after checks using Yggdrasil's QUIC listener, dropping every server response so the client could not complete the handshake. The IPv4/IPv6 matrix covered default/1200-byte clients, repeats and truncated datagrams. The 1199- and 32-byte inputs produced no replies.\n\nThere is an important caveat: in a longer 12-second check with 2400 input bytes, the server sent 8417 bytes before and 7304 after. So I cannot claim a strict 3x bound. quic-go already explicitly [tests allowing the last packet to exceed that budget](https://github.com/quic-go/quic-go/blob/v0.64.1/internal/ackhandler/sent_packet_handler_test.go#L519-L531). These bounded checks did not demonstrate a new amplification bypass from this setting; they are not an exhaustive security assessment.\n\nOn general flakiness: no, this only addresses the demonstrated handshake/reconnection failure on a 1280-byte IP path. In the routed test, the first request could still fail; subsequent requests recovered with the setting. I haven't established a fix for QUIC's broader reliability problems."
     }
    ]
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2609,
+     "title": "fix UPnP patch",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-22T18:30:34Z",
+     "updated_at": "2026-10-27T17:45:32Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2609",
+     "body": "Оно и с `@@ -31,7 +31,7 @@` работает\n\n\n"
+    },
+    {
+     "number": 2614,
+     "title": "move HaikuDaemon.cpp to a separate dir",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-25T15:11:30Z",
+     "updated_at": "2026-10-27T17:45:26Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2614",
+     "body": ""
+    },
+    {
+     "number": 2612,
+     "title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-24T20:09:11Z",
+     "updated_at": "2026-10-27T17:45:20Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2612",
+     "body": "Debian 13, there was Linux build like this: \r\n`g++ -DUSE_UPNP -DGITVER=3.0.0-18-ga646ac2c -Wl,-z,relro -Wl,-z,now  -o i2pd obj/daemon/Daemon.o obj/daemon/HaikuDaemon.o obj/daemon/HTTPServer.o obj/daemon/I2PControl.o obj/daemon/I2PControlHandlers.o obj/daemon/i2pd.o obj/daemon/UnixDaemon.o obj/daemon/UPnP.o libi2pd.a libi2pdclient.a libi2pdlang.a -lboost_json -lboost_url -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -lminiupnpc`\r\n\r\nНа Haiku не проверял.\r\n"
+    },
+    {
+     "number": 2610,
+     "title": "fix Makefile.linux logic, improve readability",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-22T21:01:36Z",
+     "updated_at": "2026-10-27T17:45:18Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2610",
+     "body": ""
+    },
+    {
+     "number": 2616,
+     "title": "Check read and write results for torrent files and reopen a broken stream",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-25T23:16:25Z",
+     "updated_at": "2026-10-27T16:54:52Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2616",
+     "body": "As asked in #dev by orignal and R4SAS.\n\n`TorrentFile::Save` and `Load` did not look at the result of the write or the read, so a failed write was reported as success. Worse, the failure leaves the error flag set on the stream while the file stays open, and `Open` only opens when the file is closed - so every later call failed silently for the life of the object, while `m_LastAccessTime` kept being updated so the file was not closed by inactivity either.\n\nNow both calls check the stream after the operation, log the error with `strerror` and return false, and `Open` closes and clears a stream that is open but in a failed state before reopening it. The periodic flush is checked too, since that is where a buffered write actually reaches the disk.\n\nMeasured with a harness that sets `RLIMIT_FSIZE` to 64 KB and writes past it:\n\n| step | before | after |\n|---|---|---|\n| write at offset 0 | true | true |\n| write past the size limit | true | true (buffered, see below) |\n| write at offset 2048 after the failure | true (nothing written) | false |\n| read at offset 0 | false | true |\n\nThe file on disk holds 1024 bytes in both cases - that is, the second and third writes were lost while reporting success. After the change the lost write is reported, and the stream recovers for the next call instead of staying broken.\n\nOne honest limitation: writes are buffered, so a write that oversteps a limit still returns true at that moment and the error surfaces on the next call or on the flush. Forcing a flush per block would make it immediate, but that is a different trade-off on disk IO, so I left it to you. Build without warnings, unit tests pass."
+    },
+    {
+     "number": 2330,
+     "title": "Threads data races detection",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-02-20T12:44:03Z",
+     "updated_at": "2026-10-27T16:07:31Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2330",
+     "body": "Thread Sanitizer https://github.com/google/sanitizers/wiki/ThreadSanitizerCppManual\n\nSome warnings detected  https://github.com/PurpleI2P/i2pd/issues/1509#issuecomment-3928656874  and below \n\nHow to reproduce\n ------\nDebian 12.13 x86_64 (maybe the same in Debian 13)\nCheck if the packages are installed (maybe only  libtsan2 is needed)\n```\nii  libasan8:amd64                         12.2.0-14+deb12u1                       amd64        AddressSanitizer -- a fast memory error detector\nii  liblsan0:amd64                         12.2.0-14+deb12u1                       amd64        LeakSanitizer -- a memory leak detector (runtime)\nii  libtsan2:amd64                         12.2.0-14+deb12u1                       amd64        ThreadSanitizer -- a Valgrind-based detector of data races (runtime)\nii  libubsan1:amd64                        12.2.0-14+deb12u1                       amd64        UBSan -- undefined behaviour sanitizer (runtime)\n```\nCompile with `-fsanitize=thread -fno-omit-frame-pointer`\nLink with `-ltsan`\nFor example, add these options to the Makefile.linux\n```\nuser@xxxxxx$ git diff\ndiff --git a/Makefile.linux b/Makefile.linux\nindex 4ea39e22..69946d82 100644\n--- a/Makefile.linux\n+++ b/Makefile.linux\n@@ -1,5 +1,5 @@\n # set defaults instead redefine\n-CXXFLAGS ?= ${CXX_DEBUG} -Wall -Wextra -Wno-unused-parameter -pedantic -Wno-psabi\n+CXXFLAGS ?= ${CXX_DEBUG} -Wall -Wextra -Wno-unused-parameter -pedantic -Wno-psabi -fsanitize=thread -fno-omit-frame-pointer\n LDFLAGS ?= ${LD_DEBUG}\n\n ## NOTE: The NEEDED_CXXFLAGS are here so that custom CXXFLAGS can be specified at build time\n@@ -40,7 +40,7 @@ ifeq ($(USE_UPNP),yes)\n endif\n        LDLIBS += -lpthread -ldl\n else\n-       LDLIBS += -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic\n+       LDLIBS += -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -ltsan\n ifeq ($(USE_UPNP),yes)\n        LDLIBS += -lminiupnpc\n endif\n```\nBuild with `make`, еxecutable file i2pd will be generated in working directory\n`xxxxxx# file ./i2pd`\n`./i2pd: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=df85046f1dd4e0a20c50f09fde4c75830ac32509, for GNU/Linux 3.2.0, with debug_info, not stripped`\n\nRun ./i2pd as root \n~with `LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtsan.so.2`~\nand `2>./threads_out.txt`\nand some other options, depending on your system configuration (./i2pd --help),\nfor example \n`root@xxxxxxx# prlimit --core=unlimited --nofile=20000  ./i2pd --conf=/etc/i2pd/i2pd.conf --tunconf=/etc/i2pd/tunnels.conf --logfile=/var/log/i2pd/i2pd.log  --service   2>./threads_out.txt` .\nSignificant RAM usage is expected.\nAfter some runtime stop the i2pd with Ctrl-C, read the threads_out.txt \nor split it  `csplit threads_out.txt  /WARNING/ {*}`   .\nor look inside `grep -E \"Thread\\ T|====|SUMM\"   threads_out.txt  | nl`\n"
+    },
     {
      "number": 2617,
      "title": "RUNTIME 10:17:26",
@@ -144,17 +181,6 @@
      "user": "bluca",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2389",
      "body": "sysusers.d/tmpfiles.d config files allow a package to use declarative configuration instead of manually written maintainer scripts.\nThis also allows image-based systems to be created with /usr/ only, and also allows for factory resetting a system and recreating /etc/ on boot.\n\nhttps://www.freedesktop.org/software/systemd/man/latest/sysusers.d.html\nhttps://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html\n\nThey are not specific to debian, so move them to the contrib/ directory.\nAlso rename to the canonical form, which is tmpfiles (plural)."
-    },
-    {
-     "number": 2330,
-     "title": "Threads data races detection",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-02-20T12:44:03Z",
-     "updated_at": "2026-10-26T19:50:56Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2330",
-     "body": "Thread Sanitizer https://github.com/google/sanitizers/wiki/ThreadSanitizerCppManual\n\nSome warnings detected  https://github.com/PurpleI2P/i2pd/issues/1509#issuecomment-3928656874  and below \n\nHow to reproduce\n ------\nDebian 12.13 x86_64 (maybe the same in Debian 13)\nCheck if the packages are installed (maybe only  libtsan2 is needed)\n```\nii  libasan8:amd64                         12.2.0-14+deb12u1                       amd64        AddressSanitizer -- a fast memory error detector\nii  liblsan0:amd64                         12.2.0-14+deb12u1                       amd64        LeakSanitizer -- a memory leak detector (runtime)\nii  libtsan2:amd64                         12.2.0-14+deb12u1                       amd64        ThreadSanitizer -- a Valgrind-based detector of data races (runtime)\nii  libubsan1:amd64                        12.2.0-14+deb12u1                       amd64        UBSan -- undefined behaviour sanitizer (runtime)\n```\nCompile with `-fsanitize=thread -fno-omit-frame-pointer`\nLink with `-ltsan`\nFor example, add these options to the Makefile.linux\n```\nuser@xxxxxx$ git diff\ndiff --git a/Makefile.linux b/Makefile.linux\nindex 4ea39e22..69946d82 100644\n--- a/Makefile.linux\n+++ b/Makefile.linux\n@@ -1,5 +1,5 @@\n # set defaults instead redefine\n-CXXFLAGS ?= ${CXX_DEBUG} -Wall -Wextra -Wno-unused-parameter -pedantic -Wno-psabi\n+CXXFLAGS ?= ${CXX_DEBUG} -Wall -Wextra -Wno-unused-parameter -pedantic -Wno-psabi -fsanitize=thread -fno-omit-frame-pointer\n LDFLAGS ?= ${LD_DEBUG}\n\n ## NOTE: The NEEDED_CXXFLAGS are here so that custom CXXFLAGS can be specified at build time\n@@ -40,7 +40,7 @@ ifeq ($(USE_UPNP),yes)\n endif\n        LDLIBS += -lpthread -ldl\n else\n-       LDLIBS += -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic\n+       LDLIBS += -lssl -lcrypto -lz -lboost_program_options -lpthread -latomic -ltsan\n ifeq ($(USE_UPNP),yes)\n        LDLIBS += -lminiupnpc\n endif\n```\nBuild with `make`, еxecutable file i2pd will be generated in working directory\n`xxxxxx# file ./i2pd`\n`./i2pd: ELF 64-bit LSB pie executable, x86-64, version 1 (GNU/Linux), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=df85046f1dd4e0a20c50f09fde4c75830ac32509, for GNU/Linux 3.2.0, with debug_info, not stripped`\n\nRun ./i2pd as root \n~with `LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtsan.so.2`~\nand `2>./threads_out.txt`\nand some other options, depending on your system configuration (./i2pd --help),\nfor example \n`root@xxxxxxx# prlimit --core=unlimited --nofile=20000  ./i2pd --conf=/etc/i2pd/i2pd.conf --tunconf=/etc/i2pd/tunnels.conf --logfile=/var/log/i2pd/i2pd.log  --service   2>./threads_out.txt` .\nSignificant RAM usage is expected.\nAfter some runtime stop the i2pd with Ctrl-C, read the threads_out.txt \nor split it  `csplit threads_out.txt  /WARNING/ {*}`   .\nor look inside `grep -E \"Thread\\ T|====|SUMM\"   threads_out.txt  | nl`\n"
     },
     {
      "number": 2265,
@@ -201,17 +227,6 @@
      "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
     },
     {
-     "number": 2616,
-     "title": "Check read and write results for torrent files and reopen a broken stream",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-25T23:16:25Z",
-     "updated_at": "2026-10-25T23:54:41Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2616",
-     "body": "As asked in #dev by orignal and R4SAS.\n\n`TorrentFile::Save` and `Load` did not look at the result of the write or the read, so a failed write was reported as success. Worse, the failure leaves the error flag set on the stream while the file stays open, and `Open` only opens when the file is closed - so every later call failed silently for the life of the object, while `m_LastAccessTime` kept being updated so the file was not closed by inactivity either.\n\nNow both calls check the stream after the operation, log the error with `strerror` and return false, and `Open` closes and clears a stream that is open but in a failed state before reopening it. The periodic flush is checked too, since that is where a buffered write actually reaches the disk.\n\nMeasured with a harness that sets `RLIMIT_FSIZE` to 64 KB and writes past it:\n\n| step | before | after |\n|---|---|---|\n| write at offset 0 | true | true |\n| write past the size limit | true | true (buffered, see below) |\n| write at offset 2048 after the failure | true (nothing written) | false |\n| read at offset 0 | false | true |\n\nThe file on disk holds 1024 bytes in both cases - that is, the second and third writes were lost while reporting success. After the change the lost write is reported, and the stream recovers for the next call instead of staying broken.\n\nOne honest limitation: writes are buffered, so a write that oversteps a limit still returns true at that moment and the error surfaces on the next call or on the flush. Forcing a flush per block would make it immediate, but that is a different trade-off on disk IO, so I left it to you. Build without warnings, unit tests pass."
-    },
-    {
      "number": 2615,
      "title": "Check stream errors when verifying SU3 signature",
      "is_pr": true,
@@ -221,20 +236,18 @@
      "user": "pobregat0",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2615",
      "body": "As pointed out in #dev: the SU3 signature verification does not look at stream errors.\n\nTwo things in that block. The stream position was taken into a `size_t`, and `tellg` returns -1 on a stream error, which turns into a huge value and then into `tbsLen` and `new uint8_t[tbsLen]`. And the results of the two reads were not checked at all: on a truncated file the digest is computed over the whole declared length, with everything past what was read being uninitialized memory from `new`.\n\nNow the position is checked for a negative value, and each read is checked against the length it was supposed to deliver, with the buffers freed before returning.\n\nMeasured with a harness that feeds a file whose declared content length is 64 MB while the file itself is 121 bytes, with a signer whose certificate is present (otherwise the branch is never reached): before the change the log says only \"SU3 signature verification failed\" - that is, the incomplete data was hashed as if it were whole and the blame fell on the signature; after it the log says \"SU3 signed data is incomplete: 121 of 67108921\" and parsing stops there. Both return 0, so nothing else changes for the caller. Build without warnings, unit tests pass."
-    },
-    {
-     "number": 2614,
-     "title": "move HaikuDaemon.cpp to a separate dir",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-25T15:11:30Z",
-     "updated_at": "2026-10-25T22:27:28Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2614",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 6447016244,
+     "issue": 2330,
+     "issue_title": "Threads data races detection",
+     "created_at": "2026-10-27T16:07:31Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2330#issuecomment-6447016244",
+     "body": "i2pd version 3.0.0-27-gab018c7c (0.9.71)\nNTCP2 disabled\nuptime 6h\nХит-парад изменился\nВ прилагаемом файле вероятно можно найти что-то интересное\n```\n~# grep -E  \"Thread\\ T[0-9]\"   th2_ssu2.txt  | sort | uniq -c | sort -gr\n    212   Thread T10 'NetDB' (tid=2523604, running) created by main thread at:\n    155   Thread T13 'SSU2' (tid=2523607, running) created by main thread at:\n    129   Thread T9 'NetDbReq' (tid=2523603, running) created by main thread at:\n    102   Thread T12 'Transports' (tid=2523606, running) created by main thread at:\n     49   Thread T16 'Tunnels' (tid=2523610, running) created by main thread at:\n     14   Thread T17 'TBM' (tid=2523611, running) created by main thread at:\n     11   Thread T15 'Webconsole' (tid=2523609, running) created by main thread at:\n      5   Thread T18 'Router' (tid=2523612, running) created by main thread at:\n      2   Thread T649 (tid=2524936, running) created by thread T10 at:\n      2   Thread T321 (tid=2524036, finished) created by thread T10 at:\n      2   Thread T2241 (tid=2536935, running) created by thread T10 at:\n      2   Thread T1528 (tid=2531895, running) created by thread T10 at:\n      2   Thread T1385 (tid=2531694, finished) created by thread T10 at:\n      1   Thread T6477 (tid=2548296, running) created by thread T10 at:\n      1   Thread T20 'HTTPProxy' (tid=2523614, running) created by main thread at:\n```\n\n[th2_ssu2.txt.gz](https://github.com/user-attachments/files/34029170/th2_ssu2.txt.gz)\n"
+    },
     {
      "id": 6444820770,
      "issue": 2617,
@@ -423,33 +436,6 @@
      "user": "orignal",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2613#issuecomment-6404705922",
      "body": "Need more details"
-    },
-    {
-     "id": 6403841367,
-     "issue": 2585,
-     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "created_at": "2026-10-25T21:53:18Z",
-     "user": "orignal",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6403841367",
-     "body": "Build openssl manually."
-    },
-    {
-     "id": 6400667960,
-     "issue": 2585,
-     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "created_at": "2026-10-25T17:14:40Z",
-     "user": "OlegGirko",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6400667960",
-     "body": "So, what would be a solution for systems with modern OpenSSL that does not support DSA?\nI have a few eepsites that were created quote a while ago, so they use DSA-SHA1 as their keys. These keys correspond to the names registered with popular eepsite directories (like stats.i2p). Now I have no way to run these eepsites. Is there an upgrade path to newer key formats so I can re-register these eepsites with these new keys in eepsite directories?"
-    },
-    {
-     "id": 6399588693,
-     "issue": 2612,
-     "issue_title": "exclude redundant HaikuDaemon.cpp from Linux and other OS builds",
-     "created_at": "2026-10-25T15:34:30Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2612#issuecomment-6399588693",
-     "body": "Почему бы и нет, если это будет позже полезно \r\nhttps://github.com/PurpleI2P/i2pd/pull/2614\r\n"
     }
    ]
   },
@@ -459,6 +445,17 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7263,
+     "title": "CI: Enforce stricter checks on generated protobuf files",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T15:18:25Z",
+     "updated_at": "2026-10-27T16:56:32Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263",
+     "body": "用指定的版本全部重新生成一遍强校验，防止...\r\n\r\n代价是每次切 go 版本的时候要重新生成一次，因为不同 go 版本的产物也不一样（着实没想到）"
+    },
     {
      "number": 7243,
      "title": "REALITY: authenticated handshake fails with `padding: -4` when the target sends an empty EncryptedExtensions (since v26.10.21)",
@@ -480,17 +477,6 @@
      "user": "Anderhar",
      "url": "https://github.com/XTLS/Xray-core/issues/7273",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nWhen balancer is selected as dialerProxy (via loopback) for the outbound with the reverse tag enabled, xray-core chooses one (sometimes two) random unit from the selector list right at startup and then never changes it anymore. \nRestarting xray-core is the only effective way to rotate selector for given reverse outbound, regardless of the preferred strategy (Random, RoundRobin, or LeastLoad). \nTemporary forcing an override outbound on the 3X-UI balancer pane also has no effect. \nI’m not even sure that the fallback will be triggered when it necessary. \nOther (non-reverse) connections through the same balancer at the same time are handled as expected. \nRemoving the reverse tag from that same outbound also makes balancer treat it as expected and rotate selector properly. \nSo, only presence of the reverse tag breaks the selector rotation.\n\n### Reproduction Method\n\nRun **iftop** on the opposite side (i.e. public/portal) and observe your connections for more than a couple of minutes. Soon after the xray-core start up you will end up with one or two persistent connections associated with the balancer.\n\n### Client config\n\n```\n{\n  \"outbounds\": [\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-1\"\n    },\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-2\"\n    },\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-3\"\n    },\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-4\"\n    },\n    {\n      \"protocol\": \"loopback\",\n      \"settings\": {\n        \"inboundTag\": \"loopback-out\"\n      },\n      \"tag\": \"loopback-in\"\n    },\n    {\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"address\": \"MY_OWN_DOMAIN\",\n        \"encryption\": \"none\",\n        \"flow\": \"\",\n        \"port\": 443,\n        \"reverse\": {\n          \"sniffing\": {},\n          \"tag\": \"reverse-in\"\n        }\n      },\n      \"streamSettings\": {\n        \"network\": \"xhttp\",\n        \"security\": \"reality\",\n        \"sockopt\": {\n          \"dialerProxy\": \"loopback-in\"\n        },\n        \"xhttpSettings\": {\n          \"mode\": \"stream-up\",\n          \"xmux\": {\n            \"cMaxReuseTimes\": 0,\n            \"hKeepAlivePeriod\": 0,\n            \"hMaxRequestTimes\": \"600-900\",\n            \"hMaxReusableSecs\": \"1800-3000\",\n            \"maxConcurrency\": \"\",\n            \"maxConnections\": 3\n          }\n        }\n      },\n      \"tag\": \"vless-reverse\"\n    }\n  ],\n  \"routing\": {\n    \"balancers\": [\n      {\n        \"fallbackTag\": \"wireguard-4\",\n        \"selector\": [\n          \"wireguard-1\",\n          \"wireguard-2\",\n          \"wireguard-3\"\n        ],\n        \"strategy\": {\n          \"settings\": {},\n          \"type\": \"leastLoad\"\n        },\n        \"tag\": \"balancer\"\n      }\n    ],\n    \"rules\": [\n      {\n        \"balancerTag\": \"balancer\",\n        \"inboundTag\": [\n          \"loopback-out\"\n        ],\n        \"type\": \"field\"\n      }\n    ]\n  },\n  \"burstObservatory\": {\n    \"pingConfig\": {\n      \"connectivity\": \"https://www.google.com/generate_204\",\n      \"destination\": \"https://MY_OWN_DOMAIN/generate_204\",\n      \"httpMethod\": \"HEAD\",\n      \"interval\": \"5m\",\n      \"sampling\": 2,\n      \"timeout\": \"5s\"\n    },\n    \"subjectSelector\": [\n      \"wireguard-1\",\n      \"wireguard-2\",\n      \"wireguard-3\",\n      \"wireguard-4\"\n    ]\n  }\n}\n```\n\n### Server config\n\n—\n\n### Client log\n\nNo useful clues, unfortunately.\n\n### Server log\n\n—"
-    },
-    {
-     "number": 7263,
-     "title": "CI: Enforce stricter checks on generated protobuf files",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T15:18:25Z",
-     "updated_at": "2026-10-27T14:49:46Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263",
-     "body": "用指定的版本全部重新生成一遍强校验，防止...\r\n\r\n代价是每次切 go 版本的时候要重新生成一次，因为不同 go 版本的产物也不一样（着实没想到）"
     },
     {
      "number": 7212,
@@ -799,64 +785,36 @@
      "user": "Vikrant-Aleph",
      "url": "https://github.com/XTLS/Xray-core/issues/7253",
      "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n在 Windows 11 上使用 Xray-core 连接 VLESS + REALITY + Vision 节点时，发现 TCP 下载吞吐量在部分网络条件下明显低于 Linux 和 Android。\n\n本地宽带约为 100 Mbps。在网络条件较差、可能存在拥堵或丢包的时段，Windows 原生 Xray 的下载速度通常只有 10～30 Mbps，最近一次测试甚至只有约 10 Mbps。\n\n但在同一时段：\n\n- Android v2rayNG 连接同一节点，可以达到约 90 Mbps。\n- 同一台 Windows 电脑通过 WSL2 Linux 运行相同版本的 Xray-core，可以达到约 90 Mbps。\n- 在 Windows 原生 Xray 的 TCP 出站中显式设置 `SO_RCVBUF = 2 MiB` 后，下载速度可以从约 10 Mbps 提升至约 85 Mbps。\n\nWindows 和 WSL2 Linux 使用完全相同的 Xray-core 版本。\n\n因此，这个问题并不依赖于 v2rayN 的运行逻辑，更可能与 Windows 原生 Xray 建立的 TCP 连接、Socket 缓冲区行为或 Go/Windows 网络实现有关。\n\n不过，目前还无法确定根本原因属于 Xray-core、Go 运行时还是 Windows TCP 协议栈。\n\n#### 测试环境\n\n| 项目 | 信息 |\n|---|---|\n| Windows 系统 | Windows 11 26H2 |\n| Windows OS Build | 26300.9711 |\n| Windows 运行方式 | 命令行直接运行 `xray.exe`，不使用图形客户端 |\n| Windows Xray-core | v26.10.21 |\n| WSL2 Linux Xray-core | v26.10.21 |\n| Android 客户端 | v2rayNG 2.3.13 (xray v26.10.21) |\n| 协议 | VLESS |\n| 传输 | TCP |\n| 安全协议 | REALITY |\n| Flow | xtls-rprx-vision |\n| VPS TCP 拥塞控制 | BBR |\n| RTT | 约 140～180 ms |\n| 本地宽带 | 约 100 Mbps |\n\nMux 和 Fragment 均未启用。\n\n此前分别使用有线以太网和 Wi-Fi 测试，均出现过相同问题。\n\n#### 最新的同一时段对照测试\n\n在网络条件较差的同一时段，使用相同 Reality 节点进行了以下测试：\n\n| 测试方式 | 下载速度 |\n|---|---|\n| Android v2rayNG | 约 90 Mbps |\n| Windows 原生 Xray，默认 Socket 配置 | 约 10 Mbps |\n| Windows 原生 Xray，设置 `SO_RCVBUF = 2 MiB` | 约 85 Mbps |\n| WSL2 Linux Xray，相同核心版本 | 约 90 Mbps |\n\n\n两次测试使用相同的 Reality 节点和相同的出站配置，主要变化是 TCP Socket 的 `SO_RCVBUF` 设置。\n\n在相近的网络条件下，添加该设置后，Windows Xray 下载速度从约 10 Mbps 提升到了约 85 Mbps。\n\n此前还尝试将 `SO_RCVBUF` 从 2 MiB 增加到 4 MiB，但没有观察到明显的额外性能提升。\n\n#### Windows 电脑通过 Android 代理的交叉验证\n\n此前还进行了另一组测试：\n\n让 Android v2rayNG 建立 Reality 出站连接，并在 Android 上提供 SOCKS5 代理。\n\n同一台 Windows 电脑上的浏览器及 `curl` 通过该 SOCKS5 代理下载，可以达到接近 90～100 Mbps 的速度。\n\n例如，下载相同的 Cloudflare 测试文件时，曾观察到：\n\n- Windows 原生 Xray：约 2 MB/s。\n- Windows 通过 Android 的 SOCKS5 代理：约 12 MB/s。\n\n因此，Windows 浏览器、下载工具以及电脑本身的网络接入能力，并不能解释吞吐量差距。\n\n#### 问题与网络条件有关\n\n这个问题并不是全天持续存在。\n\n在深夜网络条件较好时，即使完全删除 `SO_RCVBUF` 自定义设置，Windows 原生 Xray 也能够达到约 85～90 Mbps。\n\n因此，这不是 Windows Xray 始终被限制在 10～30 Mbps 的固定性能瓶颈。\n\n更准确地说：\n\n**在某些网络条件下，Windows 原生 Xray 的 TCP 吞吐量明显低于 Linux/Android，而显式设置较大的 SO_RCVBUF 后，性能下降得到显著缓解。**\n\n#### VPS 端的 TCP 状态观察\n\n此前在 VPS 上使用以下命令观察测速期间的 TCP 状态：\n\n```bash\nss -tin state established '( sport = :443 )'\n```\n\n发现以下现象：\n\n**Windows 原生 Xray 下载速度较低时：**\n\n- 部分主要数据连接的 `snd_wnd` 约为 128～256 KiB。\n- 部分连接存在一定比例的 `rwnd_limited` 时间。\n- 能观察到 TCP 重传、乱序等现象。\n\n**Android v2rayNG 下载速度正常时：**\n\n- 部分主要数据连接的 `snd_wnd` 可以达到约 4 MiB。\n- 同样存在 TCP 重传，部分连接的重传字节数并不少。\n- 尽管存在重传，仍然能够保持较高下载吞吐量。\n\n#### 已尝试的排查\n\n1. **排除图形客户端影响**\n\n   Windows 测试直接运行 `xray.exe`，不用 v2rayN。\n\n2. **排除 Xray-core 版本差异**\n\n   Windows 原生 Xray 和 WSL2 Linux Xray 使用完全相同的 v26.10.21。\n\n   在相同时段，Linux 版能够达到约 90 Mbps，而 Windows 默认 Socket 配置只有约 10 Mbps。\n\n3. **排除浏览器及下载工具**\n\n   使用不同浏览器代理方式和 `curl --socks5-hostname` 测试，均观察到原生 Windows Xray 速度偏低。\n\n4. **排除网卡连接方式**\n\n   Windows 使用有线以太网和 Wi-Fi 均曾复现问题。\n\n5. **Windows TCP 自动调优**\n\n   Windows TCP 接收窗口自动调优原本为 `Normal`。\n\n   曾临时修改为 `Experimental`，没有明显改善，之后已经恢复 `Normal`。\n\n6. **测试 VPS 拥塞控制**\n\n   VPS 原本使用 BBR。\n\n   曾临时切换至 CUBIC，Windows 下载速度反而进一步下降至个位数 Mbps，随后恢复 BBR。\n\n7. **测试更大的 SO_RCVBUF**\n\n   设置 2 MiB 后，Windows 吞吐量明显改善。\n\n   进一步增加至 4 MiB，没有观察到明显的额外提升。\n\n### 重现方式\n\n**前提：**\n\n该问题在本人网络条件较差的时段更容易复现。网络状况良好时，默认配置也可能达到满速。\n\n**1. 使用默认 Socket 配置运行 Windows Xray**\n\nWindows 系统：\n\n```text\nWindows 11 26H2\nOS Build 26300.9711\n```\n\nXray-core：\n\n```text\nv26.10.21\n```\n\n通过命令行直接启动：\n\n```powershell\n.\\xray.exe run -config .\\config.json\n```\n\n使用 VLESS + REALITY + `xtls-rprx-vision` 出站，未设置 `SO_RCVBUF`。\n\n通过本地 SOCKS5 代理进行下载测速。\n\n在问题出现时，下载速度约为 10～30 Mbps，最近一次测试约为 10 Mbps。\n\n**2. 添加 SO_RCVBUF 设置**\n\n关闭 Windows Xray，在 VLESS 出站的 `streamSettings.sockopt` 中添加以下内容：\n\n```json\n{\n  \"customSockopt\": [\n    {\n      \"system\": \"windows\",\n      \"network\": \"tcp\",\n      \"type\": \"int\",\n      \"level\": \"65535\",\n      \"opt\": \"4098\",\n      \"value\": \"2097152\"\n    }\n  ]\n}\n```\n\n其中：\n\n- `level = 65"
-    },
-    {
-     "number": 7239,
-     "title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-23T02:43:26Z",
-     "updated_at": "2026-10-25T21:53:00Z",
-     "user": "bin-ran",
-     "url": "https://github.com/XTLS/Xray-core/issues/7239",
-     "body": "### Describe the bug\n\nOn Windows, Xray fails to start when the **current working directory** contains a directory junction:\n\n```\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nThe config file itself exists and is readable — the failure happens while Xray resolves the path of an already opened file.\n\n### Versions\n\n- Xray core **v26.10.21** (go1.27.3 windows/amd64) — broken\n- Xray core **v26.9.30** — works (the code path described below does not exist there)\n\n### Steps to reproduce\n\n```bat\nmkdir C:\\test\\target\necho {}> C:\\test\\target\\config.json\nmklink /J C:\\test\\link C:\\test\\target\n\ncd /d C:\\test\\link\nxray run -c config.json\n```\n\nResult:\n\n```\nXray 26.10.21 (Xray, Penetrates Everything.) 1b1647c (go1.27.3 windows/amd64)\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nWith the **physical** path it works:\n\n```bat\ncd /d C:\\test\\target\nxray run -c config.json\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\n[Warning] core: Xray 26.10.21 started\n```\n\n### Root cause\n\n`main/confloader/external/external.go`, function `readConfigFile()` (introduced in v26.10.21):\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\npath, err = filepath.EvalSymlinks(path)\nif err != nil {\n    return nil, err\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n`filepath.EvalSymlinks` fails on Windows with `ERROR_PATH_NOT_FOUND` (\"The system cannot find the path specified\") as soon as one component of the path is a **directory junction** (this is a Go standard library behavior, see the related golang/go report).\n\nNotes:\n- the file has already been opened successfully at this point (`os.Open(arg)` succeeded);\n- the resolved path is only used for an **extension whitelist** check, so the resolution itself is not required;\n- the failure is fatal and prevents the core from starting at all.\n\n### Impact\n\nEvery user whose Xray is launched with a working directory located under a junction / symlinked directory is affected, e.g.:\n\n- Scoop: `C:\\Users\\<user>\\scoop\\apps\\<app>\\current` is a junction to the versioned folder;\n- Chocolatey / WinGet shim directories;\n- any manually created `mklink /J` layout.\n\nThis is not only a CLI issue: for example **v2rayN** (which starts the core with `run -c config.json` and `WorkingDirectory = <install dir>\\binConfigs`) becomes completely unusable after updating the bundled core to v26.10.21 — the client shows `Failed to start: main: failed to load config files: [config.json] ... The system cannot find the path specified.` and no proxy is available.\n\n### Suggested fix\n\nDo not let the symlink resolution failure be fatal — fall back to the unresolved path and check the extension with `filepath.Ext`:\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\nif resolved, err := filepath.EvalSymlinks(path); err == nil {\n    path = resolved\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n### Minimal Go reproducer for the underlying behavior\n\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\tp, err := filepath.Abs(os.Args[1])\n\tfmt.Println(\"Abs:         \", p, err)\n\tr, err := filepath.EvalSymlinks(p)\n\tfmt.Println(\"EvalSymlinks:\", r, err)\n}\n```\n\nRun it with the CWD set to a junction directory and pass a file name inside it:\n\n```bat\ncd /d C:\\test\\link\ngo run main.go config.json\n`"
-    },
-    {
-     "number": 7256,
-     "title": "Transport: Bind the UDP outbound socket with udp4/udp6 on OpenBSD",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-25T19:52:34Z",
-     "updated_at": "2026-10-25T20:09:58Z",
-     "user": "adsdevdoo",
-     "url": "https://github.com/XTLS/Xray-core/pull/7256",
-     "body": "Follow-up to #6688.\n\n#6688 binds the wildcard of the destination's family, but the merged version still passes the generic `\"udp\"` network to `ListenPacket`. For `\"[::]:0\"` Go also tries `0.0.0.0` (a lone `::` gets `IPv4zero` appended, golang/go#18806) and `ListenPacket` takes the first IPv4 address of the list. Where IPv4-mapped addresses exist that is still a dual-stack socket, so nothing shows up there. OpenBSD has no mapping: the socket stays `AF_INET` and every send to an IPv6 peer fails:\n\n```\nwrite udp 0.0.0.0:15085->[2001:4860:4806::]:123: address 2001:4860:4806::: non-IPv4 address\n```\n\nOn v26.10.21 this broke IPv6 UDP (QUIC, DNS, NTP) through `freedom` on an OpenBSD transparent-proxy router: 208 such errors in the first ~90 minutes after the upgrade. The build I tested #6624/#6688 with passed `udp4`/`udp6` explicitly, which is why it did not show up in my testing.\n\nThis names the family explicitly on OpenBSD only: `udp4` for a v4 bind address, `udp6` for a v6 one (a `sendThrough` address goes through the same check). Other platforms keep the network string and the dual-stack socket they get today.\n\n`TestDialUDPToIPv6` dials `[::1]` with `DialSystem` and writes one datagram. On OpenBSD 7.8 amd64 it fails without the change (`non-IPv4 address`) and passes with it; elsewhere it passes either way. The patched v26.10.21 has been running on the router since, and IPv6 UDP goes out from `[::]` again.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
-    },
-    {
-     "number": 7252,
-     "title": "[Feature request] XHTTP: optional idle filler on the download stream, so an idle connection survives a CDN's origin-silence timeout",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-25T03:45:47Z",
-     "updated_at": "2026-10-25T18:29:12Z",
-     "user": "instaguybyebye-ship-it",
-     "url": "https://github.com/XTLS/Xray-core/issues/7252",
-     "body": "### What happens\n\nBehind Cloudflare (proxied record, any non-Enterprise plan), an XHTTP connection that carries no data for about two\nminutes is closed by the CDN, and the proxied TCP connection inside it breaks. Long-lived but mostly silent\nconnections (chat and push sockets, SSH sessions, database connections) get torn down and rebuilt every couple of\nminutes.\n\nThe same idle connection over WebSocket with `heartbeatPeriod` set survives, because the ping's pong is traffic\nfrom the origin.\n\n### Setup\n\n- Server: VLESS + XHTTP (`mode: packet-up`), TLS, behind Cloudflare. Xray-core v26.x; the code path below is the\n  same on `main`.\n- Client: Xray-core v26.9.9, `alpn` h2 or h3, default xmux plus `hKeepAlivePeriod: 10`.\n\n### Reproduce\n\n1. Through the tunnel, open a TCP connection to an SSH server and log in, running a command that prints nothing for\n   a while, e.g. `ssh -o ServerAliveInterval=0 -o TCPKeepAlive=no host 'sleep 200; echo done'`.\n2. Silent for 110 s: `done` arrives. Silent for 200 s: the session dies at 125-128 s (`client_loop: send\n   disconnect: Broken pipe`). Seen in every run.\n3. Control: the same session through a WebSocket transport on a different CDN held 290 s silent with TCP\n   keepalive off, at the default, and at 15 s, so the drop is specific to the XHTTP download path behind this CDN.\n\nTCP keepalive (`sockopt.tcpKeepAliveIdle`) and `xmux.hKeepAlivePeriod` do not help: both end at the CDN edge, and\nCloudflare's timer counts silence from the origin. Cloudflare documents a 100 s limit for the origin's response\n(error 524), and it can only be raised on Enterprise. The ~125 s drop observed mid-stream matches reports of\nstreaming responses behind Cloudflare.\n\n### Why\n\nIn `transport/internet/splithttp/hub.go`, the stream-up upload POST gets a periodic filler in its response\n(`scStreamUpServerSecs`, the goroutine that writes `X` padding), which keeps that request alive behind a CDN. The\ndownload (`GET`, stream-down / packet-up, and stream-one) gets nothing while idle: after the headers and the first\nflush, the server writes only real payload.\n\n### Request\n\nAn option, off by default, for the server to put a filler on the download stream every N seconds while it is\nidle (e.g. `scStreamDownServerSecs: \"20-80\"`, mirroring `scStreamUpServerSecs`), which the client discards. Since\nthe download body is not framed today, this probably needs a client that understands the filler, gated on the\nversion both sides already exchange (`x_version`) so older clients are never sent it.\n\nAn alternative that needs no new framing would also do: the client opening a fresh download request before the\ncurrent one has been idle for N seconds, handing the session over without losing data.\n\nHappy to test a build."
-    },
-    {
-     "number": 7254,
-     "title": "[Interface] PrivateKey = USER_PRIVATE_KEY Address = 10.0.0.2/24 DNS = 1.1.1.1, 8.8.8.8  [Peer] PublicKey = SERVER_PUBLIC_KEY Endpoint = 185.200.100.50:51820 AllowedIPs = 0.0.0.0/0, ::/0 PersistentKeepalive = 25",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-25T12:42:16Z",
-     "updated_at": "2026-10-25T18:25:41Z",
-     "user": "shahinazari1366-pixel",
-     "url": "https://github.com/XTLS/Xray-core/issues/7254",
-     "body": ""
-    },
-    {
-     "number": 7251,
-     "title": "Validate numeric port list values before building ranges",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-25T00:08:37Z",
-     "updated_at": "2026-10-25T18:25:29Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7251",
-     "body": "A numeric `PortList` value bypasses the range check already applied to its string form: `65537` passes configuration validation while `\"65537\"` is rejected. Runtime port-list endpoints are 16-bit, so accepting an oversized value can change the port when it is narrowed.\n\nValidate the numeric branch with the existing `net.PortFromInt` before modifying the list. Preserve the current behavior for numeric zero, string zero, null, empty strings, valid lists/ranges and environment-based values.\n\nValidation:\n- 17 new regression/compatibility cases: four expected failures on the original code, all pass after the fix.\n- Affected configuration, net and routing package suites pass on Windows; the same suites pass with `-race` on Linux (220 test/subtest events each, no test failures or skips).\n- The built CLI accepts numeric/string `65535` and rejects numeric/string `65537`; the official v26.10.21 binary incorrectly accepts numeric `65537`.\n- Native Windows build, repository format check and `git diff --check` pass.\n- Full `go vet` of these packages reports two existing diagnostics, also reproduced on unchanged main: discarded cancellation in `app/router/command/command.go:101` and unreachable code in `infra/conf/xray.go:674`. No new diagnostics; full vet is not reported as green.\n\nAI-assisted implementation and tests; the diff and regression results were independently reviewed before submission.\n"
     }
    ],
    "comments": [
+    {
+     "id": 6448138506,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-27T16:56:32Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6448138506",
+     "body": "可以过"
+    },
+    {
+     "id": 6447977706,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-27T16:49:44Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6447977706",
+     "body": "> 不过这样一改好像全是我的代码了(\r\n\r\n的确，关了这个你再开个 PR 也行\r\n\r\n> 跟check format共用一个安装好go的机器 多加一行 7秒就好了\r\n\r\n之前那样是死命蹬资本家的机器，也不心疼\r\n现在这个方案本地也更方便了"
+    },
+    {
+     "id": 6447862934,
+     "issue": 7263,
+     "issue_title": "CI: Enforce stricter checks on generated protobuf files",
+     "created_at": "2026-10-27T16:44:40Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6447862934",
+     "body": "<img width=\"1444\" height=\"584\" alt=\"image\" src=\"https://github.com/user-attachments/assets/3fe1b60d-2998-4f7b-a424-091b037c7dde\" />\r\n\r\n跟check format共用一个安装好go的机器 多加一行 7秒就好了\r\n不过这样一改好像全是我的代码了(\r\n\r\n这个功能还是非常有用的 现在不需要从其他环境安装任何东西了了 format和proto生成全部都是 go.mod 管理的跨平台一致 以前还有个问题是Windows上都是CRLF 工具会生成LF  虽然add后会被git洗掉但会产生很多diff 现在自己生成可以手动避免了"
+    },
     {
      "id": 6445344989,
      "issue": 7243,
@@ -1486,119 +1444,77 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6404878582",
      "body": "再回来看看还是觉得很抽象\r\ncommon.Interrupt 不保证能 Interrupt"
-    },
-    {
-     "id": 6402569811,
-     "issue": 7256,
-     "issue_title": "Transport: Bind the UDP outbound socket with udp4/udp6 on OpenBSD",
-     "created_at": "2026-10-25T20:09:28Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7256#issuecomment-6402569811",
-     "body": "这看起来像是上游的问题 都传入 0.0.0.0 了 如果每个跨平台项目还要写这么一串逻辑就太好笑了\r\n还是把这个反馈给go吧"
-    },
-    {
-     "id": 6402444127,
-     "issue": 7256,
-     "issue_title": "Transport: Bind the UDP outbound socket with udp4/udp6 on OpenBSD",
-     "created_at": "2026-10-25T19:57:42Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7256#issuecomment-6402444127",
-     "body": "如果这个pr前有问题 #6688 是怎么按你的说法通过测试的？"
-    },
-    {
-     "id": 6401483390,
-     "issue": 7252,
-     "issue_title": "[Feature request] XHTTP: optional idle filler on the download stream, so an idle connection survives a CDN's origin-silence timeout",
-     "created_at": "2026-10-25T18:29:12Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/issues/7252#issuecomment-6401483390",
-     "body": "也许通过设置ssh的保活参数("
-    },
-    {
-     "id": 6401458244,
-     "issue": 7253,
-     "issue_title": "[Performance] Windows平台上Xray在网络拥堵时TCP下载速度严重下降，设置SO_RCVBUF后恢复正常",
-     "created_at": "2026-10-25T18:26:52Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/issues/7253#issuecomment-6401458244",
-     "body": "Windows好像是接收窗口自动调谐还是哪个烂功能导致的 我当年也深受其害 去netsh捣鼓几个参数来回测几下就好了 属于Windows自己的问题"
-    },
-    {
-     "id": 6401443367,
-     "issue": 7251,
-     "issue_title": "Validate numeric port list values before building ranges",
-     "created_at": "2026-10-25T18:25:28Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7251#issuecomment-6401443367",
-     "body": "这种小旮旯应该没什么必要吧"
-    },
-    {
-     "id": 6401364521,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-25T18:18:12Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6401364521",
-     "body": "麻烦就算，谁需要谁 PR"
-    },
-    {
-     "id": 6401266321,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-25T18:09:30Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6401266321",
-     "body": "似乎有这功能，但是似乎没几个这样做的\r\n要做我也只想到三个表能单列的"
-    },
-    {
-     "id": 6401019176,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-25T17:46:58Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6401019176",
-     "body": "或许有人心疼那点流量，打算用精简版的 dat，然后又想要扩展版的某个分类\r\n如果麻烦就算了，geoip 因为有现成的很容易做"
-    },
-    {
-     "id": 6400962626,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-25T17:41:43Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6400962626",
-     "body": "> 都完事后 main 文档别忘了\r\n\r\n~已降低文档质量~\r\n\r\n> geosite 要不要提供独立分类的 dat 文件在 release 分支\r\n\r\n好像必要性不是很强的样子 有哪些要用到的吗"
-    },
-    {
-     "id": 6400694465,
-     "issue": 6482,
-     "issue_title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
-     "created_at": "2026-10-25T17:17:02Z",
-     "user": "Raymond520888",
-     "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6400694465",
-     "body": "刚试了一下，Chrome120和Firefox148都用不了不知道为什么\n"
-    },
-    {
-     "id": 6400590930,
-     "issue": 6482,
-     "issue_title": "XHTTP + REALITY stops working after upgrading v26.6.27 → v26.7.11",
-     "created_at": "2026-10-25T17:07:36Z",
-     "user": "Jackyin7",
-     "url": "https://github.com/XTLS/Xray-core/issues/6482#issuecomment-6400590930",
-     "body": "可以在shadowrocket的系统设置里面把tcp-指纹改成Chrome140即可解决\n"
-    },
-    {
-     "id": 6399909433,
-     "issue": 6800,
-     "issue_title": "Add sushTun to supported applications list",
-     "created_at": "2026-10-25T16:04:27Z",
-     "user": "soroushdeimi",
-     "url": "https://github.com/XTLS/Xray-core/pull/6800#issuecomment-6399909433",
-     "body": "hi,\r\nhow about now? it has stars and over 900 download this week only.\r\nhttps://github.com/soroushdeimi/sushTun\r\nOn Wed, Sep 23, 2026 at 10:19 PM Soroush Deimi ***@***.***>\r\nwrote:\r\n\r\n> Understood, and thanks for stating the criteria clearly.\r\n>\r\n> My point is that stars measure popularity, not quality. sushTun is new,\r\n> but I'd rather it be judged on the code and on what it actually does. Some\r\n> of these features, as far as I know, aren't offered by any other Xray\r\n> client:\r\n>\r\n>    - Hotspot integration: share the tunnel with other devices directly\r\n>    from the app\r\n>    - Coexistence with split-tunnel corporate VPNs (OpenVPN, WireGuard)\r\n>    without breaking their routes or DNS\r\n>    - A single SOCKS listener where the username selects the exit server\r\n>\r\n> If you have a few minutes, the hotspot feature is the quickest to try:\r\n> The code is open for review as well.\r\n>\r\n> If it still doesn't meet the bar, that's fine. I'll come back later.\r\n>\r\n>\r\n> On Wed, Sep 23, 2026 at 10:14 PM 风扇滑翔翼 ***@***.***> wrote:\r\n>\r\n>> *Fangliding* left a comment (XTLS/Xray-core#6800)\r\n>> <https://github.com/XTLS/Xray-core/pull/6800#issuecomment-5800798195>\r\n>>\r\n>> Could you clarify the maintenance history or other concrete criteria\r\n>> required for reconsideration?\r\n>>\r\n>> The requirements are really low, maybe 100 stars and a dozen or so\r\n>> issues, I just reject zero or almost zero repo\r\n>>\r\n>> —\r\n>> Reply to this email directly, view it on GitHub\r\n>> <https://github.com/XTLS/Xray-core/pull/6800?email_source=notifications&email_token=AN6G6I77IE6Y7T2YQUPK2GL5QQKZJA5CNFSNUABFM5UWIORPF5TWS5BNNB2WEL2JONZXKZKDN5WW2ZLOOQXTKOBQGA3TSOBRHE22M4TFMFZW63VGMF2XI2DPOKSWK5TFNZ2KYZTPN52GK4S7MNWGSY3L#issuecomment-5800798195>,\r\n>> or unsubscribe\r\n>> <https://github.com/notifications/unsubscribe-auth/AN6G6I5B4ASQI7GMU6W6FN35QQKZJAVCNFSNUABFKJSXA33TNF2G64TZHMZTCMJTGE2TOMZRHNEXG43VMU5TKNJUGE4DQMJTGQ32C5QC>\r\n>> .\r\n>> You are receiving this because you authored the thread.Message ID:\r\n>> ***@***.***>\r\n>>\r\n>\r\n"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3339,
+     "title": "feat(ui): show AmneziaWG connection status and location history",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-27T19:05:14Z",
+     "updated_at": "2026-10-27T19:05:14Z",
+     "user": "DominikTobureto",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3339",
+     "body": "## Summary\n\nAdds live AmneziaWG connection stats and per-location connection history to the premium location picker.\n\n- Poll WireGuard/AWG status once per second while connected and forward `tx/rx` counters through `VpnProtocol` → `ConnectionController` → `ConnectionUiController`.\n- Expose connection duration, setup time, and current download/upload speed.\n- Persist the last connection result per gateway server/country: success/failure, setup time, timestamp, and error.\n- Show a status dot and subtitle in `PageSettingsApiAvailableCountries`:\n  - `Connected · 12 s · ↓ 1.2 MB/s ↑ 300 KB/s`\n  - `Last connected 2 h ago · setup 0.4 s`\n  - `Last attempt failed: <reason>`\n  - `Config ready` / `Update available` plus available protocols (`AmneziaWG`, `VLESS`).\n\nNo API or backend changes. No keys or secrets are added to the source; the AGW public keys remain build-time environment inputs.\n\n## Evidence\n\n- **Before:** country rows had no status; AWG traffic always showed `0 B`.\n- **After:** on Windows 11 with Qt 6.10.1 / MSVC 2022, an active AWG connection shows non-zero live speed, country switching works, and successful/failed connection attempts are remembered per location.\n- Build: `cmake --build build --config Release --target AmneziaVPN` succeeds.\n- The status poll runs only while a connection is active and stops on disconnect/deactivate.\n\n## Merge Danger\n\n**Door:** two-way\n\n**Blast Radius:** UI and connection telemetry only; no VPN protocol or API behavior changes.\n"
+    },
+    {
+     "number": 1551,
+     "title": "Split tunneling doesnt work on Linux with `AmneziaWG` (`Self-hosted VPN`)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-04-25T12:01:58Z",
+     "updated_at": "2026-10-27T18:00:58Z",
+     "user": "hacker-hackman",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1551",
+     "body": "**Describe the bug**\nWhen using the `AmneziaWG` protocol on Linux with `Self-hosted VPN`, the split tunneling feature is not functioning properly:\n- When I select the option `Only the sites listed here will be accessed through the VPN`, the VPN doesn't work at all.\n- When I select `Addresses from the list should not be accessed via VPN`, the VPN applies to all sites, completely ignoring my excluded sites list.\n\n**Steps to Reproduce**\n1. Select \"Self-hosted VPN\" on the welcome screen\n2. Enter your credentials and click \"Continue\"\n3. After installation completes, go to Settings > Connection > Site-based split tunneling\n4. Select `Only the sites listed here will be accessed through the VPN`, add several sites to the list, and enable the \"Split tunneling\" switch\n5. Click \"Connect\" and open your browser to verify that the VPN doesn't work at all\n6. Repeat steps 3-5 but select `Addresses from the list should not be accessed via VPN` to verify that the VPN affects every site, including those on your blacklist\n\n**Expected behavior**\n- When `Only the sites listed here will be accessed through the VPN` is selected and split tunneling is enabled: only sites on my list should use the VPN connection\n- When `Addresses from the list should not be accessed via VPN` is selected and split tunneling is enabled: all sites except those on my excluded list should use the VPN connection\n\n**Desktop (please complete the following information):**\n- OS: Linux Mint 21.3\n- Amnezia Version: 4.8.5.0\n\n**Server (please complete the following information):**\n- OS: Debian 12 (bookworm)"
+    },
+    {
+     "number": 1792,
+     "title": "fix: xray docker builds for arm servers",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-08-17T11:28:38Z",
+     "updated_at": "2026-10-27T17:37:23Z",
+     "user": "tinternet",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/1792",
+     "body": "Всем привет!\r\n\r\n** Updated 28 Jul 2026: ** The original PR had a fix for openvpn_cloak arch detection but upstream dropped support for it, so I resolved the conflict. Additionally, the Xray arm32 bit links are now updated. \r\n\r\nI wanted to host an Xray server on my Raspberry PI, so I added support for it. I also noticed and corrected a wrong syntax in the Dockerfile for Cloak - the arch wasn't properly detected because of assignment instead of equality check.\r\n"
+    },
+    {
+     "number": 3192,
+     "title": "У кого то работает свой впс на протоколе awg?",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-21T18:33:22Z",
+     "updated_at": "2026-10-27T17:34:57Z",
+     "user": "ssouuu2k",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192",
+     "body": "На стороне сервера вроде проблем никаких нет, но впн не работает."
+    },
+    {
+     "number": 3334,
+     "title": "Feat/non systemd support",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-26T18:44:20Z",
+     "updated_at": "2026-10-27T17:16:43Z",
+     "user": "Werko1a",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3334",
+     "body": "Non-systemd compatibility layer for AmneziaVPN: init scripts (OpenRC, runit, s6, dinit, SysVinit) and D-Bus DNS bridge.\n(https://github.com/amnezia-vpn/amnezia-client/issues/3329)"
+    },
+    {
+     "number": 1423,
+     "title": "feature: enhance site split tunneling",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-02-18T07:49:26Z",
+     "updated_at": "2026-10-27T15:49:31Z",
+     "user": "Nethius",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1423",
+     "body": "this issue is a stub to close duplicate issues, the plan to implement this feature will be described later"
+    },
     {
      "number": 3338,
      "title": "test: remove xray settings ui tests",
@@ -1710,17 +1626,6 @@
      "body": "### Problem\n\nA WireGuard/AWG config can name the server by host name (`Endpoint = vpn.example.com:443`). The client resolves that name **once per connection** and keeps using the resulting IP. When the address behind the name changes, every connected device keeps sending to the old IP and stays offline until the user toggles the tunnel by hand.\n\nThis happens in practice when:\n\n- a self-hosted server fails over to a standby: the DNS record is switched to the standby, which has the same keys;\n- a server is moved to another hosting or region and the DNS record is updated;\n- the server has a dynamic IP behind DDNS;\n- the provider changes the server's IP during maintenance.\n\nIn all these cases the server side cannot fix it, and the user often doesn't understand why \"the VPN is connected but nothing works\".\n\nWhy nothing recovers today (checked against `dev` @ 3121775 and `amneziawg-apple` @ bdaf0b3):\n\n| Platform | Where the name is resolved | What happens later |\n|---|---|---|\n| Windows / Linux / macOS (daemon) | `WireguardProtocol::startMzImpl()` overwrites `hostName` in `m_rawConfig` with the IP | Reconnects on `networkChanged` / `wakeup` call `start()` again, but the config already holds the IP, so they reuse the old address |\n| Android | `parseInetAddress()` in `Wireguard.configWireguard()` | `reconnectVpn()` reuses the saved `WireguardConfig` with the resolved address |\n| iOS | `WireGuardAdapter.start()` → `resolvePeers()` | `didReceivePathUpdate()` → `endpointUapiConfiguration()` re-resolves the **already resolved IP** (`resolvedEndpoints`) for NAT64 synthesis, not the host name |\n| macOS (NE) | same as iOS | path updates only call `wgBumpSockets()` |\n\nThe engine cannot recover on its own either:\n\n- **No re-resolution.** `amneziawg-go` never resolves names. After `MaxHandshakeAttempts` it gives up until the next outgoing packet.\n- **No roaming.** Android and iOS call `DisableSomeRoamingForBrokenMobileSemantics()`, so a packet from a new source address doesn't move the endpoint. Even without that, stateful NAT drops packets from an address the device didn't contact.\n\n### Related issues\n\n- #801 asked to connect by host name, for servers behind DDNS. It was closed after #814, which resolves the name once before connecting. The comments posted after the close describe the part that is still missing: a server IP that changes every few days, and moving a server to a new IP without touching every client. Connecting by name works today; following the name after the address changes does not. This PR adds that.\n- #1712 asks for a domain instead of an IP so the server IP can be changed seamlessly. A later comment there describes a server whose IP was changed after it was blocked: all clients stayed on the old address.\n- #2808 proposes failover across a self-hoster's own servers through a signed config endpoint. This PR covers the simpler part of that need and adds no config fields: when the operator moves the DNS record, connected devices follow it.\n\n### Solution\n\nDetect a tunnel that is up on the device but no longer reaches its server, then resolve the configured host name again. The detection rule is the one from wireguard-tools' [`contrib/reresolve-dns`](https://git.zx2c4.com/wireguard-tools/tree/contrib/reresolve-dns/reresolve-dns.sh): **the latest handshake is older than a rekey cycle while the device keeps sending to the peer.**\n\nA live session with traffic or PersistentKeepalive renews its handshake every 120 s (`REKEY_AFTER_TIME`); a failed renewal is retried for 90 s more (`REKEY_ATTEMPT_TIME`). So \"no handshake for 180 s and tx grew during that window\" means the server is unreachable.\n\nAn idle tunnel without keepalive never handshakes and sends nothing, so it is never treated as stale. Before the first handshake, the age is counted from the tunnel start.\n\nThe same small state machine is implemented on every platform. It is pure logic with no I/O, and the C++ version is unit-tested:\n\n- `client/core/utils/endpointWatchdog.{h,cpp"
     },
     {
-     "number": 3334,
-     "title": "Feat/non systemd support",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-26T18:44:20Z",
-     "updated_at": "2026-10-26T18:44:20Z",
-     "user": "Werko1a",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3334",
-     "body": "Non-systemd compatibility layer for AmneziaVPN: init scripts (OpenRC, runit, s6, dinit, SysVinit) and D-Bus DNS bridge.\n(https://github.com/amnezia-vpn/amnezia-client/issues/3329)"
-    },
-    {
      "number": 2943,
      "title": "Deleted",
      "is_pr": false,
@@ -1785,75 +1690,45 @@
      "user": "makkoar",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3113",
      "body": "## Summary\n\nPreserve an explicitly configured non-empty MTU when importing an Amnezia `vpn://` configuration. The WireGuard or AmneziaWG protocol default is now applied only when the imported MTU is missing or empty.\n\n## Problem\n\n`ImportController::processAmneziaConfig()` unconditionally replaced the MTU contained in imported WireGuard and AmneziaWG configurations with the protocol default. As a result, profiles that intentionally specified a custom MTU silently changed during import.\n\n## Changes\n\n- Keep a non-empty imported MTU unchanged.\n- Treat whitespace-only MTU values as empty.\n- Preserve the existing WireGuard/AmneziaWG default fallback for missing or empty values.\n\n## Backward compatibility\n\nProfiles without an MTU continue to receive the same protocol default. The change only affects profiles that already provide an explicit value.\n\n## Verification\n\n- Built the Windows x64 client and service in Release mode against `dev` at [`94b51df2`](https://github.com/amnezia-vpn/amnezia-client/commit/94b51df24790bf52427afe82d81c87a95460bdfd) (`5.0.3.1`) with this change included.\n- Confirmed with `git range-diff` that the rebase preserves the patch without changing its contents.\n- Before this rebase, imported a real `vpn://` profile on Windows and verified that its non-default MTU survives import. The MTU-handling implementation is unchanged.\n\n## Related pull requests\n\n- This is complementary to #3065, which changes the AmneziaWG default MTU value. This PR only changes when the default is applied.\n"
-    },
-    {
-     "number": 3312,
-     "title": "fix: gateway requests on slow or blocked dns",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T09:16:59Z",
-     "updated_at": "2026-10-25T18:23:30Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3312",
-     "body": ""
-    },
-    {
-     "number": 3326,
-     "title": "fix: keep default godebug when disabling async preemption",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-25T18:20:49Z",
-     "updated_at": "2026-10-25T18:20:49Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3326",
-     "body": ""
-    },
-    {
-     "number": 3325,
-     "title": "feat: Add Indonesian (id_ID) localization",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-25T15:14:05Z",
-     "updated_at": "2026-10-25T15:44:17Z",
-     "user": "Grigory98",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3325",
-     "body": ""
-    },
-    {
-     "number": 3309,
-     "title": "fix: restore favorite locations",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T10:31:19Z",
-     "updated_at": "2026-10-25T15:33:56Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3309",
-     "body": ""
-    },
-    {
-     "number": 3320,
-     "title": "fix:  request local proxy location",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-23T17:09:42Z",
-     "updated_at": "2026-10-25T15:33:24Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3320",
-     "body": "add request for update config location"
-    },
-    {
-     "number": 3299,
-     "title": "feat: new design system",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-18T15:50:44Z",
-     "updated_at": "2026-10-25T15:32:52Z",
-     "user": "vkamn",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3299",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 6449722122,
+     "issue": 1551,
+     "issue_title": "Split tunneling doesnt work on Linux with `AmneziaWG` (`Self-hosted VPN`)",
+     "created_at": "2026-10-27T18:00:57Z",
+     "user": "EnderDremurr",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1551#issuecomment-6449722122",
+     "body": "+1, Amnezia 5.0.3.0, still doesn't work\nEndeavourOS 7.2.11-zen1-1-zen"
+    },
+    {
+     "id": 6449065635,
+     "issue": 3192,
+     "issue_title": "У кого то работает свой впс на протоколе awg?",
+     "created_at": "2026-10-27T17:34:57Z",
+     "user": "forchannel228-source",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192#issuecomment-6449065635",
+     "body": "Упал свой впс шведский.\n"
+    },
+    {
+     "id": 6448542164,
+     "issue": 3334,
+     "issue_title": "Feat/non systemd support",
+     "created_at": "2026-10-27T17:15:11Z",
+     "user": "Werko1a",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3334#issuecomment-6448542164",
+     "body": "Hi! Quick note before you spend time reviewing: the current branch is a workaround (init scripts + a Python D-Bus DNS bridge) but it works and you can use it if you want. My original intent was a native fix inside the client. I am reworking it into native C++ changes (DNS fallback in DnsUtilsLinux, SIGTERM handling, no sudo/systemctl assumptions in RouterLinux) plus native init scripts, with no Python bridge. I will force-push the reworked branch to this PR within the next day or two and update the description. Please hold off on a detailed review until then."
+    },
+    {
+     "id": 6446590453,
+     "issue": 1423,
+     "issue_title": "feature: enhance site split tunneling",
+     "created_at": "2026-10-27T15:49:30Z",
+     "user": "Superfly76",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1423#issuecomment-6446590453",
+     "body": "### Feature request: Country-aware split tunneling — route international traffic through VPN, local traffic directly\n\nI'd like to add a concrete use case from mainland China to this feature request.\n\nI use AmneziaVPN while traveling through Asia. The VPN itself performs very well, but split tunneling for Chinese services remains challenging.\n\nFor comparison, I've used Astrill's ASUS router applet for years with its **\"Tunnel Only International Sites\"** setting. This automatically routes domestic Chinese destinations directly through the local ISP while sending international traffic through the VPN.\n\nIt works particularly well for services such as Taobao, JD.com, Alibaba, Alipay, and WeChat.\n\nWith AmneziaVPN, I'm currently working with an exclusion list containing 118 hostnames. However, manually resolving domains into IP addresses is cumbersome and can be unreliable as CDN addresses and DNS responses change.\n\n**Suggested functionality**\n\n- Provide an optional **\"Bypass local country / Tunnel international destinations\"** mode, with a manually selectable country (e.g., China).\n- Use regularly updated geographic IP routing data to bypass domestic IP ranges while keeping other traffic inside the VPN.\n- Allow individual domain/IP overrides for exceptions and incorrectly classified destinations.\n- Handle DNS consistently with the selected routing policy, without unexpectedly exposing DNS queries intended to use the VPN.\n- Implement updates efficiently so large country-level routing tables don't introduce connection delays or client instability.\n- Ideally support this across WireGuard, AmneziaWG, and other protocols.\n\nThis could be useful not only in China but also in Iran, Russia, and other countries where users need international VPN access alongside fast and reliable domestic connectivity.\n\nI noticed the discussion in #3123 about GeoIP/GeoSite routing data and the performance challenges of large route lists. Perhaps that work could provide a foundation.\n\n**The desired experience is simple:** connect once, let domestic services use the local ISP, and let international destinations use the VPN, without maintaining extensive exclusion lists manually.\n\nThank you for developing and maintaining AmneziaVPN. It's already an excellent option for self-hosted VPN access, and this would make it considerably more practical for everyday use in China."
+    },
     {
      "id": 6436838378,
      "issue": 2407,
@@ -1885,6 +1760,17 @@
   },
   "apernet/hysteria": {
    "issues": [
+    {
+     "number": 1713,
+     "title": "Salamander and Masquerade",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-27T19:01:53Z",
+     "updated_at": "2026-10-27T19:01:53Z",
+     "user": "VoldemarBeherith",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1713",
+     "body": "Hello. One clown tells me that Salamander and Masquerade can work at the same time. Is this true?"
+    },
     {
      "number": 1706,
      "title": "feat(tun): add an L3 TUN that carries whole IP packets",

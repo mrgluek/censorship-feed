@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-30T18:00:08Z",
- "since": "2026-10-28T18:00:08Z",
+ "generated_at": "2026-10-30T22:19:12Z",
+ "since": "2026-10-28T22:19:12Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -40,32 +40,155 @@
   "yggdrasil-network/yggdrasil-go": {
    "issues": [
     {
-     "number": 1410,
-     "title": "Data races in Ironwood diagnostic getters used by getPeers/getSessions",
+     "number": 1333,
+     "title": "Feature request: using TLS, instead of FakeTLS in tls:// and wss://",
      "is_pr": false,
      "state": "open",
-     "created_at": "2026-10-30T11:10:25Z",
-     "updated_at": "2026-10-30T11:10:25Z",
-     "user": "LuciyVI",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1410",
-     "body": "Go's race detector reported three warnings in two Ironwood diagnostic getters while a local Yggdrasil integration test was exchanging routing and encrypted session traffic. The affected getters are also used by Yggdrasil's peer/session diagnostics.\n\n## Affected version and Yggdrasil call paths\n\n- Yggdrasil base: `2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35`, with local, uncommitted integration-test changes.\n- Ironwood dependency: `v0.0.0-20261023231900-0712eccbb962`, as pinned in [go.mod](https://github.com/yggdrasil-network/yggdrasil-go/blob/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35/go.mod#L6).\n- Runtime: `go1.26.8 linux/amd64`.\n- `getPeers` -> [Core.GetPeers](https://github.com/yggdrasil-network/yggdrasil-go/blob/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35/src/core/api.go#L71-L74) -> `network.Debug.GetPeers`.\n- `getSessions` -> [Core.GetSessions](https://github.com/yggdrasil-network/yggdrasil-go/blob/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35/src/core/api.go#L139-L141) -> `encrypted.Debug.GetSessions`.\n\nThe observed run invoked these getters from the local integration harness; an end-to-end reproduction through the admin socket is not claimed.\n\n## Findings\n\n1. **Peer timestamps:** `network/debug.go:85` reads `peer.srrt` and `peer.srst` concurrently with writes in `_handleSigRes` (`network/peers.go:335`) and `sendSigReq` (`network/peers.go:323`). Two race warnings were captured.\n2. **Session RX counter:** `encrypted/debug.go:31` reads `session.rx` concurrently with the increment in `doRecv` (`encrypted/session.go:441`). One race warning was captured. TX is read on the same line, but the captured counter warning establishes the RX conflict only.\n\nThe existing `phony.Block` calls protect iteration over collection maps. They do not serialize reads of mutable fields owned by the individual peer/session actors. Expected behavior is that diagnostics can be collected during normal activity without racing with those writers.\n\n<details>\n<summary>Original race-detector excerpts</summary>\n\nModule-cache prefixes, addresses and common actor frames are omitted; function names, lines and offsets are retained.\n\n```text\nWARNING: DATA RACE\nWrite by goroutine 7913:\n  github.com/Arceliar/ironwood/network.(*peer)._handleSigRes()\n      network/peers.go:335 +0x1c9\nPrevious read by goroutine 7917:\n  github.com/Arceliar/ironwood/network.(*Debug).GetPeers.func2()\n      network/debug.go:85 +0x2f8\n\nWARNING: DATA RACE\nWrite by goroutine 11962:\n  github.com/Arceliar/ironwood/network.(*peer).sendSigReq.func1()\n      network/peers.go:323 +0x4f\nPrevious read by goroutine 11929:\n  github.com/Arceliar/ironwood/network.(*Debug).GetPeers.func2()\n      network/debug.go:85 +0x334\n\nWARNING: DATA RACE\nRead by goroutine 26791:\n  github.com/Arceliar/ironwood/encrypted.(*Debug).GetSessions.func1()\n      encrypted/debug.go:31 +0x232\nPrevious write by goroutine 26788:\n  github.com/Arceliar/ironwood/encrypted.(*sessionManager)._handleTraffic.(*sessionInfo).doRecv.func1()\n      encrypted/session.go:441 +0x8cb\n```\n\nThese warnings came from local, uncommitted Yggdrasil integration subtests `TestOverlaySessionPaths/nodes-2` and `/nodes-3`, with real Core instances connected through in-process `net.Pipe` links. The tests polled diagnostic getters during routing and encrypted traffic. Ironwood production sources were unchanged in that run. These test names are observation context, not tests available in the upstream Yggdrasil repository.\n\n</details>\n\nThe initial downstream harness subsequently removed optional diagnostic polling. Its later passing race run therefore does not demonstrate that the dependency races were fixed. The original race log was preserved. No crash or security impact has been demonstrated.\n\n## Proposed fix\n\nA candidate fix and focused tests are available in [LuciyVI/ironwood commit 428512d](https://github.com/LuciyVI/ironwood/commit/428512deaaadb572ff47942593f5a80f24977b9c), based on the affected Ironwood commit.\n\nThe patch first captures peer/session references on "
+     "created_at": "2026-03-24T10:45:51Z",
+     "updated_at": "2026-10-30T19:18:13Z",
+     "user": "Orbit173",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1333",
+     "body": "I know that Yggdrasil uses E2E data encryption, but as an additional layer in tls:// and wss:// schemes, FakeTLS 1.3 encryption is used to hide metadata.\nFakeTLS means that a temporary certificate is generated each time Yggdrasil is launched. The validity of this certificate is not verified by Ygg clients. This allows for a MiTM attack.\n\n[src/core/tls.go](https://github.com/yggdrasil-network/yggdrasil-go/tree/develop/src/core/tls.go)\n```\nfunc (c *Core) generateTLSConfig(cert *tls.Certificate) (*tls.Config, error) {\n\tconfig := &tls.Config{\n\t\tCertificates: []tls.Certificate{*cert},\n\t\tClientAuth:   tls.NoClientCert,\n\t\tGetClientCertificate: func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {\n\t\t\treturn cert, nil\n\t\t},\n\t\tVerifyPeerCertificate: c.verifyTLSCertificate,\n\t\tVerifyConnection:      c.verifyTLSConnection,\n\t\tInsecureSkipVerify:    true,\n\t\tMinVersion:            tls.VersionTLS13,\n\t}\n\treturn config, nil\n}\n\nfunc (c *Core) verifyTLSCertificate(_ [][]byte, _ [][]*x509.Certificate) error {\n\treturn nil\n}\n\nfunc (c *Core) verifyTLSConnection(_ tls.ConnectionState) error {\n\treturn nil\n}\n```\n\n[src/core/link_tls.go](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/src/core/link_tls.go)\n```\ntype linkTLS struct {\n\tphony.Inbox\n\t*links\n\ttcp      *linkTCP\n\tlistener *net.ListenConfig\n\tconfig   *tls.Config\n}\n\nfunc (l *links) newLinkTLS(tcp *linkTCP) *linkTLS {\n\tlt := &linkTLS{\n\t\tlinks: l,\n\t\ttcp:   tcp,\n\t\tlistener: &net.ListenConfig{\n\t\t\tControl:   tcp.tcpContext,\n\t\t\tKeepAlive: -1,\n\t\t},\n\t\tconfig: l.core.config.tls.Clone(),\n\t}\n\treturn lt\n}\n```\n\nA simple example of MiTM using [SSLproxy](https://github.com/sonertari/SSLproxy) tool:\n10.4.4.6 (Client) , 10.4.4.10/10.5.5.10 - gateway (Attacker) and 10.5.5.5 (Server)\n\n```\nStarting main event loop.\nSNI peek: [n/a] [complete], fd=31\nConnecting to [10.5.5.5]:443\n===> Original server certificate:\nSubject DN: /C=YG/CN=0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nCommon Names: 0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nFingerprint: D7:FF:54:E6:1A:6C:CD:F3:29:87E1:8B:D4:17:DA:D7:0A:C9:6C:01\nCertificate cache: MISS\n===> Forged server certificate:\nSubject DN: /C=YG/CN=0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nCommon Names: 0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nFingerprint: 9C:E5:0A:52:FC:6E:82:B2:05:7E42:D0:F2:F6:EF:67:E5:91:CA:39\nCONN: ssl 10.4.4.6 37756 10.5.5.5 443 sni:- names:0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae sproto:TLSv1.3:TLS_AES_128_GCM_SHA256 dproto:TLSv1.3:TLS_AES_128_GCM_SHA256 origcrt:D7FF54E61A6CCDF32987E18BD417DAD70AC96C01 usedcrt:9CE50A52FC6E82B2057E42D0F2F6EF67E591CA39 user:-\nSSL connected to [10.5.5.5]:443 TLSv1.3 TLS_AES_128_GCM_SHA256\nCLIENT_RANDOM 59B962A56443027ED25643AF713B1B0A20C6F1555F75B8ECD6DA0B9D83533384 70995292118DA3214E7E11ECCBB4E53F9742DBD32762869458E838F71999DE9800000000000000000000000000000000\nSSL_free() in state 00000001 = 0001 = SSLOK (SSL negotiation finished successfully) [connect socket]\nSSL_free() in state 00000001 = 0001 = SSLOK (SSL negotiation finished successfully) [accept socket]\n```\n#### Inside TLS\n![Image](https://github.com/user-attachments/assets/2fcaedd9-379c-42cd-8dbd-9b8d553ef9c3)\n\n#### Handshake\n<img width=\"1484\" height=\"676\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1ded657f-ffa2-456f-9ad0-2a41f86e902a\" />\n\n\n### My suggestions:\n1. Add a path to certificate in yggdrasil.conf\n2. Add the key `-tlshash` when adding a peer (tls/wss), and make it mandatory.\n3. Compare `-tlshash` and server certificate hash, if not match - reject the connection.\n4. Hash output in server logs."
+    },
+    {
+     "number": 1405,
+     "title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-25T12:10:45Z",
+     "updated_at": "2026-10-30T19:14:48Z",
+     "user": "krivonosoff161",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405",
+     "body": "Should Yggdrasil start QUIC links with 1200-byte packets to support paths with IP MTU 1280, or should this remain entirely a quic-go fallback policy?\n\nI reproduced a connection problem on `develop` at `2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35` (quic-go v0.64.1, Go 1.26.9). A proposed application-level change and regression test are available in [commit b37b195](https://github.com/krivonosoff161/yggdrasil-go/commit/b37b19588936020682f3c442c9d963d84211040b). I would like to confirm the intended behaviour and whether that change belongs here.\n\n### Small reproducible example\n\nUse the production QUIC link listener, dialler and TLS configuration, with a local UDP relay between them. The relay forwards datagrams in both directions but drops those exceeding the path's payload limit. It does not return a local send error or fabricate QUIC responses.\n\n| Path | UDP payload limit | Current configuration | InitialPacketSize=1200 on both endpoints |\n| --- | --- | --- | --- |\n| IPv4, IP MTU 1500 | 1472 bytes | connection and transfer pass | pass |\n| IPv4, IP MTU 1280 | 1252 bytes | handshake timeout | 4096-byte request and reply pass |\n| IPv6, IP MTU 1280 | 1232 bytes | handshake timeout | 4096-byte request and reply pass |\n\nThe [regression test](https://github.com/krivonosoff161/yggdrasil-go/blob/b37b19588936020682f3c442c9d963d84211040b/src/core/link_quic_test.go) is included in that commit. With the test added to the base code, the two low-MTU cases fail; with the three-line production change, all cases pass. Run it with:\n\n```sh\ngo test -count=1 -v -run TestQUICLinkThroughLimitedPath ./src/core\n```\n\nThe proposed change is in the shared listener/dialler configuration in `src/core/link_quic.go`:\n\n```go\n// Inside the existing quic.Config:\nInitialPacketSize: 1200,\n```\n\nThe default initial UDP payload is 1280 bytes, which becomes 1308 bytes with IPv4/UDP headers or 1328 with IPv6/UDP headers. If the smaller MTU is on an intermediate router, a local write can succeed while the packet is dropped further along the path. The local `EMSGSIZE` fallback added in quic-go 0.64 does not cover that silent-drop case. Path MTU discovery remains enabled with the proposed setting.\n\n### Routed failure and recovery\n\nI also tested actual Yggdrasil processes across two Linux kernel routers in isolated network namespaces:\n\n1. Establish the QUIC link with path MTU 1500 and successfully request a roughly 12 KiB NodeInfo response.\n2. Lower the intermediate link MTU to 1280 while keeping the endpoint links at 1500.\n3. Request the same response again.\n\nBefore the change, the large request fails, the peer goes down, and no recovery is observed during 85 seconds at MTU 1280. Restoring MTU 1500 restores communication. With 1200 configured on both endpoints, the first large request still fails, but the following small and large requests succeed while the path remains at MTU 1280. This was observed both with ICMP fragmentation-needed messages delivered and with them blocked, with packet-header captures and router counters checked.\n\nThis does **not** establish that the change fixes every PMTU decrease on an existing connection. The initial failed request remains, mixed-version peers may still send larger initial packets, and throughput impact has not been benchmarked. The established-connection black-hole problem is already tracked in [quic-go#5914](https://github.com/quic-go/quic-go/issues/5914). Related work includes the merged [local-error fallback #5911](https://github.com/quic-go/quic-go/pull/5911) and closed [handshake retry proposal #5936](https://github.com/quic-go/quic-go/pull/5936); I am not proposing to duplicate that library work here.\n\nLocal validation: Windows full Go test suite and `go vet` pass; all seven Linux test-package binaries were executed successfully in an isolated network namespace, including IPv6. NAT state loss, translated-port change and conntrack expiry also recovered with the candidate. GitHub CI has not run.\n\nWould starting at QUIC's 1200-byte"
+    },
+    {
+     "number": 1407,
+     "title": "Title: Feature request: Allow disabling automatic TUN prefix routes on Linux",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-27T08:50:47Z",
+     "updated_at": "2026-10-30T19:12:57Z",
+     "user": "redeye-engineer",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1407",
+     "body": "**Problem**\n\nOn Linux, Yggdrasil automatically creates a connected route for the TUN interface's IPv6 prefix. For example:\n\n```200::/7 dev ygg0 proto kernel metric 256 pref medium```\n\nI run multiple Yggdrasil-go instances (v0.5.15) using Docker with network_mode: host. Each instance has a different GroupPassword, and I want to route traffic to specific Yggdrasil subnet prefixes (e.g. 300:...::/64) through the corresponding TUN interface.\n\nBecause all instances share the host's network namespace and routing table, I would like to manage these routes explicitly instead of relying on the automatically created 200::/7 route.\n\n**Proposed solution**\n\nCould you add an optional configuration parameter, for example:\n\n```IfNoPrefixRoute: true```\n\nOn Linux, when enabled, Yggdrasil would set the IFA_F_NOPREFIXROUTE flag when assigning the TUN IPv6 address. This would prevent the kernel from automatically creating the connected route for that address prefix.\n\nThe default value should remain false to preserve existing behavior.\n\n**Expected behavior**\n\nThe TUN interface and its IPv6 address are created normally.\n\nWith IfNoPrefixRoute: true, the kernel does not automatically install the connected route for the TUN address prefix.\n\nAdministrators can add explicit routes to selected Yggdrasil subnets through the appropriate TUN interfaces.\n\nExisting behavior remains unchanged when the option is not enabled.\n\n**Use case**\n\nRunning multiple Yggdrasil instances with different GroupPassword values in Docker using host networking, while routing selected 300:...::/64 subnet prefixes through specific instances.\n\nI can manage the routes manually using Linux ip -6 route commands. The goal is to make this setup possible without maintaining a custom Yggdrasil build.\n\nWould this feature be appropriate for upstream?"
     },
     {
      "number": 1409,
      "title": "Remote getNodeInfo can time out while the initial route is converging",
      "is_pr": false,
-     "state": "open",
+     "state": "closed",
      "created_at": "2026-10-29T13:34:10Z",
-     "updated_at": "2026-10-29T13:34:10Z",
+     "updated_at": "2026-10-30T19:11:39Z",
      "user": "Justsomebuddy",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1409",
      "body": "## Summary\n\nA first remote `getNodeInfo` request can time out during startup even though the\npeer becomes reachable and a later request succeeds. This was reproduced with\n0.5.15 and also with 0.5.14; it is not being reported as a new 0.5.15 regression.\n\nA peer key can already be known before the routing tree and Bloom state are\nready. If the initial NodeInfo packet is not delivered during that window, the\nadmin operation sends no further request and eventually returns\n`timed out waiting for response` after six seconds.\n\nThis report concerns a cold, pending NodeInfo query. It does not establish a\ncause for all remote timeouts or for long stalls after an established connection\ngoes idle, and it does not assume reliable delivery from the routing transport.\n\n## Reproduction and observed result\n\nA deterministic regression test uses two real Core instances and an isolated\nloopback TCP peering:\n\n1. Start one remote NodeInfo admin request before any peer, path or session\n   exists. The destination's public key is already available to the fixture.\n2. After the callback is registered and the first attempt has run, connect the\n   two nodes. Do not prime the route with another NodeInfo request or traffic.\n3. On unchanged develop, that single admin request times out after six seconds.\n   With the candidate change, the same request recovers within that budget.\n\nThe self-contained regression file is\n[`src/core/nodeinfo_cold_test.go`](https://github.com/Justsomebuddy/yggdrasil-go/blob/1e8bfb3d5bddf462a6037374d474d48a5f92c27a/src/core/nodeinfo_cold_test.go).\nIt can be copied alone into unchanged develop at\n`2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35` and run with:\n\n```sh\ngo test ./src/core -run '^TestNodeInfo(ColdStart|UnreachableBudget)$' -count=1\n```\n\nBoth regression assertions fail semantically against the unchanged Core: the\ncold query times out, and an unreachable destination produces one lookup with\nits callback still pending, rather than three attempts and prompt cleanup.\nThe original six-second timeout itself is unchanged.\n\n## Proposed bounded recovery\n\n[Candidate diff](https://github.com/Justsomebuddy/yggdrasil-go/compare/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35...1e8bfb3d5bddf462a6037374d474d48a5f92c27a)\n([branch](https://github.com/Justsomebuddy/yggdrasil-go/tree/fix/nodeinfo-cold-start-retry)).\n\n- Retry the unanswered NodeInfo query at two and four seconds, within the\n  existing six-second deadline: at most three attempts, no extended timeout.\n- Keep callback ownership, retry checks and cleanup on the NodeInfo actor.\n- Cancel pending attempts on response, timeout or core shutdown. An older\n  request cannot delete or reclaim a newer request's callback for the same key.\n- Preserve local queries, response shape and the timeout error. No dependency,\n  routing-library, configuration or wire-format changes.\n\nThis is request-level recovery for a read-only admin operation, not a guarantee\nof delivery or a redesign of the existing last-request-per-key semantics.\n\n## Verification\n\n- Nine new tests passed five repetitions, plus `-race` and `go vet`, using the\n  exact Linux Core sources and new tests in a file-scoped local run. That local\n  run did not include the existing package-wide tests.\n- The existing full-tree CI then passed all 13 jobs at head\n  `1e8bfb3d5bddf462a6037374d474d48a5f92c27a`: builds/tests on Linux, Windows and\n  macOS with Go 1.26 and 1.27, FreeBSD/OpenBSD cross-builds, lint and CodeQL.\n  [Successful workflow](https://github.com/Justsomebuddy/yggdrasil-go/actions/runs/40877246650).\n- Negative tests cover the unchanged timeout, attempt bound, cleanup, duplicate\n  replies, shutdown, queued cancellation, overlapping requests and failed writes.\n\nPR creation is currently restricted to collaborators, so the tested candidate\nis linked here for maintainer review. Would this bounded NodeInfo-level recovery\nbe suitable, and could a maintainer open a PR from the branch if so?\n"
+    },
+    {
+     "number": 1410,
+     "title": "Data races in Ironwood diagnostic getters used by getPeers/getSessions",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-30T11:10:25Z",
+     "updated_at": "2026-10-30T19:10:10Z",
+     "user": "LuciyVI",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1410",
+     "body": "Go's race detector reported three warnings in two Ironwood diagnostic getters while a local Yggdrasil integration test was exchanging routing and encrypted session traffic. The affected getters are also used by Yggdrasil's peer/session diagnostics.\n\n## Affected version and Yggdrasil call paths\n\n- Yggdrasil base: `2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35`, with local, uncommitted integration-test changes.\n- Ironwood dependency: `v0.0.0-20261023231900-0712eccbb962`, as pinned in [go.mod](https://github.com/yggdrasil-network/yggdrasil-go/blob/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35/go.mod#L6).\n- Runtime: `go1.26.8 linux/amd64`.\n- `getPeers` -> [Core.GetPeers](https://github.com/yggdrasil-network/yggdrasil-go/blob/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35/src/core/api.go#L71-L74) -> `network.Debug.GetPeers`.\n- `getSessions` -> [Core.GetSessions](https://github.com/yggdrasil-network/yggdrasil-go/blob/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35/src/core/api.go#L139-L141) -> `encrypted.Debug.GetSessions`.\n\nThe observed run invoked these getters from the local integration harness; an end-to-end reproduction through the admin socket is not claimed.\n\n## Findings\n\n1. **Peer timestamps:** `network/debug.go:85` reads `peer.srrt` and `peer.srst` concurrently with writes in `_handleSigRes` (`network/peers.go:335`) and `sendSigReq` (`network/peers.go:323`). Two race warnings were captured.\n2. **Session RX counter:** `encrypted/debug.go:31` reads `session.rx` concurrently with the increment in `doRecv` (`encrypted/session.go:441`). One race warning was captured. TX is read on the same line, but the captured counter warning establishes the RX conflict only.\n\nThe existing `phony.Block` calls protect iteration over collection maps. They do not serialize reads of mutable fields owned by the individual peer/session actors. Expected behavior is that diagnostics can be collected during normal activity without racing with those writers.\n\n<details>\n<summary>Original race-detector excerpts</summary>\n\nModule-cache prefixes, addresses and common actor frames are omitted; function names, lines and offsets are retained.\n\n```text\nWARNING: DATA RACE\nWrite by goroutine 7913:\n  github.com/Arceliar/ironwood/network.(*peer)._handleSigRes()\n      network/peers.go:335 +0x1c9\nPrevious read by goroutine 7917:\n  github.com/Arceliar/ironwood/network.(*Debug).GetPeers.func2()\n      network/debug.go:85 +0x2f8\n\nWARNING: DATA RACE\nWrite by goroutine 11962:\n  github.com/Arceliar/ironwood/network.(*peer).sendSigReq.func1()\n      network/peers.go:323 +0x4f\nPrevious read by goroutine 11929:\n  github.com/Arceliar/ironwood/network.(*Debug).GetPeers.func2()\n      network/debug.go:85 +0x334\n\nWARNING: DATA RACE\nRead by goroutine 26791:\n  github.com/Arceliar/ironwood/encrypted.(*Debug).GetSessions.func1()\n      encrypted/debug.go:31 +0x232\nPrevious write by goroutine 26788:\n  github.com/Arceliar/ironwood/encrypted.(*sessionManager)._handleTraffic.(*sessionInfo).doRecv.func1()\n      encrypted/session.go:441 +0x8cb\n```\n\nThese warnings came from local, uncommitted Yggdrasil integration subtests `TestOverlaySessionPaths/nodes-2` and `/nodes-3`, with real Core instances connected through in-process `net.Pipe` links. The tests polled diagnostic getters during routing and encrypted traffic. Ironwood production sources were unchanged in that run. These test names are observation context, not tests available in the upstream Yggdrasil repository.\n\n</details>\n\nThe initial downstream harness subsequently removed optional diagnostic polling. Its later passing race run therefore does not demonstrate that the dependency races were fixed. The original race log was preserved. No crash or security impact has been demonstrated.\n\n## Proposed fix\n\nA candidate fix and focused tests are available in [LuciyVI/ironwood commit 428512d](https://github.com/LuciyVI/ironwood/commit/428512deaaadb572ff47942593f5a80f24977b9c), based on the affected Ironwood commit.\n\nThe patch first captures peer/session references on "
     }
    ],
-   "comments": []
+   "comments": [
+    {
+     "id": 6531543268,
+     "issue": 1333,
+     "issue_title": "Feature request: using TLS, instead of FakeTLS in tls:// and wss://",
+     "created_at": "2026-10-30T19:18:13Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1333#issuecomment-6531543268",
+     "body": "The main reason we added TLS at all is mostly just to obfuscate the peering connections and to make them a bit more difficult to spot, not necessarily because we need end-to-end TLS verification. We also need to balance simplicity though, issuing and managing TLS certificates is difficult and it would drastically increase the amount of work needed to get Yggdrasil working. "
+    },
+    {
+     "id": 6531475191,
+     "issue": 1405,
+     "issue_title": "QUIC on 1280-byte IP paths: should initial packets start at 1200 bytes?",
+     "created_at": "2026-10-30T19:14:48Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1405#issuecomment-6531475191",
+     "body": "I don't really feel good about overriding the defaults here, as I would expect quic-go's defaults to do the right thing most of the time with PMTUD.\n\nTo be honest I am actually pretty disappointed with the QUIC transport though, neither the performance nor the reliability are particularly great and it might be that we will remove it from future versions (it adds to the binary size quite significantly for something that doesn't work as well as I'd hoped)."
+    },
+    {
+     "id": 6531437611,
+     "issue": 1407,
+     "issue_title": "Title: Feature request: Allow disabling automatic TUN prefix routes on Linux",
+     "created_at": "2026-10-30T19:12:57Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1407#issuecomment-6531437611",
+     "body": "This might be better solved with network namespaces, I'm reluctant to add `IFA_F_NOPREFIXROUTE` given it is not portable across different platforms and a device route is normal and expected behaviour. "
+    },
+    {
+     "id": 6531410654,
+     "issue": 1409,
+     "issue_title": "Remote getNodeInfo can time out while the initial route is converging",
+     "created_at": "2026-10-30T19:11:39Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1409#issuecomment-6531410654",
+     "body": "Nodeinfo requests aren't really idempotent so automatic retries could happen while waiting for an in-flight response on a higher latency network, so I don't really want to add that. I think it's OK personally if nodeinfo requests time out occasionally, it isn't a core network feature and it can be easily retried by a caller if it's really that important."
+    },
+    {
+     "id": 6531377332,
+     "issue": 1410,
+     "issue_title": "Data races in Ironwood diagnostic getters used by getPeers/getSessions",
+     "created_at": "2026-10-30T19:10:04Z",
+     "user": "neilalexander",
+     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1410#issuecomment-6531377332",
+     "body": "PRs are indeed restricted now to stop the flood of AI-generated drive-by pull requests. In the worst case these data races would just affect the admin socket responses (which are only really there for debug purposes), but will look into fixing it."
+    }
+   ]
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2624,
+     "title": "OpenWrt build",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T21:09:34Z",
+     "updated_at": "2026-10-30T22:09:58Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2624",
+     "body": "Tested on TP-Link TL-MR3020v3, OpenWrt r37915-5057a9aba5.\r\n\r\nРеализована возможность собрать с UPnP или без, с торрент-клиентом или без, добавлены соответствующие пункты в menuconfig и патчи. \r\nНеплохо бы для экономии добавить возможность отключение переводов на иностранные языки, заготовка в menuconfig имеется.\r\nВ составе пакета имеется i2pd.conf, подходящий (надеюсь) для многих домашних маршрутизаторов. Размещение файлов в ФС целевого устройства аналогично пакету для Debian.\r\n\r\nДля сборки свежей версии в Makefile менять дату сборки `PKG_SOURCE_DATE`,  хэш очередного коммита `PKG_SOURCE_VERSION`. Они попадают в имя apk-файла. Контрольную сумму архива с исходниками (создается в процессе загрузки) `PKG_MIRROR_HASH` можно установить в значение `skip` \r\nhttps://openwrt.org/docs/guide-developer/packages#use_source_repository , однако имеется баг https://github.com/openwrt/openwrt/issues/19757\r\nМожно выполнить `make package/i2pd/clean; make package/i2pd/download V=s` с заведомо неправильной контрольной суммой и в сообщении об ошибке загрузки получить правильную контрольную сумму, которую и указать в `PKG_MIRROR_HASH`.\r\n"
+    },
+    {
+     "number": 2412,
+     "title": "Revert \"Haiku OS gui\"",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-06-17T17:47:48Z",
+     "updated_at": "2026-10-30T22:08:46Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2412",
+     "body": "Reverts PurpleI2P/i2pd#2411"
+    },
+    {
+     "number": 2560,
+     "title": "Revert \"LeaseSet2: check declared key length before creating an encryptor\"",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-09-16T11:27:51Z",
+     "updated_at": "2026-10-30T22:08:42Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2560",
+     "body": "Reverts PurpleI2P/i2pd#2556\r\nClaude."
+    },
+    {
+     "number": 2623,
+     "title": "Revert neuroslop \"Fixup i2cp option on reconfigure.\"",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-30T18:17:15Z",
+     "updated_at": "2026-10-30T22:08:40Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2623",
+     "body": "Reverts PurpleI2P/i2pd#2365"
+    },
     {
      "number": 2622,
      "title": "contrib/openrc: add DAEMON_OPTS unconditionally",
@@ -124,6 +247,15 @@
    ],
    "comments": [
     {
+     "id": 6534558724,
+     "issue": 2624,
+     "issue_title": "OpenWrt build",
+     "created_at": "2026-10-30T22:09:58Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2624#issuecomment-6534558724",
+     "body": "@r4sas  посмотри"
+    },
+    {
      "id": 6522123708,
      "issue": 345,
      "issue_title": "OpenWrt packages",
@@ -177,12 +309,78 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7298,
+     "title": "HTTP inbound: Forward short 100 Continue responses promptly",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T20:47:20Z",
+     "updated_at": "2026-10-30T21:13:13Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7298",
+     "body": "A short `HTTP/1.1 100 Continue\\r\\n\\r\\n` response is only 25 bytes, but the HTTP inbound waits for 56 bytes before deciding whether to forward it. If the origin waits for the request body and the client waits for Continue, the upload stalls until the client falls back or times out.\n\nPeek only the 12-byte HTTP status prefix needed to identify a 1xx response. The existing raw-header forwarding, header-size check and final-response parsing stay in place. This follows the behavior introduced in #4547 for #4545.\n\nThe regression withholds the final response until the complete interim response has been forwarded. It fails on the original code and passes with the fix, without sleeps or goroutines. The existing two response tests still pass.\n\nValidation:\n- An actual Xray binary with a synthetic loopback HTTP origin: the short-response upload times out before the fix and completes with HTTP 200 after it. Direct-origin and longer-interim-response controls pass in both runs.\n- Windows Go 1.27.3: all tests in `./proxy/http ./proxy/socks ./common/protocol/http` (12 leaf tests), plus all seven HTTP scenarios selected by `^Test(Http|HTTP)` in `./testing/scenarios`, pass. Vet for the three packages and the main build pass.\n- Linux Go 1.27.1: the same package suite and seven scenarios pass with `-race`; vet for the three packages and the main build pass. The upstream scenario harness builds ordinary child Xray binaries.\n- Repository format check and `git diff --check` pass.\n\nAI-assisted implementation and tests; the change received a separate code review and was checked against the reproduced behavior.\n"
+    },
+    {
+     "number": 7279,
+     "title": "Query every balancer tag passed to api bi",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-28T11:31:42Z",
+     "updated_at": "2026-10-30T21:06:27Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7279",
+     "body": "> Continued in [#7299](https://github.com/XTLS/Xray-core/pull/7299). This remaining BI change follows the request to include it in #7276, which has since merged without the BI fix. Validation was refreshed against current main.\n\nThe documented `xray api bi balancer-a balancer-b` invocation only queries `balancer-a`. The second tag is ignored in both text and JSON modes; even an unknown second tag returns success.\n\nQuery each supplied tag in argument order through the existing `GetBalancerInfo` call and print each response. Single-tag output and the existing command timeout are preserved.\n\nAdded two regression cases that record the actual CLI-to-gRPC requests in text and JSON modes. Both fail on the original implementation (`[a]` instead of `[a, b]`) and pass with the fix.\n\nValidation:\n- Built CLI: both single-tag controls, two-tag text/JSON output and an unknown second tag all behave as expected. JSON mode yields two complete responses in argument order.\n- Affected command and routing suites pass on Windows and with `-race` on Linux: 59 leaf tests each, no failures or skips.\n- Native Windows build, repository format check and `git diff --check` pass.\n- `go vet` of the same package scope reports one existing discarded-cancellation diagnostic in `app/router/command/command.go:101`, identically reproduced on unchanged main. No new diagnostics.\n\nAI-assisted implementation and tests with OpenAI Codex; the production change and validation evidence were independently reviewed.\n"
+    },
+    {
+     "number": 7299,
+     "title": "Commands: Fix `xray api bi balancer1 balancer2`",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T21:04:43Z",
+     "updated_at": "2026-10-30T21:04:43Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7299",
+     "body": "Follow-up to #7279 and the [request to include it in #7276](https://github.com/XTLS/Xray-core/pull/7279#issuecomment-6468250523). #7276 has since merged with the `adrules` fix; this is the remaining BI change on current main.\n\nThe help documents `xray api bi balancer1 balancer2`, but only the first tag is queried, including with `--json`. Query every supplied tag in order through the existing GetBalancerInfo RPC and output formatters. A failed later tag now reports an error instead of silently succeeding after querying only the first tag. JSON output is a sequence of complete response objects.\n\nThe two regression cases call the actual command against a local gRPC recorder in text and JSON modes and verify both requested tags in order. Both fail with the original source and pass with the fix. The production and test files are byte-identical to #7279.\n\nValidation refreshed against main `0afec660`:\n- Windows Go 1.27.3 and Linux Go 1.27.1 (`-race`): all tests in `./main/commands/... ./app/router/...` pass (59 leaf tests on each platform; no test failures or skips).\n- Five actual CLI cases against a synthetic loopback RoutingService pass: each single tag, multiple tags in text/JSON, and an invalid later tag. On the baseline, the last three cases fail their assertions.\n- Main build, repository format check and `git diff --check` pass.\n- `go vet ./main/commands/... ./app/router/...` reports the existing lost-cancel diagnostic at `app/router/command/command.go:101`. It is identical with the original BI source and with the fix on Windows; Linux reports the same diagnostic. No analyzers were disabled.\n\nAI-assisted implementation and tests; separately reviewed and checked against the reproduced command behavior.\n"
+    },
+    {
+     "number": 7297,
+     "title": "Mux: serialize shared worker writes",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-30T20:28:08Z",
+     "updated_at": "2026-10-30T20:58:06Z",
+     "user": "Ar-Atharifard",
+     "url": "https://github.com/XTLS/Xray-core/pull/7297",
+     "body": "Concurrent mux sessions share a transport writer. Their frame writes can race on the TCP vector cache, panic in WebSocket, or corrupt/stall gRPC traffic.\n\nSerialize complete frames with one writer mutex per client/server worker. Close and Interrupt bypass the write lock so shutdown can interrupt blocked I/O.\n\nRelated: #5143. [Reproduction, configs and logs](https://github.com/XTLS/Xray-core/pull/5143#issuecomment-6528383844) include an unpatched v26.10.29 crash and a passing patched run.\n\nValidation on the rebased v26.10.29 commit:\n- Mux race tests and SOCKS integration: 10 repetitions each, covering TCP, WebSocket and both gRPC modes.\n- SOCKS, HTTP and gRPC encoding race tests pass.\n- Project formatting, protobuf consistency and whitespace checks pass.\n- TCP loopback benchmarks add no per-frame allocations; median overhead was 2.8% at 4 KiB and 0.3% at 8 KiB. These are local measurements.\n\nThe full Linux suite passed 94 packages, with 2 failing in TLS/ECH and QUIC DNS. Those failures also reproduce on unmodified upstream. Windows/macOS validation remains for CI.\n"
+    },
+    {
+     "number": 7296,
+     "title": "XHTTP server: unblock writes and serialize connection close",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T19:48:48Z",
+     "updated_at": "2026-10-30T19:48:48Z",
+     "user": "ODtian",
+     "url": "https://github.com/XTLS/Xray-core/pull/7296",
+     "body": "## Summary\n\nAn XHTTP response write can hold the connection mutex while blocked on a slow reader. Closing the logical connection then waits on that mutex, including when a proxy inactivity timeout cancels the business context while the HTTP request stays open.\n\nSignal closure before waiting for the writer and interrupt an active write using `http.ResponseController`. Serialize the complete transition with `sync.Once` so concurrent business/handler closes join the deadline call and the writer before `ServeHTTP` returns.\n\n```text\nClose (once)\n  signal closure\n  interrupt active write\n  wait for writer completion\n```\n\n## Evidence\n\n- Added `TestConcurrentCloseWaitsForDeadline`, using a real HTTP test server and a gated response writer. The gates ensure the business close owns the first deadline call before the handler closes.\n- Upstream implementation: fails with `Close waited for the blocked writer without interrupting it`.\n- An unserialized close transition: fails with `deadline call outlived ServeHTTP during concurrent Close`.\n- Commit `8628110`, rebuilt with Go 1.27.3 on Linux/amd64: `go test -buildvcs=false ./transport/internet/splithttp -count=1` passes (`ok`, 2.434s).\n- Bounded loopback `packet-up` fixtures run against a binary rebuilt from commit `8628110`: peer half-close and an internal inactivity timeout with the HTTP request still open both finish with `CLOSE_FRAMES=0`, `WRITE_FRAMES=0`, and `CLOSE_WAIT_CONNECTIONS=0`.\n\n## Merge Danger\n\n**Door:** Two-way.\n\n**Blast Radius:** XHTTP shutdown. Active I/O is interrupted on close; the existing transport tests cover normal completion.\n"
+    },
+    {
+     "number": 6535,
+     "title": "在Windows上TUN疑似无法正确嗅探高权限进程的名称引发error",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-07-24T03:37:40Z",
+     "updated_at": "2026-10-30T19:09:14Z",
+     "user": "Kc2353",
+     "url": "https://github.com/XTLS/Xray-core/issues/6535",
+     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n（从日志上下文判断，原因不一定准确）在Windows上TUN疑似无法正确嗅探高权限进程的名称，例如卡巴斯基，引发\n[Error] app/router: Unables to find local process name: common/net: not found\n\n### 重现方式\n\n不确定，根据日志上下文判断是卡巴斯基更新相关\n\n### 客户端配置\n\n<details><pre><code>\n{\n  \"log\": {\n    \"loglevel\": \"debug\"\n  },\n  \"dns\": {\n    \"hosts\": {\n      \"dns.google\": [\n        \"8.8.8.8\",\n        \"8.8.4.4\",\n        \"2001:4860:4860::8888\",\n        \"2001:4860:4860::8844\"\n      ],\n      \"dns.alidns.com\": [\n        \"223.5.5.5\",\n        \"223.6.6.6\",\n        \"2400:3200::1\",\n        \"2400:3200:baba::1\"\n      ],\n      \"one.one.one.one\": [\n        \"1.1.1.1\",\n        \"1.0.0.1\",\n        \"2606:4700:4700::1111\",\n        \"2606:4700:4700::1001\"\n      ]\n    },\n    \"servers\": [\n      {\n        \"address\": \"https://cloudflare-dns.com/dns-query\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"https://dns.google/dns-query\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"8.8.8.8\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-1\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"domains\": [\n          \"\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-2\"\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"geosite:cn\",\n          \"geosite:private\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-3\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"domains\": [\n          \"geosite:cn\",\n          \"geosite:private\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-4\"\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"full:cloudflare-dns.com\",\n          \"full:dns.google\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"skipFallback\": false,\n        \"tag\": \"direct-dns-5\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"skipFallback\": false,\n        \"tag\": \"direct-dns-6\"\n      }\n    ],\n    \"serveStale\": true,\n    \"tag\": \"dns-module\"\n  },\n  \"inbounds\": [\n    {\n      \"tag\": \"socks\",\n      \"port\": 7890,\n      \"listen\": \"127.0.0.1\",\n      \"protocol\": \"mixed\",\n      \"sniffing\": {\n        \"enabled\": false,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ],\n        \"routeOnly\": false\n      },\n      \"settings\": {\n        \"auth\": \"noauth\",\n        \"udp\": true,\n        \"allowTransparent\": false\n      }\n    },\n    {\n      \"tag\": \"tun\",\n      \"protocol\": \"tun\",\n      \"sniffing\": {\n        \"enabled\": false,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ],\n        \"routeOnly\": false\n      },\n      \"settings\": {\n        \"name\": \"xray_tun\",\n        \"MTU\": 9000,\n        \"gateway\": [\n          \"172.18.0.1/30\"\n        ],\n     "
+    },
+    {
      "number": 7294,
      "title": "Geodata: Support streaming gzip decompression for downloaded assets",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-10-30T03:05:25Z",
-     "updated_at": "2026-10-30T17:16:50Z",
+     "updated_at": "2026-10-30T18:40:05Z",
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7294",
      "body": "检测到 gzip 头就自动流式解压\n实测可节省 80% 流量\n\n目前 https://github.com/XTLS/Xray-rules-dat 已适配此 PR\n只需要在下载的 url 加 `.gz` 后缀即可\n\n例如 `https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geoip-full.dat.gz`"
@@ -340,17 +538,6 @@
      "user": "KobeArthurScofield",
      "url": "https://github.com/XTLS/Xray-core/pull/7185",
      "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
-    },
-    {
-     "number": 6535,
-     "title": "在Windows上TUN疑似无法正确嗅探高权限进程的名称引发error",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-07-24T03:37:40Z",
-     "updated_at": "2026-10-29T20:09:51Z",
-     "user": "Kc2353",
-     "url": "https://github.com/XTLS/Xray-core/issues/6535",
-     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n（从日志上下文判断，原因不一定准确）在Windows上TUN疑似无法正确嗅探高权限进程的名称，例如卡巴斯基，引发\n[Error] app/router: Unables to find local process name: common/net: not found\n\n### 重现方式\n\n不确定，根据日志上下文判断是卡巴斯基更新相关\n\n### 客户端配置\n\n<details><pre><code>\n{\n  \"log\": {\n    \"loglevel\": \"debug\"\n  },\n  \"dns\": {\n    \"hosts\": {\n      \"dns.google\": [\n        \"8.8.8.8\",\n        \"8.8.4.4\",\n        \"2001:4860:4860::8888\",\n        \"2001:4860:4860::8844\"\n      ],\n      \"dns.alidns.com\": [\n        \"223.5.5.5\",\n        \"223.6.6.6\",\n        \"2400:3200::1\",\n        \"2400:3200:baba::1\"\n      ],\n      \"one.one.one.one\": [\n        \"1.1.1.1\",\n        \"1.0.0.1\",\n        \"2606:4700:4700::1111\",\n        \"2606:4700:4700::1001\"\n      ]\n    },\n    \"servers\": [\n      {\n        \"address\": \"https://cloudflare-dns.com/dns-query\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"https://dns.google/dns-query\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"8.8.8.8\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-1\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"domains\": [\n          \"\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-2\"\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"geosite:cn\",\n          \"geosite:private\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-3\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"domains\": [\n          \"geosite:cn\",\n          \"geosite:private\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-4\"\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"full:cloudflare-dns.com\",\n          \"full:dns.google\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"skipFallback\": false,\n        \"tag\": \"direct-dns-5\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"skipFallback\": false,\n        \"tag\": \"direct-dns-6\"\n      }\n    ],\n    \"serveStale\": true,\n    \"tag\": \"dns-module\"\n  },\n  \"inbounds\": [\n    {\n      \"tag\": \"socks\",\n      \"port\": 7890,\n      \"listen\": \"127.0.0.1\",\n      \"protocol\": \"mixed\",\n      \"sniffing\": {\n        \"enabled\": false,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ],\n        \"routeOnly\": false\n      },\n      \"settings\": {\n        \"auth\": \"noauth\",\n        \"udp\": true,\n        \"allowTransparent\": false\n      }\n    },\n    {\n      \"tag\": \"tun\",\n      \"protocol\": \"tun\",\n      \"sniffing\": {\n        \"enabled\": false,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ],\n        \"routeOnly\": false\n      },\n      \"settings\": {\n        \"name\": \"xray_tun\",\n        \"MTU\": 9000,\n        \"gateway\": [\n          \"172.18.0.1/30\"\n        ],\n     "
     },
     {
      "number": 7290,
@@ -967,86 +1154,27 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7242",
      "body": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6361862358"
-    },
-    {
-     "number": 7276,
-     "title": "Commands: Fix `xray api adrules c1.json c2.json`",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-28T09:58:05Z",
-     "updated_at": "2026-10-28T21:48:44Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7276",
-     "body": "The documented `xray api adrules c1.json c2.json` command sends a replacement for each file by default. Both RPCs succeed, but only the rules from `c2.json` remain.\n\nApply the requested append mode to the first file, then append subsequent files in argument order. This preserves the existing single-file and `--append` behavior.\n\nLocal validation of the current head (`d0ad893`):\n- Three regression scenarios pass through the real RoutingService and router: replacement with two files, append with two files, and replacement with one file. The harness is retained locally and is not included in the current diff. The two-file replacement fails on the original implementation.\n- The built CLI passes the same three scenarios; native Windows build and repository format check pass.\n- `go vet ./main/commands/... ./app/router/...` reports one existing discarded-cancellation diagnostic in `app/router/command/command.go:101`, also reproduced on unchanged main.\n\nThe original submitted fix also passed the affected package suites on Windows and with `-race` on Linux (60 leaf tests each); the subsequent edits remove the test file and add a comment, with executable logic unchanged.\n\nAI-assisted implementation and local tests with OpenAI Codex; the production change and regression evidence were independently reviewed before submission.\n"
-    },
-    {
-     "number": 7255,
-     "title": "File loader: Check file extensions without resolving symlinks",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-25T18:48:28Z",
-     "updated_at": "2026-10-28T21:33:12Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7255",
-     "body": "Close #7239\r\n这是由于 https://github.com/golang/go/issues/63703 导致的\r\n\r\n以前做的有点过了又不够，只穿透了软链接没检查硬链接，后者不需要管理员权限就能做到\r\n仔细想了下威胁模型根本不存在，因此直接放弃符号链接的检查才是对的，不应该在这个方向继续堆代码"
-    },
-    {
-     "number": 7239,
-     "title": "Windows: core fails to start with 'The system cannot find the path specified' when the working directory contains a directory junction (regression in v26.10.21)",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-23T02:43:26Z",
-     "updated_at": "2026-10-28T21:23:19Z",
-     "user": "bin-ran",
-     "url": "https://github.com/XTLS/Xray-core/issues/7239",
-     "body": "### Describe the bug\n\nOn Windows, Xray fails to start when the **current working directory** contains a directory junction:\n\n```\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nThe config file itself exists and is readable — the failure happens while Xray resolves the path of an already opened file.\n\n### Versions\n\n- Xray core **v26.10.21** (go1.27.3 windows/amd64) — broken\n- Xray core **v26.9.30** — works (the code path described below does not exist there)\n\n### Steps to reproduce\n\n```bat\nmkdir C:\\test\\target\necho {}> C:\\test\\target\\config.json\nmklink /J C:\\test\\link C:\\test\\target\n\ncd /d C:\\test\\link\nxray run -c config.json\n```\n\nResult:\n\n```\nXray 26.10.21 (Xray, Penetrates Everything.) 1b1647c (go1.27.3 windows/amd64)\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\nFailed to start: main: failed to load config files: [config.json] > infra/conf/serial: failed to read config: &{Name:config.json Format:json} > The system cannot find the path specified.\n```\n\nWith the **physical** path it works:\n\n```bat\ncd /d C:\\test\\target\nxray run -c config.json\n[Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\n[Warning] core: Xray 26.10.21 started\n```\n\n### Root cause\n\n`main/confloader/external/external.go`, function `readConfigFile()` (introduced in v26.10.21):\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\npath, err = filepath.EvalSymlinks(path)\nif err != nil {\n    return nil, err\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n`filepath.EvalSymlinks` fails on Windows with `ERROR_PATH_NOT_FOUND` (\"The system cannot find the path specified\") as soon as one component of the path is a **directory junction** (this is a Go standard library behavior, see the related golang/go report).\n\nNotes:\n- the file has already been opened successfully at this point (`os.Open(arg)` succeeded);\n- the resolved path is only used for an **extension whitelist** check, so the resolution itself is not required;\n- the failure is fatal and prevents the core from starting at all.\n\n### Impact\n\nEvery user whose Xray is launched with a working directory located under a junction / symlinked directory is affected, e.g.:\n\n- Scoop: `C:\\Users\\<user>\\scoop\\apps\\<app>\\current` is a junction to the versioned folder;\n- Chocolatey / WinGet shim directories;\n- any manually created `mklink /J` layout.\n\nThis is not only a CLI issue: for example **v2rayN** (which starts the core with `run -c config.json` and `WorkingDirectory = <install dir>\\binConfigs`) becomes completely unusable after updating the bundled core to v26.10.21 — the client shows `Failed to start: main: failed to load config files: [config.json] ... The system cannot find the path specified.` and no proxy is available.\n\n### Suggested fix\n\nDo not let the symlink resolution failure be fatal — fall back to the unresolved path and check the extension with `filepath.Ext`:\n\n```go\npath, err := filepath.Abs(file.Name())\nif err != nil {\n    return nil, err\n}\nif resolved, err := filepath.EvalSymlinks(path); err == nil {\n    path = resolved\n}\nswitch strings.ToLower(filepath.Ext(path)) {\ncase \".jsonc\", \".json\", \".yml\", \".yaml\", \".toml\", \".pb\", \".protobuf\":\ndefault:\n    return nil, errors.New(\"unsupported config file extension: \", path)\n}\n```\n\n### Minimal Go reproducer for the underlying behavior\n\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"os\"\n\t\"path/filepath\"\n)\n\nfunc main() {\n\tp, err := filepath.Abs(os.Args[1])\n\tfmt.Println(\"Abs:         \", p, err)\n\tr, err := filepath.EvalSymlinks(p)\n\tfmt.Println(\"EvalSymlinks:\", r, err)\n}\n```\n\nRun it with the CWD set to a junction directory and pass a file name inside it:\n\n```bat\ncd /d C:\\test\\link\ngo run main.go config.json\n`"
-    },
-    {
-     "number": 7227,
-     "title": "Linux TUN: IPv6 process lookup fails with \"not found in /proc/net/tcp6\"",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-22T02:32:58Z",
-     "updated_at": "2026-10-28T20:49:10Z",
-     "user": "k1tamura",
-     "url": "https://github.com/XTLS/Xray-core/issues/7227",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nWhen using Xray's TUN inbound on Linux, routing by process name fails for IPv6 TCP connections. Xray cannot identify the process, so the intended `process` rule does not match. Traffic falls through to subsequent rules or the default outbound instead. The same rule works for IPv4 TCP.\n\nReproduced with the official Xray 26.10.21 binary (1b1647c, linux/amd64) on Ubuntu 24.04.5 / WSL2. The minimal example below uses `curl`, a TUN inbound and two local outbounds.\n\nExpected: both connections select `process-match`.\nActual: IPv4 selects `process-match`; IPv6 selects `fallback` with this error:\n\n```text\n[Error] app/router: Unables to find local process name: common/net: connection for fc00::1:41002 not found in /proc/net/tcp6\n```\n\nThe likely cause is [`formatLittleEndianString`](https://github.com/XTLS/Xray-core/blob/1b1647cd9ddf0abc34b981d4611fc03bcac1ca74/common/net/find_process_linux.go#L90-L107): it reverses all 16 IPv6 address bytes. However, `/proc/net/tcp6` formats each 32-bit word in native byte order while preserving the order of the four words. On little-endian Linux, these produce different lookup strings. IPv4 works because its address contains only one 32-bit word.\n\n### Reproduction Method\n\nSave the client config below as `config.json` alongside the official `xray` binary. Run on Linux:\n\n```sh\nsudo unshare --net bash\nip link set lo up\n./xray run -c config.json >xray.log 2>&1 &\nxray_pid=$!\nsleep 1\nip addr add 10.0.0.1/24 dev xray-repro\nip -6 addr add fc00::1/64 dev xray-repro nodad\nip route add 192.0.2.2/32 dev xray-repro\nip -6 route add 2001:db8::2/128 dev xray-repro\n\ncurl --noproxy '*' --local-port 41001 --max-time 3 -i http://192.0.2.2/\ncurl --noproxy '*' --local-port 41002 --max-time 3 -i 'http://[2001:db8::2]/'\n\nkill \"$xray_pid\"\nwait \"$xray_pid\"\nexit\ncat xray.log\n```\n\nThe commands use an isolated network namespace. IPv4 selects `process-match`; IPv6 selects `fallback`.\n\n### Client config\n\n<details><pre><code>\n{\n  \"log\": {\"loglevel\": \"debug\", \"dnsLog\": true},\n  \"inbounds\": [\n    {\"tag\": \"tun-in\", \"protocol\": \"tun\", \"settings\": {\"name\": \"xray-repro\"}}\n  ],\n  \"outbounds\": [\n    {\"tag\": \"fallback\", \"protocol\": \"blackhole\"},\n    {\"tag\": \"process-match\", \"protocol\": \"blackhole\", \"settings\": {\"response\": {\"type\": \"http\"}}}\n  ],\n  \"routing\": {\n    \"rules\": [\n      {\"type\": \"field\", \"process\": [\"curl\"], \"outboundTag\": \"process-match\"}\n    ]\n  }\n}\n</code></pre></details>\n\n### Server config\n\n<details><pre><code>\nNot applicable. No server is required.\n</code></pre></details>\n\n### Client log\n\n<details><pre><code>\nXray 26.10.21 (Xray, Penetrates Everything.) 1b1647c (go1.27.3 linux/amd64)\nA unified platform for anti-censorship.\n2026/10/22 04:53:08.288725 [Info] infra/conf/serial: Reading config: &{Name:config.json Format:json}\n2026/10/22 04:53:08.289617 [Debug] app/log: Logger started\n2026/10/22 04:53:08.291793 [Info] proxy/tun: xray-repro created\n2026/10/22 04:53:08.292708 [Info] proxy/tun: xray-repro up\n2026/10/22 04:53:08.293171 [Warning] core: Xray 26.10.21 started\n2026/10/22 04:53:09.290633 [Info] [312366165] proxy/tun: processing from tcp:10.0.0.1:41001 to tcp:192.0.2.2:80\n2026/10/22 04:53:09.294028 from tcp:10.0.0.1:41001 accepted tcp:192.0.2.2:80 [tun-in -> process-match]\n2026/10/22 04:53:09.294037 [Info] [312366165] app/dispatcher: taking detour [process-match] for [tcp:192.0.2.2:80]\n2026/10/22 04:53:09.300980 [Info] [3066045415] proxy/tun: process"
-    },
-    {
-     "number": 7232,
-     "title": "Routing: Fix Linux IPv6 `process`",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T17:20:41Z",
-     "updated_at": "2026-10-28T20:49:08Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7232",
-     "body": "小端序处理的bug\nclose #7227"
-    },
-    {
-     "number": 7228,
-     "title": "Fail tun-in inbound traffic to a wireguard outbound",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-22T04:04:00Z",
-     "updated_at": "2026-10-28T20:34:42Z",
-     "user": "gnought",
-     "url": "https://github.com/XTLS/Xray-core/issues/7228",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nUsing Xray v26.10.21 under macOS 27.0.1, I face following error, and cannot proxy tun-in traffic to a wireguard channel.\n```\n[Error] Unable to update bind: proxy/wireguard: failed to dial to dest > listen udp 0.0.0.0:0: transport/internet: failed to apply external controller > proxy/tun: [tun] falied to set interface > invalid argument\n```\n\n### Reproduction Method\n\nrun xray v26.10.21 with posted client config\n\n### Client config\n\n<details><pre><code>\n{\n  \"log\": {\n    \"loglevel\": \"debug\"\n  },\n  \"inbounds\": [\n    {\n      \"tag\": \"tun-in\",\n      \"protocol\": \"tun\",\n      \"settings\": {\n        \"mtu\": 1420,\n        \"autoSystemRoutingTable\": [\"0.0.0.0/0\", \"::/0\"]\n      }\n    }\n  ],\n  \"outbounds\": [\n    {\n      \"tag\": \"wg-out\",\n      \"protocol\": \"wireguard\",\n      \"settings\": {\n        \"secretKey\": \"<redacted>\",\n        \"address\": [\"6.7.8.9/32\"],\n        \"peers\": [\n          {\n            \"publicKey\": \"<redacted>\",\n            \"preSharedKey\": \"<redacted>\",\n            \"keepAlive\": 25,\n            \"endpoint\": \"1.2.3.4:12345\",\n            \"allowedIPs\": [\"0.0.0.0/0\", \"::/0\"]\n          }\n        ],\n        \"mtu\": 1380\n      }\n    }\n  ]\n}\n</code></pre></details>\n\n### Server config\n\nN/A\n\n### Client log\n\n```\nXray 26.10.21 (Xray, Penetrates Everything.) Custom (go1.27.3 darwin/arm64)\nA unified platform for anti-censorship.\n2026/10/22 11:56:22.091987 [Info] infra/conf/serial: Reading config: &{Name:min.jsonc Format:json}\n2026/10/22 11:56:22.093090 [Debug] app/log: Logger started\n2026/10/22 11:56:22.093655 [Warning] proxy/wireguard: Using built-in TCP/IP stack\n2026/10/22 11:56:22.094938 [Debug] Routine: encryption worker 9 - started\n2026/10/22 11:56:22.094957 [Info] proxy/tun: [tun] update interface en0 14\n2026/10/22 11:56:22.094966 [Debug] Routine: encryption worker 3 - started\n2026/10/22 11:56:22.094975 [Debug] Routine: handshake worker 9 - started\n2026/10/22 11:56:22.094980 [Debug] Routine: handshake worker 1 - started\n2026/10/22 11:56:22.094985 [Debug] Routine: handshake worker 6 - started\n2026/10/22 11:56:22.094997 [Debug] Routine: encryption worker 2 - started\n2026/10/22 11:56:22.095003 [Debug] Routine: decryption worker 2 - started\n2026/10/22 11:56:22.095008 [Debug] Routine: encryption worker 5 - started\n2026/10/22 11:56:22.095013 [Debug] Routine: encryption worker 1 - started\n2026/10/22 11:56:22.095018 [Debug] Routine: decryption worker 5 - started\n2026/10/22 11:56:22.095024 [Debug] Routine: handshake worker 2 - started\n2026/10/22 11:56:22.095029 [Debug] Routine: handshake worker 5 - started\n2026/10/22 11:56:22.095035 [Debug] Routine: handshake worker 7 - started\n2026/10/22 11:56:22.095041 [Debug] Routine: decryption worker 6 - started\n2026/10/22 11:56:22.095047 [Debug] Routine: encryption worker 6 - started\n2026/10/22 11:56:22.095053 [Debug] Routine: decryption worker 8 - started\n2026/10/22 11:56:22.095058 [Debug] Routine: encryption worker 7 - started\n2026/10/22 11:56:22.095063 [Debug] Routine: encryption worker 8 - started\n2026/10/22 11:56:22.095069 [Debug] Routine: handshake worker 3 - started\n2026/10/22 11:56:22.095075 [Debug] Routine: decryption worker 7 - started\n2026/10/22 11:56:22.095081 [Debug] Routine: decryption worker 3 - started\n2026/10/22 11:56:22.095086 [Debug] Routine: handshake worker 8 - started\n2026/10/22 11:56:22.095091 [Debug] Routine: encryption worker 12 - started\n2026/10/22 11:56:22.095097 [Debug] Routine: decryption worker 11 - started\n202"
-    },
-    {
-     "number": 7230,
-     "title": "TUN inbound: `autoOutboundsInterface` should not set IP_BOUND_IF on IPv6 sockets on Darwin (mainly macOS)",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T07:49:35Z",
-     "updated_at": "2026-10-28T20:34:40Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7230",
-     "body": "Since #7173, a failed interface binding fails the dial. On Darwin (macOS and iOS), setinterface fell through from IPV6_BOUND_IF to IP_BOUND_IF on IPv6 sockets, which Darwin rejects with EINVAL. So every UDP dial failed, as Go opens a dual-stack IPv6 socket for it, and so did TCP to IPv6. TCP to IPv4 uses an IPv4 socket and kept working. Before #7173 the error was only logged.\n\nIPV6_BOUND_IF binds the whole socket, so on a dual-stack socket it covers its IPv4 traffic as well. Set only the option of the socket's family, as sockopt_darwin.go already does for sockopt.interface. The new test binds each kind of socket to lo0.\n\nLinux, Android and FreeBSD bind with socket-level options (SO_BINDTODEVICE, SO_SETFIB) that don't depend on the IP version. On Windows, the related case of an adapter without IPv4 or IPv6 is handled in #7214.\n\nFixes #7228"
     }
    ],
    "comments": [
+    {
+     "id": 6533316259,
+     "issue": 7297,
+     "issue_title": "Mux: serialize shared worker writes",
+     "created_at": "2026-10-30T20:58:05Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7297#issuecomment-6533316259",
+     "body": "怎么做到这么丑的\r\n而且似乎仅可能发生在socks上 VLESS之类是有并发写入保护的"
+    },
+    {
+     "id": 6530739165,
+     "issue": 7294,
+     "issue_title": "Geodata: Support streaming gzip decompression for downloaded assets",
+     "created_at": "2026-10-30T18:40:04Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7294#issuecomment-6530739165",
+     "body": "明白你的意思了，但是不该这么做，太脆弱了"
+    },
     {
      "id": 6528844040,
      "issue": 7294,
@@ -1984,81 +2112,40 @@
      "body": "顺便“兜底 ban 内网”还得算上新加的 MASQUE 入站，~~文档侧边栏协议排序我有空得调整下~~"
     },
     {
-     "id": 6481975095,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T22:11:41Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6481975095",
-     "body": "先只给 \"block\" 加个可选的回复比如 `blockReply`（名字有歧义但暂未想到更好的），逻辑很清晰啊，又不影响别的逻辑分支"
-    },
-    {
-     "id": 6481887026,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T22:07:11Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6481887026",
-     "body": "忘了这茬了，那样的话 freedom 感觉又脏了啊。。。"
-    },
-    {
-     "id": 6481801685,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T22:03:08Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6481801685",
-     "body": "另外无条件 \"block\" 不应该写点特殊代码吗，不然又先解析域名了"
-    },
-    {
-     "id": 6481761355,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T22:01:07Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6481761355",
-     "body": "本身就是为了精简掉一个出站，不要又多塞一个，扩展 `finalRules` 才是正途"
-    },
-    {
-     "id": 6481431239,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T21:44:16Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6481431239",
-     "body": "原黑洞之前被塞了 #6711 这种需求\r\n或许还可能进一步想读包，针对性地回复\r\n那样的话单拉个出站，职责会清晰一些"
-    },
-    {
-     "id": 6481194940,
-     "issue": 7255,
-     "issue_title": "File loader: Check file extensions without resolving symlinks",
-     "created_at": "2026-10-28T21:32:25Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7255#issuecomment-6481194940",
-     "body": "严格验证 config 和 lua 文件扩展名是为了防止下游 GUI 全盘接受恶意订阅，导致同时被用于 lua 和 config\r\n\r\n软链接、硬链接都可以在没有管理员权限的情况下，绕过文件扩展名检查\r\n但这需要本地执行命令做连接，因此这种威胁模型不存在的\r\n如果攻击者已经能够控制本地执行命令，何苦再费那么大劲借助订阅下发\r\n\r\n之前写 evalsymlink 解析符号连接，单纯是因为就多一行代码的事儿\r\n既然不兼容下游的用法，因此没必要再去费劲往这个方向扩代码\r\n这个 PR 中间的几个 commit 我去扩了，写一半发现硬链接不好处理，得写平台相关代码了\r\n于是果断放弃这个方向"
-    },
-    {
-     "id": 6480782259,
-     "issue": 7255,
-     "issue_title": "File loader: Check file extensions without resolving symlinks",
-     "created_at": "2026-10-28T21:11:02Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7255#issuecomment-6480782259",
-     "body": "可以先作为修复合并\r\n\r\n> 仔细想了下威胁模型根本不存在，因此直接放弃符号链接的检查才是对的，不应该在这个方向继续堆代码\r\n\r\n但这句话需要更多解释"
-    },
-    {
-     "id": 6479524740,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T20:13:58Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6479524740",
-     "body": "~~新增个出站干啥？~~"
+     "id": 5169342420,
+     "issue": 6535,
+     "issue_title": "在Windows上TUN疑似无法正确嗅探高权限进程的名称引发error",
+     "created_at": "2026-08-03T16:58:43Z",
+     "user": "bytecategory",
+     "url": "https://github.com/XTLS/Xray-core/issues/6535#issuecomment-5169342420",
+     "body": "385次NtOpenProcess,385次status=0000000000000000,0次c0000022.\n如果GetExtendedTcpTable失败那也是syscall error.\n\n应该是查表成功,然后没有找到TCP Owner PID... 所以和我之前说的PPL无关.\n\ncdb 复现了下\n<details>\n<pre>\n<code>\n************* Preparing the environment for Debugger Extensions Gallery repositories **************\n   ExtensionRepository : Implicit\n   UseExperimentalFeatureForNugetShare : true\n   AllowNugetExeUpdate : true\n   NonInteractiveNuget : true\n   AllowNugetMSCredentialProviderInstall : true\n   AllowParallelInitializationOfLocalRepositories : true\n\n   -- Configuring repositories\n      ----> Repository : LocalInstalled, Enabled: true\n      ----> Repository : UserExtensions, Enabled: true\n\n>>>>>>>>>>>>> Preparing the environment for Debugger Extensions Gallery repositories completed, duration 0.047 seconds\n\n************* Waiting for Debugger Extensions Gallery to Initialize **************\n\n>>>>>>>>>>>>> Waiting for Debugger Extensions Gallery to Initialize completed, duration 0.016 seconds\n   ----> Repository : LocalInstalled, Enabled: true, Packages count: 46\n   ----> Repository : UserExtensions, Enabled: true, Packages count: 0\n\nMicrosoft (R) Windows Debugger Version 10.0.29617.1000 AMD64\nCopyright (c) Microsoft Corporation. All rights reserved.\n\nCommandLine: C:\\v26.7.11\\xray\\xray.exe run -config C:\\v26.7.11\\config.json \n\n************* Path validation summary **************\nResponse                         Time (ms)     Location\nDeferred                                       srv*\nSymbol search path is: srv*\nExecutable search path is: \n\n+------------------------------------------------------------------------+\n| This target supports Hardware-enforced Stack Protection. A HW based    |\n| \"Shadow Stack\" may be available to assist in debugging and analysis.   |\n| See aka.ms/userhsp for more info.                                      |\n|                                                                        |\n| dps @ssp                                                               |\n|                                                                        |\n+------------------------------------------------------------------------+\n\nModLoad: 00007ff6`847a0000 00007ff6`88b20000   C:\\v26.7.11\\xray\\xray.exe\nModLoad: 00007ffc`b7540000 00007ffc`b77a6000   ntdll.dll\nModLoad: 00007ffc`b7320000 00007ffc`b73e9000   C:\\WINDOWS\\System32\\KERNEL32.DLL\nModLoad: 00007ffc`b47d0000 00007ffc`b4bca000   C:\\WINDOWS\\System32\\KERNELBASE.dll\n(252c.25ec): Break instruction exception - code 80000003 (first chance)\nntdll!LdrpDoDebuggerBreak+0x35:\n00007ffc`b765d78d cc              int     3\n0:000> cdb: Reading initial command '$$><C:\\v26.7.11\\cdb-nettrace.cmd'\nModLoad: 00007ffc`b5020000 00007ffc`b50c8000   C:\\WINDOWS\\System32\\bcryptprimitives.dll\nModLoad: 00007ffc`b4650000 00007ffc`b46ae000   C:\\WINDOWS\\SYSTEM32\\powrprof.dll\nModLoad: 00007ffc`b5160000 00007ffc`b52ac000   C:\\WINDOWS\\System32\\ucrtbase.dll\nModLoad: 00007ffc`b5c90000 00007ffc`b5da8000   C:\\WINDOWS\\System32\\RPCRT4.dll\nModLoad: 00007ffc`b4630000 00007ffc`b4644000   C:\\WINDOWS\\SYSTEM32\\UMPDC.dll\nModLoad: 00007ffc`b6e50000 00007ffc`b6ed0000   C:\\WINDOWS\\System32\\ws2_32.dll\nModLoad: 00007ffc`b6360000 00007ffc`b6416000   C:\\WINDOWS\\System32\\advapi32.dll\nModLoad: 00007ffc`b7270000 00007ffc`b7319000   C:\\WINDOWS\\System32\\msvcrt.dll\nModLoad: 00007ffc`b65f0000 00007ffc`b669a000   C:\\WINDOWS\\System32\\sechost.dll\nXray 26.7.11 (Xray, Penetrates Everything.) 50231ea (go1.26.5 windows/amd64)\nA unified platform for anti-censorship.\n2026/08/04 00:43:52.853972 [Info] infra/conf/serial: Reading config: &{Name:C:\\v26.7.11\\config.json Format:json}\n2026/08/04 00:43:52.999216 [Debug] app/log: Logger started\n2026/08/04 00:43:53.057952 [Info] app/dns: DNS: created DOH client for https://cloudflare-dns.com/dns-query, with h2c false\n2026/08/04 00:43:53.059451 [Info] app/dns: DNS: created DOH client for https://dns.google/dns-query, with h2c false\n2026/08/04 00:43:53.060743 [Info] app/dns: DNS: created UDP client initialized for 8.8.8.8:53\n2026/08/04 00:4"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3008,
+     "title": "Windows: VPN does not recover after sleep after 4.8.10.0",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-19T04:55:34Z",
+     "updated_at": "2026-10-30T20:21:07Z",
+     "user": "Dmitriy2692",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3008",
+     "body": "Describe the bug\n\nOn Windows, after the PC wakes up from sleep, the VPN connection stops passing traffic and requires a manual reconnect in AmneziaVPN.\n\nThe same PC, network and VPN server work correctly with AmneziaVPN 4.8.10.0.\n\nI tested the following versions:\n\n4.8.10.0 — works correctly after sleep\n4.8.21.0 — connection is lost after sleep, manual reconnect required\n5.0.0.5 — same issue, manual reconnect required\n\nSo this appears to be a regression introduced somewhere after 4.8.10.0.\n\nTo reproduce\n\n1. Connect to an AmneziaWG server.\n2. Put Windows PC to sleep.\n3. Wake the PC.\n4. VPN appears connected, but traffic does not work correctly.\n5. Manually reconnect the VPN.\n6. Internet/VPN connectivity is restored.\n\nExpected behavior\n\nVPN connection should automatically recover after Windows resumes from sleep, as it does in version 4.8.10.0.\n\nEnvironment\n\nOS: Windows 10 64-bit\nProtocol: AmneziaWG\nWorking version: 4.8.10.0\nAffected versions tested: 4.8.21.0, 5.0.0.5"
+    },
+    {
+     "number": 3084,
+     "title": "Проблема с сессией AmneziaWG в Telegram после режима ожидания на Android",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-28T17:04:38Z",
+     "updated_at": "2026-10-30T20:17:56Z",
+     "user": "ghost",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3084",
+     "body": "Окружение: \n- Клиент: Amnezia VPN 5.0.1.0 (Android, Arm64, Realme 15T)\n- Протокол: AmneziaWG 3.1 (на собственном VPS)\n- Настройки: Включено раздельное туннелирование (в VPN направлено несколько выбранных приложений, включая Telegram; остальные идут напрямую).\n\nСуть проблемы:\n- После входа телефона в режим ожидания (обычное отключение экрана) \"рукопожатия\" с заданным интервалом преращаются (наблюдаю по входящим на VPS пакетам). Возможно так и должно быть (не уверен), но гораздо интереснее следующее.\n- Если активировать телефон (включить экран) и открыть любое приложение, которое должно теннелироваться, \"рукопожатие\" происходит сразу и без проблем (на VPS видно несколько входящих пакетов и ответ от AmneziaWG сервера)\n- Если открыть Telegram (который тоже настроен на туннелирование) - \"рукорожатие\" долго (до минуты) не происходит, Telegram висит в состоянии \"Connecting...\". При этом на VPS наблюдаю кучу входящих через туннель сообщений и ни одного ответа от AmneziaWG сервера. Выглядит так, будто клиент Amnezia на телефоне \"забыл\", что он спал и нужно обновить рукопожатие, и вместо этого продолжает отправлять трафик в туннель как ни в чем ни бывало. \n- При этом, если в Telegram в то время, когда телефон в режиме ожидания, приходит входящее сообщение - проблем никаких - рукопожатие тут же происходит, Telegram загружает сообщение.\n"
+    },
     {
      "number": 3357,
      "title": "feat: Add Vietnamese (vi_VN) localization",
@@ -2248,6 +2335,24 @@
     }
    ],
    "comments": [
+    {
+     "id": 6532677718,
+     "issue": 3008,
+     "issue_title": "Windows: VPN does not recover after sleep after 4.8.10.0",
+     "created_at": "2026-10-30T20:21:07Z",
+     "user": "buzmakov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3008#issuecomment-6532677718",
+     "body": "Correction to my comment above, Case 2 (sleep at home, wake at the office): the endpoint route is **not** the explanation there. Case 1 (route left on an unplugged adapter) stands as measured.\n\nI captured the next occurrence with `pktmon` (2026-10-30, AmneziaVPN 5.0.3.0, wake at the office, tunnel process survived sleep):\n\n- The endpoint route was correct: `<server>/32` via the Ethernet gateway, Ethernet up.\n- At the Ethernet adapter, the tunnel's UDP packets left with the correct source (`10.0.6.43:53780 → <server>:<port>`, correct gateway MAC): about 4,100 packets in 22 s, **0 packets from the server on any interface**.\n- At the same time, TCP from the same interface to `<server>` (ports 443 and 22) worked.\n- Reconnecting created a new socket (source port 53780 → 63024). The handshake completed 1.6 s after `activate`, on the same adapter, the same gateway, and the same server port. In the next 20 s: about 13,000 packets out and about 21,000 in.\n\nSo the old UDP flow stopped getting any answer, while a new flow from the same address worked immediately. The packets leave the laptop correctly, so this looks like something outside the client: on the path, or on the server.\n\nPattern since 2026-10-23, from the service log:\n- 4 of 4 wakes at the office failed. In each, the handshake first succeeds over office Wi-Fi, and 9–20 s after the wake the wired adapter comes up (or, today, resets).\n- 0 of 7 wakes at home failed (single Wi-Fi network).\n- Two of the four failures used a tunnel process started at home, whose port had never been used on the office network. So it is not stale NAT state left over from the previous day.\n- The `stopped hearing back after N seconds` timer is armed by the first packet sent after the last one received, and outgoing traffic was continuous. So it dates the last received packet:\n  - 10-28: within 1 s of the wired adapter coming up;\n  - 10-29: within 1 s of the wired adapter coming up;\n  - 10-30: 1 s after the handshake, while the wired adapter was still resetting.\n- In every case, only a manual reconnect fixed it. `UDP bind has been updated` appears only at activation (7 of 7), never on a network change.\n\nA possible client-side mitigation: when the default-route interface changes and nothing is received for a few seconds, re-handshake on a fresh UDP socket (new source port) instead of retrying on the old one. This is what a manual reconnect does.\n"
+    },
+    {
+     "id": 6532617795,
+     "issue": 3084,
+     "issue_title": "Проблема с сессией AmneziaWG в Telegram после режима ожидания на Android",
+     "created_at": "2026-10-30T20:17:39Z",
+     "user": "HugoFiermein",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3084#issuecomment-6532617795",
+     "body": "У меня на Pixel 10 Pro вылечилось включением настройки Постоянная VPN. Видимо это проблема чисто по пикселям, но допускаю что и по андроидам в целом.\nЗаходим в Настройки - Сеть и интернет - VPN - нажимаем шестерёнку справа от AmneziaVPN - включаем Постоянная VPN"
+    },
     {
      "id": 6517274653,
      "issue": 3302,

@@ -1,21 +1,9 @@
 {
- "generated_at": "2026-10-30T00:58:43Z",
- "since": "2026-10-28T00:58:43Z",
+ "generated_at": "2026-10-30T09:59:59Z",
+ "since": "2026-10-28T09:59:59Z",
  "repos": {
   "net4people/bbs": {
-   "issues": [
-    {
-     "number": 589,
-     "title": "amneziawg-installer: One-command AmneziaWG setup for Ubuntu/Debian VPS (3.1 by default since v6.0.0)",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-03-03T08:56:37Z",
-     "updated_at": "2026-10-28T06:52:16Z",
-     "user": "bivlked",
-     "url": "https://github.com/net4people/bbs/issues/589",
-     "body": "[[AmneziaWG](https://github.com/amnezia-vpn/amneziawg-go)](https://github.com/amnezia-vpn/amneziawg-go) has been discussed here before (#223, #88), but deploying it on a VPS still requires significant manual effort: building the kernel module, configuring obfuscation parameters, setting up firewall rules, and managing clients.\n\n[**[amneziawg-installer](https://github.com/bivlked/amneziawg-installer)**](https://github.com/bivlked/amneziawg-installer) is a Bash toolkit that automates the full AmneziaWG 2.0 deployment on a dedicated Ubuntu (24.04 LTS / 25.10 / 26.04) or Debian (12 / 13) server in a single command. It targets users who want a working VPN on a clean minimal VPS without advanced Linux knowledge.\n\n**What it does:**\n\n- Installs AmneziaWG 2.0 with full protocol support (H1-H4 ranges, S1-S4 padding, I1-I5 CPS concealment packets, Jc/Jmin/Jmax junk packets); all obfuscation parameters are generated automatically\n- Hardens the server: UFW deny-all + SSH rate-limit + VPN port only, Fail2Ban, sysctl hardening, IPv6 disabled by default (configurable via `--allow-ipv6`)\n- Optimizes kernel and network stack based on detected hardware (RAM, CPU, NIC capabilities)\n- Provides client management: add, remove, list, regenerate, backup/restore; outputs both `.conf` files and QR codes\n- Survives reboots mid-install via a state machine that resumes from the last completed step\n- Non-interactive mode with CLI flags for scripted deployments\n\n**AmneziaWG 2.0 vs 1.x:**\n\nThe installer uses AmneziaWG 2.0, which adds CPS (Concealment Packet System) with tagged I1-I5 parameters and range-based H1-H4 headers, making traffic patterns significantly harder to fingerprint compared to AWG 1.x fixed values.\n\n**Relevance to censorship circumvention:**\n\nAmneziaWG modifies the WireGuard protocol at the packet level: randomized headers, junk packets, and variable padding make it resistant to the DPI signatures that censors use to block standard WireGuard (as reported in Russia #274, Iran #140, Turkmenistan #523). A user in Turkmenistan (#523) reported AmneziaWG surviving on the same IP for ~2 years, though with very low traffic (~500 MB/month); similar setups with higher consumption were banned. This installer removes the deployment barrier by handling the entire setup automatically.\n\nProject: https://github.com/bivlked/amneziawg-installer\nLicense: MIT"
-    }
-   ],
+   "issues": [],
    "comments": []
   },
   "yggdrasil-network/yggdrasil-go": {
@@ -30,30 +18,9 @@
      "user": "Justsomebuddy",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1409",
      "body": "## Summary\n\nA first remote `getNodeInfo` request can time out during startup even though the\npeer becomes reachable and a later request succeeds. This was reproduced with\n0.5.15 and also with 0.5.14; it is not being reported as a new 0.5.15 regression.\n\nA peer key can already be known before the routing tree and Bloom state are\nready. If the initial NodeInfo packet is not delivered during that window, the\nadmin operation sends no further request and eventually returns\n`timed out waiting for response` after six seconds.\n\nThis report concerns a cold, pending NodeInfo query. It does not establish a\ncause for all remote timeouts or for long stalls after an established connection\ngoes idle, and it does not assume reliable delivery from the routing transport.\n\n## Reproduction and observed result\n\nA deterministic regression test uses two real Core instances and an isolated\nloopback TCP peering:\n\n1. Start one remote NodeInfo admin request before any peer, path or session\n   exists. The destination's public key is already available to the fixture.\n2. After the callback is registered and the first attempt has run, connect the\n   two nodes. Do not prime the route with another NodeInfo request or traffic.\n3. On unchanged develop, that single admin request times out after six seconds.\n   With the candidate change, the same request recovers within that budget.\n\nThe self-contained regression file is\n[`src/core/nodeinfo_cold_test.go`](https://github.com/Justsomebuddy/yggdrasil-go/blob/1e8bfb3d5bddf462a6037374d474d48a5f92c27a/src/core/nodeinfo_cold_test.go).\nIt can be copied alone into unchanged develop at\n`2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35` and run with:\n\n```sh\ngo test ./src/core -run '^TestNodeInfo(ColdStart|UnreachableBudget)$' -count=1\n```\n\nBoth regression assertions fail semantically against the unchanged Core: the\ncold query times out, and an unreachable destination produces one lookup with\nits callback still pending, rather than three attempts and prompt cleanup.\nThe original six-second timeout itself is unchanged.\n\n## Proposed bounded recovery\n\n[Candidate diff](https://github.com/Justsomebuddy/yggdrasil-go/compare/2c7f050fc5398ecd8ac5f77e9bb5bd91aa2e9e35...1e8bfb3d5bddf462a6037374d474d48a5f92c27a)\n([branch](https://github.com/Justsomebuddy/yggdrasil-go/tree/fix/nodeinfo-cold-start-retry)).\n\n- Retry the unanswered NodeInfo query at two and four seconds, within the\n  existing six-second deadline: at most three attempts, no extended timeout.\n- Keep callback ownership, retry checks and cleanup on the NodeInfo actor.\n- Cancel pending attempts on response, timeout or core shutdown. An older\n  request cannot delete or reclaim a newer request's callback for the same key.\n- Preserve local queries, response shape and the timeout error. No dependency,\n  routing-library, configuration or wire-format changes.\n\nThis is request-level recovery for a read-only admin operation, not a guarantee\nof delivery or a redesign of the existing last-request-per-key semantics.\n\n## Verification\n\n- Nine new tests passed five repetitions, plus `-race` and `go vet`, using the\n  exact Linux Core sources and new tests in a file-scoped local run. That local\n  run did not include the existing package-wide tests.\n- The existing full-tree CI then passed all 13 jobs at head\n  `1e8bfb3d5bddf462a6037374d474d48a5f92c27a`: builds/tests on Linux, Windows and\n  macOS with Go 1.26 and 1.27, FreeBSD/OpenBSD cross-builds, lint and CodeQL.\n  [Successful workflow](https://github.com/Justsomebuddy/yggdrasil-go/actions/runs/40877246650).\n- Negative tests cover the unchanged timeout, attempt bound, cleanup, duplicate\n  replies, shutdown, queued cancellation, overlapping requests and failed writes.\n\nPR creation is currently restricted to collaborators, so the tested candidate\nis linked here for maintainer review. Would this bounded NodeInfo-level recovery\nbe suitable, and could a maintainer open a PR from the branch if so?\n"
-    },
-    {
-     "number": 1372,
-     "title": "DNS lookups IPv6 address of domain while yggdrasil service is up",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-18T17:25:40Z",
-     "updated_at": "2026-10-28T07:28:22Z",
-     "user": "destime224",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1372",
-     "body": "While Yggdrasil service is up `$ ssh -Tv git@codeberg` cannot connect and shows\n```\n...\ndebug1: Connecting to codeberg.org [2a0a:4580:103f:c0de::1] port 22\n...\n```\n[2a0a:...::1] is ipv6 of codeberg.org.\nBut `$ dig codeberg.org` lookups \n```\n...\n;; ANSWER SECTION:\ncodeberg.org.           2066    IN      A       217.197.84.140\n```\n<img width=\"1294\" height=\"471\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/759b9902-9a9b-4306-bce4-4b59f15e5f13\" />\nStopping yggdrasil service fixes the problem\n\n```\nygg0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 65535 qdisc pfifo_fast state UNKNOWN group default qlen 500\n    link/none \n    inet6 200:.../7 scope global \n       valid_lft forever preferred_lft forever\n    inet6 fe80::306f:ba4c:5497:c287/64 scope link stable-privacy proto kernel_ll \n       valid_lft forever preferred_lft forever\n```\n<hr>\nopenSUSE Tumbleweed 20260916\n\nBuild name: yggdrasil\nBuild version: 0.5.14"
     }
    ],
-   "comments": [
-    {
-     "id": 6463284763,
-     "issue": 1372,
-     "issue_title": "DNS lookups IPv6 address of domain while yggdrasil service is up",
-     "created_at": "2026-10-28T07:28:22Z",
-     "user": "destime224",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1372#issuecomment-6463284763",
-     "body": "> 1. To get the ipv6 address, you need to use dig AAAA, to query the ipv6 addresses (dig's default is A)\n>        I assume you don't have a normal ipv6 interface, therefore yggdrasil is your only ipv6, which will cause issues as the programs see you have ipv6 (as that is how yggdrasil routes currently) and tries to connect to the service, but it is unreachable\n>        I have been able to fix it with some routing config settings but can't remember the exact changes I made, but that is at least why the issue is appearing\n\nYes, I have no ipv6 address. But I don't know why ipv6 addresses have more priority than ipv4 on my system if domain has both."
-    }
-   ]
+   "comments": []
   },
   "PurpleI2P/i2pd": {
    "issues": [
@@ -148,6 +115,50 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7288,
+     "title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-29T11:38:42Z",
+     "updated_at": "2026-10-30T06:47:22Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7288",
+     "body": "https://github.com/XTLS/Xray-core/pull/6853#issuecomment-6492838227\n\n\"dns\" in autoSystemWfpBlockLeak only blocked port 53 outside the TUN, plus the DNS Client service on Windows 11 and Server 2022 and later, so other programs' DNS over TLS (TCP 853) and DNS over QUIC (UDP 853) could still leave outside the TUN.\n\nautoSystemWfpBlockLeak now takes:\n\n- \"tcp/<port>\", \"udp/<port>\": connections to that port may only go through the TUN (or come from Xray itself).\n- \"windnsclient\": Windows' DNS Client service may only connect through the TUN, except for mDNS and LLMNR. As before, this only applies from Windows 11 and Server 2022 on, where the service may use DoH or DoT to any port; earlier versions only query port 53.\n- \"dns\": stands for \"udp/53\", \"tcp/53\", \"windnsclient\", \"tcp/853\" and \"udp/853\".\n- \"misconfigtun\": unchanged.\n\nValues are case-insensitive, deduplicated, and anything else, such as \"tcp/0\" or \"icmp/1\", is rejected. Keeping the system's DNS inside the TUN, with \"udp/53\", \"tcp/53\" or \"windnsclient\", needs dns to be set, as \"dns\" did; ports like 853 alone do not. Each port gets its own permit-through-TUN and block filters with a protocol condition, where port 53 used to have one for both protocols, and the log lists what is blocked, e.g. \"[tun] blocked outside the TUN: udp/53, tcp/53, tcp/853, udp/853, windnsclient\".\n\nTested on Windows 11 with a Wintun adapter as the outside interface: with \"tcp/853\", \"udp/853\", \"tcp/7215\" and \"udp/7216\", those are blocked outside the TUN over IPv4 and IPv6, while tcp/7216, udp/7215 and 443 are not, port 853 works through the TUN, Xray's own connections to port 853 still leave outside it, and nothing is blocked after Xray stops."
+    },
+    {
+     "number": 7208,
+     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-20T14:40:01Z",
+     "updated_at": "2026-10-30T06:36:48Z",
+     "user": "4erdenko",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208",
+     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
+    },
+    {
+     "number": 7291,
+     "title": "Disable default MPTCP listener",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-29T20:21:44Z",
+     "updated_at": "2026-10-30T04:10:49Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7291",
+     "body": "关闭被go默认启用的MPTCP 并使核心本来的MPTCP选项重新有效（可以手动开启）\nhttps://thehackernews.com/2026/10/linux-kernel-tcp-flaw-with-98-cvss.html\n不知是否和MPTCP强相关 可以观望一段时间 如果是真的所有go编写的翻墙服务端和caddy可以被一键获取root就搞笑了"
+    },
+    {
+     "number": 7294,
+     "title": "Geodata: Support streaming gzip decompression for downloaded assets",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T03:05:25Z",
+     "updated_at": "2026-10-30T03:05:25Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7294",
+     "body": "检测到 gzip 头就自动流式解压\n实测可节省 80% 流量\n\n目前 https://github.com/XTLS/Xray-rules-dat 已适配此 PR\n只需要在下载的 url 加 `.gz` 后缀即可\n\n例如 `https://github.com/XTLS/Xray-rules-dat/releases/latest/download/geoip-full.dat.gz`"
+    },
+    {
      "number": 7293,
      "title": "Bump google.golang.org/protobuf from 1.36.11 to 1.36.12",
      "is_pr": true,
@@ -190,28 +201,6 @@
      "user": "KobeArthurScofield",
      "url": "https://github.com/XTLS/Xray-core/pull/7185",
      "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
-    },
-    {
-     "number": 7291,
-     "title": "Disable default MPTCP listener",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-29T20:21:44Z",
-     "updated_at": "2026-10-29T20:21:44Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7291",
-     "body": "关闭被go默认启用的MPTCP 并使核心本来的MPTCP选项重新有效（可以手动开启）\nhttps://thehackernews.com/2026/10/linux-kernel-tcp-flaw-with-98-cvss.html\n不知是否和MPTCP强相关 可以观望一段时间 如果是真的所有go编写的翻墙服务端和caddy可以被一键获取root就搞笑了"
-    },
-    {
-     "number": 7288,
-     "title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-29T11:38:42Z",
-     "updated_at": "2026-10-29T20:11:55Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7288",
-     "body": "https://github.com/XTLS/Xray-core/pull/6853#issuecomment-6492838227\n\n\"dns\" in autoSystemWfpBlockLeak only blocked port 53 outside the TUN, plus the DNS Client service on Windows 11 and Server 2022 and later, so other programs' DNS over TLS (TCP 853) and DNS over QUIC (UDP 853) could still leave outside the TUN.\n\nautoSystemWfpBlockLeak now takes:\n\n- \"tcp/<port>\", \"udp/<port>\": connections to that port may only go through the TUN (or come from Xray itself).\n- \"windnsclient\": Windows' DNS Client service may only connect through the TUN, except for mDNS and LLMNR. As before, this only applies from Windows 11 and Server 2022 on, where the service may use DoH or DoT to any port; earlier versions only query port 53.\n- \"dns\": stands for \"udp/53\", \"tcp/53\", \"windnsclient\", \"tcp/853\" and \"udp/853\".\n- \"misconfigtun\": unchanged.\n\nValues are case-insensitive, deduplicated, and anything else, such as \"tcp/0\" or \"icmp/1\", is rejected. Keeping the system's DNS inside the TUN, with \"udp/53\", \"tcp/53\" or \"windnsclient\", needs dns to be set, as \"dns\" did; ports like 853 alone do not. Each port gets its own permit-through-TUN and block filters with a protocol condition, where port 53 used to have one for both protocols, and the log lists what is blocked, e.g. \"[tun] blocked outside the TUN: udp/53, tcp/53, tcp/853, udp/853, windnsclient\".\n\nTested on Windows 11 with a Wintun adapter as the outside interface: with \"tcp/853\", \"udp/853\", \"tcp/7215\" and \"udp/7216\", those are blocked outside the TUN over IPv4 and IPv6, while tcp/7216, udp/7215 and 443 are not, port 853 works through the TUN, Xray's own connections to port 853 still leave outside it, and nothing is blocked after Xray stops."
     },
     {
      "number": 6535,
@@ -300,17 +289,6 @@
      "user": "j2rong4cn",
      "url": "https://github.com/XTLS/Xray-core/pull/7284",
      "body": "修复重启内核时立即有入站连接时有几率崩溃\n```\npanic: runtime error: invalid memory address or nil pointer dereference\n[signal 0xc0000005 code=0x0 addr=0x0 pc=0x7ff6735c3529]\n\ngoroutine 52 [running]:\ngithub.com/xtls/xray-core/common/lua.(*Pool).Acquire(0x0, {0x0, 0x0})\n\tcommon/lua/pool.go:51 +0x49\ngithub.com/xtls/xray-core/common/lua.(*Pool).WithState(0x0, {0x0, 0x0}, 0x0, 0xaa88b26a9c0)\n\tcommon/lua/pool.go:94 +0x7d\ngithub.com/xtls/xray-core/app/router.(*scriptEngine).pickRoute(0xaa88b2a0a00, {0x7ff675081de0, 0xaa88b41c060})\n\tapp/router/script.go:66 +0x14d\ngithub.com/xtls/xray-core/app/router.(*Router).PickRoute(0xaa88b202d20, {0x7ff675081de0, 0xaa88b41c060})\n\tapp/router/router.go:65 +0x94\ngithub.com/xtls/xray-core/app/dispatcher.(*DefaultDispatcher).routedDispatch(0xaa88b499090, {0x7ff675077838, 0xaa88b28e150}, 0xaa88afeb380, {{0x7ff675078088, 0xaa88b2a04a0}, 0x1bb, 0x2})\n\tapp/dispatcher/default.go:457 +0x565\ngithub.com/xtls/xray-core/app/dispatcher.(*DefaultDispatcher).DispatchLink(0xaa88b499090, {0x7ff675077838, 0xaa88b28e150}, {{0x7ff675078088, 0xaa88b2a04a0}, 0x1bb, 0x2}, 0xaa88afeb380)\n\tapp/dispatcher/default.go:373 +0x1005\ngithub.com/xtls/xray-core/common/mux.(*Server).DispatchLink(0xaa88b2a0c00, {0x7ff675077838, 0xaa88b28e150}, {{0x7ff675078088, 0xaa88b3880d0}, 0x1bb, 0x2}, 0xaa88afeb380)\n\tcommon/mux/server.go:64 +0x2a7\ngithub.com/xtls/xray-core/proxy/http.(*Server).handleConnect(0xaa88b2901f8, {0x7ff675077838, 0xaa88b28e150}, 0xaa88b0f4140, 0xaa88b0fe360, {0x20acd57cd20, 0xaa88b082180}, {{0x7ff675078088, 0xaa88b3880d0}, 0x1bb, ...}, ...)\n\tproxy/http/server.go:191 +0x69e\ngithub.com/xtls/xray-core/proxy/http.(*Server).ProcessWithFirstbyte(0xaa88b2901f8, {0x7ff675077838, 0xaa88b28e150}, 0x2, {0x20acd57cd20, 0xaa88b082180}, {0x7ff675079030, 0xaa88b2a0c00}, {0xaa88b2ca160, 0x1, ...})\n\tproxy/http/server.go:156 +0x14a5\ngithub.com/xtls/xray-core/proxy/socks.(*Server).Process(0xaa88b4bab40, {0x7ff675077838, 0xaa88b4bb5f0}, 0x2, {0x20acd57cd20, 0xaa88b082180}, {0x7ff675079030, 0xaa88b2a0c00})\n\tproxy/socks/server.go:89 +0x5cb\ngithub.com/xtls/xray-core/app/proxyman/inbound.(*tcpWorker).callback(0xaa88b1800e0, {0x20acd57cd20, 0xaa88b082180})\n\tapp/proxyman/inbound/worker.go:123 +0xf3e\ncreated by github.com/xtls/xray-core/app/proxyman/inbound.(*tcpWorker).Start.func1 in goroutine 51\n\tapp/proxyman/inbound/worker.go:142 +0xcd\n```"
-    },
-    {
-     "number": 7208,
-     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-20T14:40:01Z",
-     "updated_at": "2026-10-29T12:38:58Z",
-     "user": "4erdenko",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
     },
     {
      "number": 7277,
@@ -1037,20 +1015,36 @@
      "user": "eliotcougar",
      "url": "https://github.com/XTLS/Xray-core/pull/7214",
      "body": "With `autoOutboundsInterface` selecting an IPv4-only Windows adapter, a normal IPv4 UDP dial can fail with WSAEINVAL (10022). Go creates a dual-stack socket and reports `udp6`; TUN then requires both IPv6 and IPv4 interface bindings, although IPv6 is disabled on the selected adapter. IPv6-only interfaces have the corresponding IPv4-binding failure. IPv6 TCP is also unnecessarily subjected to IPv4 binding.\n\nKeep both bindings for dual-stack UDP. If binding fails, use the existing `BindError` classification to permit one Windows UDP socket-creation retry restricted to the resolved destination's family. The TUN helper checks `IPV6_V6ONLY` and applies IPv4 options only when the UDP socket supports both families; IPv6 TCP/IP binds only IPv6.\n\n**Why retain dual-stack first?** Freedom's packet writer can send different destinations through one UDP socket. Binding only the initial destination's family could leave the other family unbound. This change preserves mixed-family UDP when both bindings work. A single-family retry cannot emit packets on the unsupported family, and a failure to bind the required family remains fatal. Ordinary external-controller errors are not retried. No configuration fields or public APIs change.\n\nRelated to #7160 and the [follow-up discussion on #7201](https://github.com/XTLS/Xray-core/pull/7201#issuecomment-6314278104); this does not claim to explain every occurrence of the original error.\n\n### Validation\n\nNative Windows 10/amd64 in Hyper-V, Go 1.27.2, comparing unmodified `00c0277787c84425738b5e65fe515b0473e06203` with this change. A disposable Wintun adapter was tested with both protocol bindings enabled, IPv6 disabled, and IPv4 disabled. Tests exercise the actual default dialer and TUN binding helper with local UDP/TCP echo traffic.\n\n| Native scenario | Unmodified | Fixed |\n| --- | --- | --- |\n| Dual-stack UDP, including IPv4 and IPv6 destinations on one socket | Pass | Pass |\n| IPv4-only uplink, IPv4 UDP with wildcard source | Fail | Pass |\n| IPv6-only uplink, IPv6 UDP | Fail | Pass |\n| IPv6-only uplink, IPv6 TCP | Fail | Pass |\n\nIPv4-mapped destinations and explicit source addresses were also checked. Required-family failures remain fatal; restricted UDP sockets reject the opposite family without delivering its packet, and an ordinary controller denial produces exactly one attempt. Dual-stack interface bindings were read back from Winsock. The temporary adapter was removed; the existing guest core/ICS runtime, original adapters, forwarding settings and routes were preserved. This is native socket/traffic evidence, not a full TUN-ingress or throughput benchmark.\n\nAffected package tests (`proxy/tun`, `transport/internet`, `proxy/socks`, `proxy/dns`), `go vet`, upstream `vformat`, and `git diff --check` passed. Transport tests cross-compiled for Linux/amd64 and macOS/arm64; they were not executed there. The full suite and race detector were not run locally. The native investigation fixture is kept outside the production diff.\n"
-    },
-    {
-     "number": 7274,
-     "title": "WireGuard kernelTun: Fix capget writing past its buffer",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-28T08:15:19Z",
-     "updated_at": "2026-10-28T08:44:21Z",
-     "user": "heppycat",
-     "url": "https://github.com/XTLS/Xray-core/pull/7274",
-     "body": "`KernelTunSupported` calls `capget` with `_LINUX_CAPABILITY_VERSION_3`. For v3 (and v2) the kernel always writes **two** `__user_cap_data_struct`, 24 bytes, one for capabilities 0-31 and one for 32-63 (see `capget(2)`). The code passes a single `unix.CapUserData`, 12 bytes, so the kernel writes 12 bytes past it, over whatever comes next on the goroutine stack.\n\nOn 64-bit this has gone unnoticed so far. On 32-bit ARM it overwrites a saved return address, and creating any WireGuard outbound kills the process. That includes `xray run -test` on a WireGuard config and every WireGuard config in Android clients on 32-bit-only phones. The panic message depends on the frame layout:\n\n```\nruntime: g 1: unexpected return pc for github.com/xtls/xray-core/common.CreateObject called from 0x18\nfatal error: unknown caller pc\n```\n```\nfatal error: traceback did not unwind completely\n```\nSometimes it is a SIGSEGV inside `runtime.mallocgcSmallScanNoHeaderSC5`.\n\nThe bug came in with #3871 (2024-10-15).\n\n### Reproduction\nSamsung Galaxy A13 (SM-A135F), Android 14, 32-bit only (`armeabi-v7a`), `GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0`, Go 1.27.3, v26.10.21 (`1b1647c`), any WireGuard outbound, `xray run -test -c wg.json`:\n\n| build | result |\n|---|---|\n| default flags | crashes 3/3 |\n| `-gcflags=all=-l=4` (release workflow flags) | passes, by luck of frame layout |\n| `-gcflags=github.com/xtls/xray-core/proxy/wireguard=-N` | passes, by luck of frame layout |\n| default flags + this fix | passes 3/3, VLESS config also passes |\n\nThe release binaries happen not to crash because `-l=4` moves things around. `gomobile bind` builds don't pass it, so v2rayNG 2.3.14 (AndroidLibXrayLite, Go 1.27.3, the same xray commit) crashes on every WireGuard delay test and connect on these phones. Other xray-based Android clients on the same phone also crash when starting WireGuard.\n\n### Fix\nPass a `[2]unix.CapUserData` and read `data[0].Effective` (`CAP_NET_ADMIN` is 12, so it is in the first word). `go vet` is clean for linux/amd64, arm64, 386, arm and mips.\n"
     }
    ],
    "comments": [
+    {
+     "id": 6516762634,
+     "issue": 7288,
+     "issue_title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
+     "created_at": "2026-10-30T06:47:22Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7288#issuecomment-6516762634",
+     "body": "> @patterniha 新加的这些是不是不好做双向 block（因为得排除掉 Xray 接收 DNS 响应的情况）？~虽然“只 block 发送”也够用了~\r\n\r\nNo, they're already blocked in both directions, the same as port 53 before, and Xray is excluded.\r\n\r\nThe filters sit in WFP's ALE (Application Layer Enforcement) layers, which are stateful. ALE connect judges a program's outgoing connection, and for UDP its first packet to each remote IP:port. ALE recv-accept judges incoming connections, and for UDP the first packet from a remote IP:port the socket never sent to. Once a flow is allowed, the rest of it, replies included, is not checked again. Each port gets its filters on both layers, for IPv4 and IPv6, and \"permit Xray\" (by its app ID) is on all of them with the highest weight.\r\n\r\nSo:\r\n- Xray queries a DNS server outside the TUN: allowed at connect, and the replies belong to that flow, so they are never checked.\r\n- Another program queries port 53/853 outside the TUN: blocked at connect, so no reply comes back either.\r\n- Another program queries through the TUN: allowed.\r\n- A packet from port 53/853 arrives outside the TUN without a flow (unsolicited, or a reply from another address than the one queried): blocked at recv-accept, unless it is for Xray.\r\n- The same packet arriving through the TUN: allowed.\r\n- Queries to a local DNS server on port 53 (e.g. one serving the LAN): not matched, as the filters match the remote port, not the local one.\r\n\r\nOnly \"windnsclient\" is outbound-only, since the DNS Client service only opens connections. In the test, Xray's own queries to port 53 and 853 outside the TUN got their replies while other programs were blocked."
+    },
+    {
+     "id": 6514873788,
+     "issue": 7288,
+     "issue_title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
+     "created_at": "2026-10-30T04:19:27Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7288#issuecomment-6514873788",
+     "body": "@patterniha 新加的这些是不是不好做双向 block（因为得排除掉 Xray 接收 DNS 响应的情况）？~~虽然“只 block 发送”也够用了~~"
+    },
+    {
+     "id": 6514765301,
+     "issue": 7291,
+     "issue_title": "Disable default MPTCP listener",
+     "created_at": "2026-10-30T04:10:49Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7291#issuecomment-6514765301",
+     "body": "> The exploit works in two stages. First, the race makes the kernel send extra bytes back to the attacker. Once one of those replies contains a kernel address, the attacker can get around KASLR, the kernel's memory address randomization.\r\n> \r\n> Second, the same bug overflows a buffer and overwrites a callback pointer with the address of a payload the attacker had already placed in kernel memory. When the kernel calls that pointer, the payload executes a shell command of the attacker's choice as root.\r\n> \r\n> A lost race only fails that one connection attempt and does not crash the system, so an attacker can keep trying, the company said. In its test, leaking a kernel address took 48 minutes, and reaching command execution took 5 more minutes.\r\n\r\n> Red Hat says a remote attacker who can reach an exposed TCP service could trigger the race. Anthropic's root exploit, however, targeted servers with a multipath TCP listener. The post does not say whether servers without one can be taken over the same way.\r\n\r\n~~确实很搞笑，远程提权路径清晰，可以确定的是 Golang 默认开的 MPTCP server 一定能被远程一键 root，只需等待一小时~~\r\n\r\n红帽说普通 TCP server 也能被 trigger the race 但没说能不能被提权，~~如果能的话那就更搞笑了，先等一天看看~~\r\n\r\n~~好消息是安卓 root 又有了新方案，最后希望 TCP client 别受影响吧，不然那就太炸了，个人设备很少积极更新 Linux 内核~~"
+    },
     {
      "id": 6510221797,
      "issue": 4809,
@@ -1238,7 +1232,7 @@
      "created_at": "2026-10-29T12:10:56Z",
      "user": "Ahmad-2213",
      "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-6496289286",
-     "body": "@RPRX made some optimizations. ~~I finally managed to get a ping-time of 1200 ms on V2rayN after a hard work!~~\nyoutube is smooth now and videos are easily loaded without buffering. it depends on how many sessions and therefore how many rings you make, this mostly controls the throughput.\n~~@4RH1T3CT0R7 it's suggested to see the latest `xdrive` folder if you want to add commits.~~\n\nthe config that i used ( note the relationship between mux and xdrive's ring concurrency):\n```\n          \"segmentBytes\": 1048576,\n          \"segmentGrowthFactor\": 1,\n          \"flushIntervalMs\": 10,\n          \"pollIntervalMs\": 100,\n          \"maxPollIntervalMs\": 200,\n          \"eagerWindowMs\": 4000,\n          \"holeTimeoutMs\": 30000,\n          \"concurrency\": 16,\n          \"sessionTtlSeconds\": 300\n```\n```\n\"mux\": {\n        \"enabled\": true,\n        \"concurrency\": 8\n      }\n```\nAI Report:\n\n> 1. f5588d0c — build the whole slot ring in one parallel wave Session setup previously created slot files concurrently per direction but ran the watermark write and the second direction sequentially — ~4 sequential Drive round trips per new session. Now all slot files plus both watermarks are created in a single concurrent wave (index-addressed writes, mutex-guarded first error). Ring setup drops from ~4 Drive-latency rounds to ~1, which matters because traffic bursts open new rings.\n> \n> 2. 75098023 — jump to full segments once the ring is three-quarters busy Fresh rings ramp segment size 14 KB → configured size (doubling every 8 full segments) so small or idle sessions stay cheap — inline segments ride the file description and cost one read. The downside was that a bursty fresh ring holds only 8×14 KB in flight and crawls until the ramp completes; a live 2 MB transfer over a fresh ring measured ~0.65 Mbps effective, with every multiplexed substream queued behind it. The jump-to-full-size now triggers at 75% ring occupancy instead of only at full saturation, so a bursty fresh ring widens a full ack-wave earlier instead of climbing most of the ramp ladder. A dedicated test discriminates the 75% path from the saturation path.\n> \n> 3. efeaa641 — keep the reader fetch window flat Reverts an experiment from the same series that widened the reader's fetch window (6 → up to ring depth) while the session was recently active. The extra ahead-pollers kept issuing Drive reads during idle periods with no measurable latency benefit, so the window is back to a flat fetchAhead = 6 and idle quota burn returns to baseline.\n> \n> Net effect: fresh-ring ramp-up stalls — the dominant latency contributor when bursts open new rings — are largely removed, session setup is ~4× faster, and idle poll overhead is back to baseline. No config surface changed.\n\n<img width=\"770\" height=\"308\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a6c3edec-fa38-4dce-99c8-36ecc07c2d1b\" />"
+     "body": "@RPRX made some optimizations. ~~I finally managed to get a ping-time of 1200 ms on V2rayN after a hard work!~~\nyoutube is smooth now and videos are easily loaded without buffering.\n~~@4RH1T3CT0R7 it's suggested to see the latest `xdrive` folder if you want to add commits.~~\n\nthe config that i used ( note the relationship between mux and xdrive's ring concurrency):\n```\n \"segmentBytes\": 524288,\n\"segmentGrowthFactor\": 1,\n\"flushIntervalMs\": 10,\n\"pollIntervalMs\": 50,\n\"maxPollIntervalMs\": 200,\n\"eagerWindowMs\": 4000,\n\"holeTimeoutMs\": 30000,\n\"concurrency\": 16,\n\"sessionTtlSeconds\": 300\n```\n```\n\"mux\": {\n        \"enabled\": true,\n        \"concurrency\": 32\n      }\n```\nAI Report:\n\n> 1. f5588d0c — build the whole slot ring in one parallel wave Session setup previously created slot files concurrently per direction but ran the watermark write and the second direction sequentially — ~4 sequential Drive round trips per new session. Now all slot files plus both watermarks are created in a single concurrent wave (index-addressed writes, mutex-guarded first error). Ring setup drops from ~4 Drive-latency rounds to ~1, which matters because traffic bursts open new rings.\n> \n> 2. 75098023 — jump to full segments once the ring is three-quarters busy Fresh rings ramp segment size 14 KB → configured size (doubling every 8 full segments) so small or idle sessions stay cheap — inline segments ride the file description and cost one read. The downside was that a bursty fresh ring holds only 8×14 KB in flight and crawls until the ramp completes; a live 2 MB transfer over a fresh ring measured ~0.65 Mbps effective, with every multiplexed substream queued behind it. The jump-to-full-size now triggers at 75% ring occupancy instead of only at full saturation, so a bursty fresh ring widens a full ack-wave earlier instead of climbing most of the ramp ladder. A dedicated test discriminates the 75% path from the saturation path.\n> \n> 3. efeaa641 — keep the reader fetch window flat Reverts an experiment from the same series that widened the reader's fetch window (6 → up to ring depth) while the session was recently active. The extra ahead-pollers kept issuing Drive reads during idle periods with no measurable latency benefit, so the window is back to a flat fetchAhead = 6 and idle quota burn returns to baseline.\n> \n> Net effect: fresh-ring ramp-up stalls — the dominant latency contributor when bursts open new rings — are largely removed, session setup is ~4× faster, and idle poll overhead is back to baseline. No config surface changed.\n\n<img width=\"770\" height=\"308\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a6c3edec-fa38-4dce-99c8-36ecc07c2d1b\" />"
     },
     {
      "id": 6496101264,
@@ -2112,110 +2106,44 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/issues/7160#issuecomment-6466693384",
      "body": "> proxy/tun: [tun] falied to set interface > multierr: An invalid argument was supplied.\n\n以上报错可能由 https://github.com/XTLS/Xray-core/pull/7214 修复了，~~还没测，不确定~~\n\n> 我的意思是有些程序可能看网卡有 IPv6 地址就 prefer 它了\n\n不确定有没有这样的程序，比如不确定有没有该被分流到本地直连的应用程序就是 dial IPv6 且不回退到 IPv4（没有 happyEyeballs）\n\nReopen，直到上述情况被妥善处理"
-    },
-    {
-     "id": 6465768105,
-     "issue": 7275,
-     "issue_title": "[Bug] VLESS + REALITY 使用 vlessRoute 路由至 WireGuard 出站时连接失败",
-     "created_at": "2026-10-28T09:47:55Z",
-     "user": "Godsix",
-     "url": "https://github.com/XTLS/Xray-core/issues/7275#issuecomment-6465768105",
-     "body": "me too. v26.3.27 WireGuard outbound is OK,but v26.10.21 is error. error log relevant log line:\n\n> app/proxyman/outbound: app/proxyman/outbound: failed to process outbound traffic > proxy/wireguard: failed to create TCP connection > ..."
-    },
-    {
-     "id": 6464669635,
-     "issue": 7263,
-     "issue_title": "GitHub Action CI: Enforce stricter checks on generated protobuf files",
-     "created_at": "2026-10-28T08:49:30Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6464669635",
-     "body": "备忘一下 现在的 `protoc        v6.33.5` 是假的 虽然 bufbuild/protocompile 和目前的 protoc v6.33.5 是字节级一致所以没有任何问题 后续需要换掉 直接扔这个pr里会造成大量diff导致很难审核 合并之后单开一个改成unknown"
-    },
-    {
-     "id": 6464588139,
-     "issue": 7265,
-     "issue_title": "Geodata: https Max Redirects set to 20",
-     "created_at": "2026-10-28T08:45:00Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7265#issuecomment-6464588139",
-     "body": "那你搁7267顺手改一下吧"
-    },
-    {
-     "id": 6464511257,
-     "issue": 7274,
-     "issue_title": "WireGuard kernelTun: Fix capget writing past its buffer",
-     "created_at": "2026-10-28T08:40:37Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7274#issuecomment-6464511257",
-     "body": "There is no more low-end 32bit phone, 32 bit phone cpu should have been discontinued for years\r\nIf it is a big problem, we should have received a lot of complaints\r\nIf you submitted this a few months ago, I should approve it"
-    },
-    {
-     "id": 6464222609,
-     "issue": 7274,
-     "issue_title": "WireGuard kernelTun: Fix capget writing past its buffer",
-     "created_at": "2026-10-28T08:24:33Z",
-     "user": "heppycat",
-     "url": "https://github.com/XTLS/Xray-core/pull/7274#issuecomment-6464222609",
-     "body": "> 这个kernel tun搞不好要被移除了 也顶多影响32位 就算了吧(\r\n\r\nfor clarity: KernelTunSupported() runs in NewClient for every WireGuard outbound, before choosing kernel TUN or the built-in stack, so it overflows even when the built-in stack is used. As a result every xray-based client on 32-bit Android (Happ, V2rayNg, V2Box, etc...) crashes on any WireGuard config, and there are a lot of low-end phones. If kernel TUN is going away soon, removing this check with it works too; if it's staying for a while, this is  basically a one line change, could it be merged in the meantime?"
-    },
-    {
-     "id": 6464138105,
-     "issue": 7274,
-     "issue_title": "WireGuard kernelTun: Fix capget writing past its buffer",
-     "created_at": "2026-10-28T08:19:32Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7274#issuecomment-6464138105",
-     "body": "这个kernel tun搞不好要被移除了 也顶多影响32位 就算了吧("
-    },
-    {
-     "id": 6460070160,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-28T03:40:53Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6460070160",
-     "body": "按你想的来吧，site 我完全用不到，只是建议\r\ndoc 有问题你直接改\r\n~我燃尽了，要沉淀一下~"
-    },
-    {
-     "id": 6460051073,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-28T03:39:29Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6460051073",
-     "body": "ru 没有白名单，看了下 available-only-in-ru 是只能用俄罗斯 IP 访问的，这个表非常小\r\ncn 的话白名单默认沿用上游，不想再复制一个了\r\n\r\n如果搞额外白名单的话，located-in 词缀吧\r\n\r\n扩展版我想的是能不动原有的分类就尽量不动，避免意外切换出现更意外的东西\r\n\r\n> main 分支的文档弄完了你看看\r\n\r\n除了 available-only-in-ru 别的都没问题"
-    },
-    {
-     "id": 6459999852,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-28T03:35:28Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6459999852",
-     "body": "main 分支的文档弄完了你看看\r\n~这玩意写的真费劲，AI 做的总是废话太多，表达的不精准~"
-    },
-    {
-     "id": 6459881718,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-28T03:26:51Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6459881718",
-     "body": "整理文档的时候感觉怪怪的主要是\r\n觉得趁现在用量少，还能 break\r\n\r\n黑白名单感觉统一了会更直观\r\n黑名单好说，问题在白名单\r\n\r\n白名单主要纠结的点是要不要用 `cn` `ir` `ru` 这样\r\n因为现在没有别名，再复制一份的话基础版似乎有点大了？会膨胀多少不知道，少的话倒是可以搞，以后别名了再裁\r\n\r\n扩展版是否要带 `expand` 倒是无所谓\r\n看 site 分支的 readme 字面意思理解 ir 白名单扩展版似乎没有包含基础版的内容\r\n才想到要不要直接给合并了\r\n炸的话都一样，一是分类不存在直接炸，另一个是启动时 oom 结果都一样\r\n这点主要看你喜好"
-    },
-    {
-     "id": 6459554298,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-28T03:05:19Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6459554298",
-     "body": "是，分类上是这样的关系\r\n\r\n> 有必要把它们统一成 blacklist-xx/whitelist-xx 吗？ \r\n\r\n也不是不行，虽然目前已经部分程度上统一了（黑名单用的 blocked-in 反冲突词缀，白名单没有统一词缀）\r\n\r\n> 扩展版是否应该沿用分类名称，不搞 `expand` 词缀？\r\n\r\nir 的白名单里面，小表四万多条，大表五万多条，重合部分会比较多，分开完全是受原来对应设计的影响\r\nru 的黑名单比较麻烦，antifilter-list-full 源文件 ~30 MB，百万条，如果不区分的话在不小心从标准版切换成扩展版的时候会炸掉部分设备\r\n\r\n> 我看了一下 v2fly/domain-list-community 那边没有 geosite:ru geosite:ir 似乎可以把它们当白名单用，这样 cn 也不用改名了，语义统一\r\n\r\n~geosite:cn 现在完全是用来兼容古老设计的产物，如果真的不用考虑兼容问题我估计上游会比较想铲掉它~\r\n"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3355,
+     "title": "[API] Статус аккаунта — «Активен», обновление API положительно из инфтерфейса; новые серверы не появляются, конфигурации не скачиваются 1100, подключение не работает на любых устройствах по ключу VPN",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-30T08:57:59Z",
+     "updated_at": "2026-10-30T08:57:59Z",
+     "user": "laaaaiiit",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3355",
+     "body": "Описание ошибки\nПосле тестирования кастомной сборки с функцией автоматической смены локации каждые 2 часа клиент перестал получать актуальные данные о серверах и конфигурациях. Статус аккаунта по-прежнему отображается как «Активен», обновление API происходит положительно если верить интерфейсу, однако при попытке подключиться к любой локации выполняется бесконечное подключение, при скачивании конфигов выдает ошибку 1100.\nСписок серверов остается устаревшим (доступно лишь 10–14 серверов, новые не появляются). Проблема воспроизводится на любом устройстве при использовании того же аккаунта/ключа. В службе поддержки после описания проблемы, через 5 минут сообщили, что аккаунт был заблокирован за «злоупотребление API». Хотелось бы уточнить: дейстсвительно ли моя учетная запись заблокирована или это я что то не так сделал и попал в баг, потому что я использовал офф приложение просто доделав ему функцию рандомного выбора страны и переключения каждые 2 часа, я руками зачастую чаще переключаюсь на VPN так как он то нужен то нет для серфинга сайтов.\n\nОтвет технической поддержки\nЗдравствуйте!\nНа вашем аккаунте зафиксирована активность, создающая повышенную нагрузку на инфраструктуру Amnezia Premium. Такая активность возникает при использовании стороннего программного обеспечения, выполняющего автоматические запросы к API, частые проверки доступности серверов или повторное получение конфигураций. (что то я очень сомневаюсь в ддосе по API, больше поверю, что я что то не так сделал в запросе но я вроде ничего не изменял)\nAmnezia Premium предназначен для использования с официально поддерживаемыми приложениями и способами подключения. Мы не гарантируем корректную работу сервиса при использовании стороннего программного обеспечения, которое не поддерживается Amnezia. Некоторые сторонние приложения и автоматизированные инструменты могут выполнять фоновые запросы, многократные проверки доступности серверов или другие операции, создающие повышенную нагрузку на инфраструктуру и API сервиса. Такая активность может автоматически определяться системами защиты как подозрительная и приводить к ограничениям аккаунта независимо от намерений пользователя.\nИспользование подобных инструментов является нарушением Политики конфиденциальности и приемлемого использования сервиса. В целях обеспечения стабильности и безопасности сервиса подобная активность приводит к ограничениям доступа, а при её повторении — к дополнительным защитным мерам в соответствии с действующими условиями использования сервиса. (я не получал никаких уведомлений или предпосылок к блокировкам или что либо и даже сейчас из учетной записи не понятно заблокирован я или нет)\nОбращаем внимание: в связи с данным нарушением пересмотр ограничений, компенсации или иные решения по вашему обращению предоставлены не будут.\n\nОтвет технической поддержки\nВозможен ли разбан?\nМогу ли я купить ключ на ту же почту и пользоваться?\nЗдравствуйте!\nПокупка новой подписки не гарантирует работоспособность. Разбан за деньги не предоставляем.\n\nЛог-файлы\nпри обновлении API, подключении, отключении, изменения страны.\n[2026-10-30 06:21:49.451Z] [DEBUG] AmneziaVPN  : Logger::clearServiceLogs(): Logs cleared\n[2026-10-30 06:21:49.451Z] [INFO] AmneziaVPN  : Started AmneziaVPN version 5.0.1.5 7d4f3e0\n[2026-10-30 06:21:49.451Z] [INFO] AmneziaVPN  : Debian GNU/Linux 13 (trixie) (x86_64)\n[2026-10-30 06:21:49.451Z] [INFO] AmneziaVPN  : SSL backend: OpenSSL 3.6.2 7 Apr 2026\n[2026-10-30 06:22:04.890Z] [DEBUG] AmneziaVPN  : \"Trying to connect to VPN, server id is ff93ef99-bb66-4f2e-9e2a-1d4031c3aa18, container is amnezia-awg, route mode is\" amnezia::route_mode_ns::VpnOnlyForwardSites\n[2026-10-30 06:22:04.891Z] [DEBUG] AmneziaVPN  : \"Site split tunneling is disabled, route mode is 0\"\n[2026-10-30 06:22:04.891Z] [DEBUG] AmneziaVPN  : \"App split tunneling is disabled, route mode is 0\"\n[2026-10-30 06:22:04.891Z] [DEBUG] AmneziaVPN LocalSocketController : Initializing\n[2026-10-30 06:22:04.891Z] [DEBUG] AmneziaVPN LocalSocketController : "
+    },
+    {
+     "number": 3302,
+     "title": "Зачем AmneziaWG изменяет глобальные sysctl хоста? Возможные проблемы на VPS с несколькими сервисами.",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-19T07:30:34Z",
+     "updated_at": "2026-10-30T07:21:50Z",
+     "user": "foxidermist",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3302",
+     "body": "Здравствуйте!\n\n‎При установке AmneziaWG 3.1 через AmneziaVPN на VPS с Ubuntu Server 24.04.5 LTS обнаружил, что установщик изменяет большое количество глобальных параметров Linux.\n‎\n‎Конфигурация сервера:\n‎\n· ‎Ubuntu Server 24.04.5 LTS, ядро 6.8.0-147-generic.\n· ‎KVM, 4 vCPU, 4 ГБ RAM.\n· ‎Docker Engine 29.9.1.\n· ‎AmneziaWG tools 3.1.20260812.\n· ‎Self-hosted AmneziaWG в Docker-контейнере.\n‎\n‎Изменения выполняются сценарием \"client/server_scripts/setup_host_firewall.sh\" версии 5.0.3.0.\n‎\n‎Из 21 проверенного параметра sysctl после установки изменились 17.\n‎\n‎Наиболее заметные изменения:\n‎\n‎Параметр| До установки| После установки\n‎\"fs.file-max\"| 9223372036854775807| 51200\n‎\"net.ipv4.tcp_congestion_control\"| cubic| hybla\n‎\"net.netfilter.nf_conntrack_max\"| 65536| 262144\n‎\"net.core.rmem_max\"| 212992| 67108864\n‎\"net.core.wmem_max\"| 212992| 67108864\n‎\"net.ipv4.tcp_max_tw_buckets\"| 16384| 5000\n‎\"net.ipv4.ip_local_port_range\"| 32768–60999| 10000–65000\n‎\n‎В исходном коде также присутствует попытка установить \"net.ipv4.tcp_tw_recycle\", хотя этот параметр отсутствует в современных ядрах Linux.\n‎\n‎Заметил, что комментарий в скрипте объясняет увеличение \"nf_conntrack_max\" требованиями Telegram-прокси (MTProxy/TeleMT/TProxy).\n‎\n‎Хотелось бы уточнить:\n‎\n1. ‎Какие из этих изменений действительно необходимы для работы исключительно AmneziaWG 3.1?\n2. ‎Почему установщик снижает \"fs.file-max\" до 51200, если исходное значение значительно выше? Есть ли техническая причина не сохранять более высокий лимит?\n3. ‎Почему для всех TCP-соединений VPS принудительно выбирается \"hybla\" вместо штатного \"cubic\"? Есть ли измерения, показывающие преимущество такой настройки именно для AmneziaWG?\n4. ‎Могут ли изменения TCP-буферов, лимитов соединений и сетевых очередей отрицательно влиять на другие приложения или потребление памяти VPS с 4 ГБ RAM?\n5. ‎Безопасно ли вернуть исходные значения \"fs.file-max\" и \"tcp_congestion_control\", оставив контейнер AmneziaWG работающим?\n6. ‎Возможно ли сделать этот тюнинг необязательным либо применять только параметры, необходимые выбранному протоколу?\n7. ‎Будут ли эти настройки применяться повторно при обновлении или пересоздании AmneziaWG?\n‎\n‎Ожидаемое поведение: установка отдельного VPN-протокола не должна без необходимости менять глобальные параметры работающего сервера либо должна предупреждать администратора о таких изменениях.\n‎\n‎Буду признателен за техническое объяснение и рекомендации для VPS, на котором AmneziaWG работает одновременно с другими Docker-сервисами."
+    },
+    {
+     "number": 2997,
+     "title": "Linux: endpoint exclusion route skipped after switching servers due to failed default-gateway detection",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-17T17:50:28Z",
+     "updated_at": "2026-10-30T04:14:36Z",
+     "user": "samdark",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2997",
+     "body": "Related to #2048, but not fixed by #2840.\n\nI have two AWG2 server connections in the Linux client:\n\n- The first server works normally.\n- The second server reports `Connected` and completes the handshake, but no traffic passes.\n- The same second connection works on a phone connected to the same LAN.\n- Recreating the second server from scratch did not help.\n\nThe client log shows that it fails to install the endpoint exclusion route:\n\n```\nAmnezia LinuxRouteMonitor : Adding exclusion route for <VPN_SERVER_IP>/32\nAmnezia LinuxRouteMonitor : No default gateway available, skipping exclusion route\n```\n\nIt then installs the full-tunnel routes:\n\n```\nAdding route to 0.0.0.0/1\nAdding route to 128.0.0.0/1\n```\n\nConsequently, traffic to the VPN endpoint itself is routed into `amn0`. The initial handshake succeeds before the full-tunnel routes are installed, so the UI misleadingly reports that the connection is active.\n\nThe working server already had a correct endpoint route through the physical interface. Adding the missing route manually fixed the second connection immediately:\n\n```\nsudo ip route replace <VPN_SERVER_IP>/32 via <LAN_GATEWAY> dev <PHYSICAL_INTERFACE>\n```\n\nAfter this command, AWG2 traffic through the second server works normally.\n\nThe logs also contain:\n\n```\nError: argument \"amnvpnrt\" is wrong: invalid table ID\nmkdir: No such file or directory: /sys/fs/cgroup/net_cls/amnvpnexclusions/\n```\n\nEnvironment\n\n- AmneziaVPN: `5.0.0.5` (`4d28f81`, built July 26, 2026)\n- OS: Ubuntu 26.04 LTS (Resolute Raccoon)\n- Kernel: `7.0.0-29-generic`\n- Architecture: x86_64\n- VPN interface: `amn0`\n- Protocol: AmneziaWG v2\n\nThis appears to be a Linux client bug in default-gateway detection or endpoint exclusion-route management, particularly when multiple server connections are configured or switched between.\n\n#2840 does not cover the missing endpoint exclusion-route variant.\n"
+    },
     {
      "number": 3192,
      "title": "У кого то работает свой впс на протоколе awg?",
@@ -2424,64 +2352,27 @@
      "user": "zven73",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3344",
      "body": "Fixes #3216.\n\n## Problem\n\nWith app split tunneling unused, kernel paged pool grows without bound while `AmneziaVPN-service` runs and is only freed by a reboot (or a service restart).\n\n`WindowsSplitTunnel::create()` → `initDriver()` sends `IOCTL_INITIALIZE` at daemon start. In `mullvad-split-tunnel.sys`, initialization registers the process-notify routine, which allocates one `PROCESS_EVENT` (tag `SPTU`, paged pool) for every process arrival and departure and appends it to `EventQueue` ([procmon.cpp](https://github.com/mullvad/win-split-tunnel/blob/main/src/procmon/procmon.cpp)). The worker drains the queue only after `procmon::EnableDispatching()`, i.e. after `IOCTL_REGISTER_PROCESSES`.\n\nThe daemon sends `IOCTL_REGISTER_PROCESSES` only from `start()`, when the config has excluded apps. Otherwise it calls `stop()` → `IOCTL_CLEAR_CONFIGURATION`, which the driver does not accept in `STATE_INITIALIZED` (only `IOCTL_REGISTER_PROCESSES` is valid there), so the queue never drains.\n\n## Fix\n\n- `initDriver()`: still resets a driver left at `>= STATE_INITIALIZED`, but no longer sends `IOCTL_INITIALIZE`; the driver stays in `STATE_STARTED`, where no process events are queued. `start()` already sends `IOCTL_INITIALIZE` when it finds `STATE_STARTED`, so enabling app split tunneling works as before.\n- `stop()`: returns early in `STATE_STARTED`; in `STATE_INITIALIZED` (a `start()` that failed before process registration) it sends `IOCTL_ST_RESET`, which is valid in that state and tears down the process monitor, freeing the queue. `READY` / `RUNNING` keep the existing `IOCTL_CLEAR_CONFIGURATION` path (dispatching is enabled there, so the queue drains).\n- Constructor assert and header comment updated to `STATE_STARTED`.\n\n## Measurements (before the fix)\n\nWindows 11, AmneziaVPN 5.0.1.5, `mullvad-split-tunnel.sys` 1.2.5.0, app split tunneling not configured:\n\n- after 12 days of uptime: 31.6 M live `SPTU` allocations, 3.7 GB of paged pool (read with `NtQuerySystemInformation(SystemPoolTagInformation)`);\n- about 5.5 records leaked per `cmd.exe /c exit` (cmd + conhost, arrival + departure), measured over 1000 runs with the background rate subtracted.\n\n## Testing\n\nNot built locally (no Qt toolchain on this machine). The change was checked against the driver's IOCTL state machine (`driverentry.cpp`, `ioctl.cpp` `Reset()`), and the leak was measured live on the release build above. Reviewers with a Windows build: with app split tunneling off, `SPTU` live allocations should stay flat while processes start and exit; turning app split tunneling on should still reach `STATE_RUNNING`.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
-    },
-    {
-     "number": 3343,
-     "title": "xray: use a fixed wintun guid on windows",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-28T09:14:07Z",
-     "updated_at": "2026-10-28T09:14:07Z",
-     "user": "hasanerman",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3343",
-     "body": "tun2socks was started with plain tun://tun2 so wintun picked a random guid every time and windows made a new network profile on each connect (network 6, 7, 8...). tun2socks 2.6.0 takes ?GUID= on windows, so pass a fixed one. other platforms unchanged.\n\nfixes #2350"
-    },
-    {
-     "number": 3329,
-     "title": "[Feature Request] Support for non-systemd Linux distributions (OpenRC, runit, dinit, s6, SysVinit)",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-26T13:04:09Z",
-     "updated_at": "2026-10-28T08:50:01Z",
-     "user": "Werko1a",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3329",
-     "body": "I recently encountered a major problem: when I tried running AmneziaVPN on Gentoo Linux with OpenRC, the client immediately failed and crashed. When I reached out to official support, they couldn't help since non-systemd distributions are not officially supported. ( This relates to the problems discussed in #775 and #3000)\n\nSo I decided to investigate what was actually causing the failure and built a working solution myself.\nAfter digging into the logs and daemon behavior, I found that `AmneziaVPN-service` itself is a standard Qt process and doesn't actually need systemd. The failures come down to three specific external dependencies:\n1. The installer hardcodes `systemctl`, failing on any alternative init system.\n2. Strict reliance on `systemd-resolved` via D-Bus (`org.freedesktop.resolve1`): when Amnezia connects, it applies `iptables` drop rules for port 53, but because `systemd-resolved` doesn't exist, the DNS configuration fails completely. The result is a connected tunnel with zero working Internet.\n3. Improper lifecycle and socket handling: killing the process leaves stale Unix sockets in `/tmp/`, causing immediate `EADDRINUSE` crash loops on restart, while stopping the daemon leaves orphaned `amnvpn.*` chains cluttering the firewall.\n\nTo solve this for Gentoo, Artix, Void, and other non-systemd distros, I created a universal compatibility layer with a lightweight D-Bus DNS bridge and supervised service scripts:\nRepo: https://github.com/Werko1a/amneziavpn-non-systemd\n\nIt has been thoroughly tested and verified on an Artix Linux VM (OpenRC):\n- Service cleanly survives `kill -9` without stale socket deadlocks;\n- DNS resolves properly through the tunnel via the D-Bus shim;\n- Firewall rules are completely purged across all tables on service stop.\n\n*(The initial scaffolding was assisted by AI tools, but every script, template, and fix has been manually verified, debugged, and tested on an Artix Linux OpenRC environment).*"
-    },
-    {
-     "number": 3342,
-     "title": "wg: keep the ipv6 address from the config on desktop",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-28T07:37:19Z",
-     "updated_at": "2026-10-28T07:37:19Z",
-     "user": "hasanerman",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3342",
-     "body": "the whole Address line went into deviceIpv4Address and ipv6 was always the hardcoded fd58:baa6:dead::1, so a config with \"10.8.1.2/32, fd42:42:42::1001/128\" got the wrong v6 on the tunnel and the server dropped it. on mac/linux the combined string didnt even parse as ipv4.\n\nnow the address list is split, first v4 goes to v4, first v6 goes to v6. the ula fallback is still used when there is no v6 in the config.\n\nfixes #2539"
-    },
-    {
-     "number": 3341,
-     "title": "awg: check h1-h4 ranges for overlap",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-28T07:10:03Z",
-     "updated_at": "2026-10-28T07:10:03Z",
-     "user": "hasanerman",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3341",
-     "body": "isHeadersEqual only compared strings so 100-200 and 150-250 got saved fine. now it parses the ranges and checks overlap. added a small test.\n\nrefs #3073"
-    },
-    {
-     "number": 1630,
-     "title": "[macOS] Amnezia VPN fails to connect when both IPv4 and IPv6 are present in the WireGuard Address field",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-06-04T06:17:03Z",
-     "updated_at": "2026-10-28T03:31:29Z",
-     "user": "ARS1510",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1630",
-     "body": "**Describe the bug**\nIn the Amnezia VPN client for macOS, when the WireGuard configuration includes both an IPv4 and an IPv6 address in the Address field, like:\n```\nAddress = 192.0.2.2/32, 2001:db8::2/128\n```\nthe VPN interface is created, but the connection does not work — traffic does not go through the tunnel. Removing the IPv6 address from the config solves the issue. The same configuration works without any issues in the Amnezia VPN client for Windows.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Open Amnezia VPN on macOS  \n2. Import a WireGuard config with:\n```\nAddress = 192.0.2.2/32, 2001:db8::2/128\n```\n3. Start the VPN connection\n4. Observe that the tunnel is established but there is no traffic\n\n**Expected behavior**\nTunnel should work properly with both IPv4 and IPv6 addresses in the Address field — just like on Windows.\n\n**Log files**\nNo log files attached — the issue is reproducible with any config that includes both address types.\n\n**Screenshots**\nN/A\n\n**Desktop (please complete the following information):**\n - OS: macOS Sequoia 15.5\n - Amnezia VPN Version: 4.8.7.2\n\n**Smartphone (please complete the following information):**\n N/A\n\n**Server (please complete the following information):**\n N/A\n\n**Additional context**\nRemoving the IPv6 part from the Address field (so it only contains IPv4) allows the connection to work properly.\nThis issue does not occur:\n- when using the same configuration on the Amnezia VPN client for Windows  \n- or when using the AmneziaWG client on macOS"
     }
    ],
    "comments": [
+    {
+     "id": 6517274653,
+     "issue": 3302,
+     "issue_title": "Зачем AmneziaWG изменяет глобальные sysctl хоста? Возможные проблемы на VPS с несколькими сервисами.",
+     "created_at": "2026-10-30T07:21:50Z",
+     "user": "impaxel",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3302#issuecomment-6517274653",
+     "body": "Похоже корректировка этих параметров осталась с давних времен и скорее всего не относится к awg. Изменения почти полностью повторяют рекомендации из гайда https://github.com/shadowsocks/shadowsocks/wiki/Optimizing-Shadowsocks. Если сервер перезагрузить, то все параметры вернутся к исходным значениям"
+    },
+    {
+     "id": 6514400528,
+     "issue": 2997,
+     "issue_title": "Linux: endpoint exclusion route skipped after switching servers due to failed default-gateway detection",
+     "created_at": "2026-10-30T03:41:38Z",
+     "user": "odmin4eg",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2997#issuecomment-6514400528",
+     "body": "я столкнулся с этой же штуковиной :( \n\nAdditional occurrence on AmneziaVPN 5.0.3.0 / Ubuntu 26.04.1 LTS\n\nEnvironment:\n- AmneziaVPN 5.0.3.0 (installed package metadata)\n- Ubuntu 26.04.1 LTS, x86_64, kernel 7.0.0-38-generic\n- Ethernet uplink; many Docker bridges/routes\n- Self-hosted server; the server also works from a macOS client on another network\n\nObserved during a failed connection:\n- amn0 was UP with IPv4 10.8.1.4/32, MTU 1376.\n- Full-tunnel routes 0.0.0.0/1 and 128.0.0.0/1 selected amn0.\n- No endpoint /32 exclusion route was present.\n- `ip route get <VPN_SERVER_IP>` selected amn0 instead of the physical uplink.\n- amn0 had 0 RX bytes and approximately 2.7 GB TX / 3.3 million packets shortly after connecting, with many TX drops.\n- Both DNS and HTTPS pinned to 1.1.1.1 (curl --resolve, verified TLS) timed out.\n\nWorkaround tested:\n1. Added `sudo ip route add <VPN_SERVER_IP>/32 via <LAN_GATEWAY> dev <UPLINK>`.\n2. Fully restarted the Amnezia client and connected again.\n3. Endpoint route then selected the physical uplink; `ip route get 1.1.1.1` selected amn0.\n4. HTTPS by hostname and HTTPS with --resolve both returned HTTP/2 200.\n5. amn0 had bidirectional traffic and no interface drops in the verification snapshot.\n\nCode review:\n- LinuxRouteMonitor::rtmSendRoute() skips endpoint exclusion when getGatewayAndIface() returns an empty gateway.\n- It treats a successful sendto() as success; kernel errors are only logged asynchronously by nlsockReady().\n- WireguardUtilsLinux::updatePeer() does not check addExclusionRoute()'s result.\n- Confirmed in freshly fetched dev commit 7f9b7db4 (2026-10-29): client/core/utils/networkUtilities.cpp:294 uses a fixed 8192-byte buffer; line 338 receives into its remaining capacity.\n- A read-only AF_UNSPEC RTM_GETROUTE dump on this machine returned 120 routes, 9276 bytes including netlink headers:\n  chunk=0 bytes=3756 total=3756\n  chunk=1 bytes=5500 total=9256\n  chunk=2 bytes=20 total=9276\n- The route messages alone exceed the client buffer. With this response layout, after receiving the first datagram only 4436 bytes remain for the 5500-byte second datagram. recv() without MSG_PEEK/MSG_TRUNC handling can discard the truncated remainder. The buffer then has no space left for the completion message, and the client cannot reliably complete/parse the dump.\n- This confirms the oversized-dump condition on this host and strongly supports the failure described above. It is not a replay of the installed client's function; service logs from the original failed connection are unavailable, so the original failure path has not been directly traced.\n\nExpected behavior:\nVerify that the endpoint exclusion is installed successfully before redirecting all public traffic into amn0. If gateway detection or route installation fails, retry or show an actionable error rather than silently leaving the endpoint routed through its own tunnel.\n"
+    },
     {
      "id": 6508908650,
      "issue": 3192,
@@ -2580,24 +2471,6 @@
      "user": "k-semenko",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090#issuecomment-6470932046",
      "body": "Same on **5.0.3.0** (also reproduced on 5.0.0.5), Ubuntu with Docker (~10 bridge networks + veths), self-hosted AmneziaWG.\n\nMeasured the `RTM_GETROUTE` dump (all tables, `AF_UNSPEC`) on this machine: **10176 bytes** vs. the 8192-byte buffer in `getGatewayAndIface()` (45 IPv4 + 64 IPv6 routes). Log:\n\n```\nAdding exclusion route for <endpoint>/32\nError in received packet: No such file or directory\nNo default gateway available, skipping exclusion route\n...\nFailed to send data packets: ... sendmmsg: message too long\n```\n\nThe tunnel and the server are fine: a manual `ip route add <endpoint>/32 via <gw> dev <iface>` before connecting makes everything work. The macOS client with the same server is unaffected.\n\n#3170 fixes exactly this. Would be great to get it reviewed/merged.\n"
-    },
-    {
-     "id": 6464679375,
-     "issue": 3329,
-     "issue_title": "[Feature Request] Support for non-systemd Linux distributions (OpenRC, runit, dinit, s6, SysVinit)",
-     "created_at": "2026-10-28T08:50:01Z",
-     "user": "Werko1a",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3329#issuecomment-6464679375",
-     "body": "closed due to making a pr with native c++ patch"
-    },
-    {
-     "id": 6459948233,
-     "issue": 1630,
-     "issue_title": "[macOS] Amnezia VPN fails to connect when both IPv4 and IPv6 are present in the WireGuard Address field",
-     "created_at": "2026-10-28T03:31:29Z",
-     "user": "demanray",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1630#issuecomment-6459948233",
-     "body": "I can confirm this issue affects **all Macs among my VPN users** after switching to AmneziaWG 3.1.\n\n**Environment:**\n- AmneziaVPN 5.0.3.0\n- macOS (multiple devices)\n- AmneziaWG 3.1\n\n**Symptoms:**\n- VPN fails to establish a connection.\n- No successful handshake.\n- In some cases, internet access stops working entirely.\n- The same server works correctly on other platforms.\n\n**Confirmed workaround:**\n\nThe original configuration contains both IPv4 and IPv6 entries in `Address`, `DNS`, and `AllowedIPs`.\n\nAfter removing all IPv6 entries and keeping only IPv4, **the VPN connects immediately and works normally**.\n\nNo changes to the server, encryption keys, or AWG 3.1 obfuscation parameters were necessary.\n\nThis is reproducible across all affected Macs in my user group, not just a single machine.\n\nCould the developers please prioritize this issue? AWG 3.1 configurations should work on macOS without requiring users to manually remove IPv6 entries.\n\nThank you!"
     }
    ]
   },

@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-29T18:28:19Z",
- "since": "2026-10-27T18:28:19Z",
+ "generated_at": "2026-10-30T00:58:43Z",
+ "since": "2026-10-28T00:58:43Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -58,6 +58,39 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2622,
+     "title": "contrib/openrc: add DAEMON_OPTS unconditionally",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-29T19:38:48Z",
+     "updated_at": "2026-10-29T19:39:16Z",
+     "user": "fkobi",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2622",
+     "body": "if it is a zero-string it will just add a space which is ignored. This keeps the init script simpler.\r\n\r\nEDIT: if you want me to propose a new init.d and conf.d then I am willing to to that :D"
+    },
+    {
+     "number": 2324,
+     "title": "contrib/openrc/i2pd.openrc: remove `name`",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-02-11T16:53:44Z",
+     "updated_at": "2026-10-29T19:34:31Z",
+     "user": "fkobi",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2324",
+     "body": "That variable is no longer used:\r\nhttps://github.com/OpenRC/openrc/blob/master/service-script-guide.md"
+    },
+    {
+     "number": 2265,
+     "title": "contrib/openrc: improve `command_args`",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2025-11-23T21:13:42Z",
+     "updated_at": "2026-10-29T19:33:55Z",
+     "user": "fkobi",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2265",
+     "body": "It looks better now!"
+    },
+    {
      "number": 2621,
      "title": "The WebTorrent feature of i2pd does not accept valid magnets.",
      "is_pr": false,
@@ -70,6 +103,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6506463788,
+     "issue": 2324,
+     "issue_title": "contrib/openrc/i2pd.openrc: remove `name`",
+     "created_at": "2026-10-29T19:34:28Z",
+     "user": "fkobi",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2324#issuecomment-6506463788",
+     "body": "Thanks!"
+    },
     {
      "id": 6498947891,
      "issue": 2621,
@@ -106,12 +148,100 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7293,
+     "title": "Bump google.golang.org/protobuf from 1.36.11 to 1.36.12",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T00:12:43Z",
+     "updated_at": "2026-10-30T00:12:47Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7293",
+     "body": "Bumps google.golang.org/protobuf from 1.36.11 to 1.36.12.\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=google.golang.org/protobuf&package-manager=go_modules&previous-version=1.36.11&new-version=1.36.12)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>"
+    },
+    {
+     "number": 7292,
+     "title": "QUIC sniffer: Don't accept ClientHello with gaps in CRYPTO data",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-29T23:06:13Z",
+     "updated_at": "2026-10-29T23:52:06Z",
+     "user": "fwx",
+     "url": "https://github.com/XTLS/Xray-core/pull/7292",
+     "body": "Chrome's chaos protection splits the QUIC ClientHello into many small CRYPTO frames and sends them out of order. With ML-KEM the hello is about 1.9 KB, so it always spans two Initial packets.\n\nThe sniffer writes CRYPTO data into a zero-filled buffer and takes `max(offset+length)` as the received length. If the first packet has both the start and the end of the hello, that length looks complete while the middle is still zeros. When the gap covers the server name, `ReadClientHello` reads a zero name length and returns success with an empty domain. Sniffing stops there, the second packet is never looked at, and the flow gets routed by IP.\n\nCaptured from Chrome 130 to `www.youtube.com`: the first Initial carries CRYPTO ranges 0-59 and 1039-1955, hello length 1955, SNI sits in the gap. With ML-KEM disabled the layout is different and sniffing works on the second packet, by luck.\n\nChanges:\n- track received CRYPTO ranges, parse only when `[0, 4+len)` is contiguous, otherwise keep reading and return `ErrProtoNeedMoreData`\n- `ReadClientHello`: reject an empty HostName (RFC 6066 needs at least 1 byte)\n\n`TestSniffQUICChromeScatteredCryptoFrames` uses the two captured packets. The first alone must give `ErrProtoNeedMoreData`, both together `www.youtube.com`. Fails without the fix.\n"
+    },
+    {
+     "number": 4809,
+     "title": "Workflows: Cleaner Docker builds, support for manual exec and pre-release",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2025-06-11T14:27:02Z",
+     "updated_at": "2026-10-29T22:42:53Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/4809",
+     "body": "- 中间产物用 digest 而非 -usa 这种临时标签来标记，这样不污染 registry，专治 @RPRX 强迫症\r\n- pre-release 时不打 latest 标签，只有版本号\r\n- pre-release 转为 latest 时自动打 latest\r\n- 支持手动运行\r\n\r\n---\r\n\r\n![image](https://github.com/user-attachments/assets/5f036d6d-0aae-4097-aef2-d309547a86f6)"
+    },
+    {
+     "number": 7185,
+     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-17T06:19:36Z",
+     "updated_at": "2026-10-29T21:11:18Z",
+     "user": "KobeArthurScofield",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185",
+     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
+    },
+    {
+     "number": 7291,
+     "title": "Disable default MPTCP listener",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-29T20:21:44Z",
+     "updated_at": "2026-10-29T20:21:44Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7291",
+     "body": "关闭被go默认启用的MPTCP 并使核心本来的MPTCP选项重新有效（可以手动开启）\nhttps://thehackernews.com/2026/10/linux-kernel-tcp-flaw-with-98-cvss.html\n不知是否和MPTCP强相关 可以观望一段时间 如果是真的所有go编写的翻墙服务端和caddy可以被一键获取root就搞笑了"
+    },
+    {
+     "number": 7288,
+     "title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-29T11:38:42Z",
+     "updated_at": "2026-10-29T20:11:55Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7288",
+     "body": "https://github.com/XTLS/Xray-core/pull/6853#issuecomment-6492838227\n\n\"dns\" in autoSystemWfpBlockLeak only blocked port 53 outside the TUN, plus the DNS Client service on Windows 11 and Server 2022 and later, so other programs' DNS over TLS (TCP 853) and DNS over QUIC (UDP 853) could still leave outside the TUN.\n\nautoSystemWfpBlockLeak now takes:\n\n- \"tcp/<port>\", \"udp/<port>\": connections to that port may only go through the TUN (or come from Xray itself).\n- \"windnsclient\": Windows' DNS Client service may only connect through the TUN, except for mDNS and LLMNR. As before, this only applies from Windows 11 and Server 2022 on, where the service may use DoH or DoT to any port; earlier versions only query port 53.\n- \"dns\": stands for \"udp/53\", \"tcp/53\", \"windnsclient\", \"tcp/853\" and \"udp/853\".\n- \"misconfigtun\": unchanged.\n\nValues are case-insensitive, deduplicated, and anything else, such as \"tcp/0\" or \"icmp/1\", is rejected. Keeping the system's DNS inside the TUN, with \"udp/53\", \"tcp/53\" or \"windnsclient\", needs dns to be set, as \"dns\" did; ports like 853 alone do not. Each port gets its own permit-through-TUN and block filters with a protocol condition, where port 53 used to have one for both protocols, and the log lists what is blocked, e.g. \"[tun] blocked outside the TUN: udp/53, tcp/53, tcp/853, udp/853, windnsclient\".\n\nTested on Windows 11 with a Wintun adapter as the outside interface: with \"tcp/853\", \"udp/853\", \"tcp/7215\" and \"udp/7216\", those are blocked outside the TUN over IPv4 and IPv6, while tcp/7216, udp/7215 and 443 are not, port 853 works through the TUN, Xray's own connections to port 853 still leave outside it, and nothing is blocked after Xray stops."
+    },
+    {
+     "number": 6535,
+     "title": "在Windows上TUN疑似无法正确嗅探高权限进程的名称引发error",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-07-24T03:37:40Z",
+     "updated_at": "2026-10-29T20:09:51Z",
+     "user": "Kc2353",
+     "url": "https://github.com/XTLS/Xray-core/issues/6535",
+     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n（从日志上下文判断，原因不一定准确）在Windows上TUN疑似无法正确嗅探高权限进程的名称，例如卡巴斯基，引发\n[Error] app/router: Unables to find local process name: common/net: not found\n\n### 重现方式\n\n不确定，根据日志上下文判断是卡巴斯基更新相关\n\n### 客户端配置\n\n<details><pre><code>\n{\n  \"log\": {\n    \"loglevel\": \"debug\"\n  },\n  \"dns\": {\n    \"hosts\": {\n      \"dns.google\": [\n        \"8.8.8.8\",\n        \"8.8.4.4\",\n        \"2001:4860:4860::8888\",\n        \"2001:4860:4860::8844\"\n      ],\n      \"dns.alidns.com\": [\n        \"223.5.5.5\",\n        \"223.6.6.6\",\n        \"2400:3200::1\",\n        \"2400:3200:baba::1\"\n      ],\n      \"one.one.one.one\": [\n        \"1.1.1.1\",\n        \"1.0.0.1\",\n        \"2606:4700:4700::1111\",\n        \"2606:4700:4700::1001\"\n      ]\n    },\n    \"servers\": [\n      {\n        \"address\": \"https://cloudflare-dns.com/dns-query\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"https://dns.google/dns-query\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"8.8.8.8\",\n        \"domains\": [\n          \"domain:cloudflare-dns.com\",\n          \"domain:one.one.one.one\",\n          \"domain:dns.google\",\n          \"domain:adguard-dns.com\",\n          \"domain:opendns.com\",\n          \"domain:umbrella.com\",\n          \"domain:quad9.net\",\n          \"domain:yandex.net\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-1\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"domains\": [\n          \"\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-2\"\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"geosite:cn\",\n          \"geosite:private\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-3\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"domains\": [\n          \"geosite:cn\",\n          \"geosite:private\"\n        ],\n        \"skipFallback\": true,\n        \"tag\": \"direct-dns-4\"\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"domains\": [\n          \"full:cloudflare-dns.com\",\n          \"full:dns.google\"\n        ],\n        \"skipFallback\": true\n      },\n      {\n        \"address\": \"119.29.29.29\",\n        \"skipFallback\": false,\n        \"tag\": \"direct-dns-5\"\n      },\n      {\n        \"address\": \"223.5.5.5\",\n        \"skipFallback\": false,\n        \"tag\": \"direct-dns-6\"\n      }\n    ],\n    \"serveStale\": true,\n    \"tag\": \"dns-module\"\n  },\n  \"inbounds\": [\n    {\n      \"tag\": \"socks\",\n      \"port\": 7890,\n      \"listen\": \"127.0.0.1\",\n      \"protocol\": \"mixed\",\n      \"sniffing\": {\n        \"enabled\": false,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ],\n        \"routeOnly\": false\n      },\n      \"settings\": {\n        \"auth\": \"noauth\",\n        \"udp\": true,\n        \"allowTransparent\": false\n      }\n    },\n    {\n      \"tag\": \"tun\",\n      \"protocol\": \"tun\",\n      \"sniffing\": {\n        \"enabled\": false,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ],\n        \"routeOnly\": false\n      },\n      \"settings\": {\n        \"name\": \"xray_tun\",\n        \"MTU\": 9000,\n        \"gateway\": [\n          \"172.18.0.1/30\"\n        ],\n     "
+    },
+    {
+     "number": 7282,
+     "title": "XHTTP server: Raise HTTP/2 receive windows for faster uplink",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-28T18:58:45Z",
+     "updated_at": "2026-10-29T19:08:07Z",
+     "user": "pqhaz3925",
+     "url": "https://github.com/XTLS/Xray-core/pull/7282",
+     "body": "## Summary\n\nThe XHTTP h1/h2 server uses `net/http`'s HTTP/2 defaults: 1 MiB receive window per connection and per stream. All uplink traffic on one h2 connection (stream-up, stream-one, and packet-up over XMUX) shares that window, so uplink is capped at ~1 MiB per RTT, about 160 Mbit/s at 50 ms RTT and lower on longer paths.\n\nThis sets `http.Server.HTTP2` to 10 MiB per connection and per stream (about 1.6 Gbit/s per connection at 52 ms RTT). Buffers are only allocated as data arrives. It's server-only, so existing clients benefit without changes. XHTTP/3 (QUIC windows) is not affected.\n\n## Test\n\nVLESS + XHTTP + REALITY, stock 26.10.21 client (macOS) → Linux server, 52 ms RTT, iperf3 12 s through the tunnel (Mbit/s):\n\n| mode | up ×1 | up ×8 | down ×1 | down ×8 |\n|---|---|---|---|---|\n| stream-one, before | 76 | 171 | 156 | 367 |\n| stream-one, after | 271 | 503 | 191 | 388 |\n| packet-up, before | 140 | 341 | 169 | 421 |\n| packet-up, after | 253 | 459 | 153 | 433 |\n\nDownload differences are within run-to-run noise; uplink improves 1.3–3.6×. (Measured with 64/16 MiB windows; the test link tops out around 500 Mbit/s, below what 10 MiB allows.)\n\n- `go test ./transport/internet/splithttp` passes\n\n"
+    },
+    {
      "number": 7290,
      "title": "XHTTP transport: Accept OPTIONS as uplinkHTTPMethod",
      "is_pr": true,
-     "state": "closed",
+     "state": "open",
      "created_at": "2026-10-29T13:42:50Z",
-     "updated_at": "2026-10-29T16:01:49Z",
+     "updated_at": "2026-10-29T19:04:43Z",
      "user": "konstpic",
      "url": "https://github.com/XTLS/Xray-core/pull/7290",
      "body": "`uplinkHTTPMethod` accepts any method except GET outside packet-up (`infra/conf/transport_method.go`), and the client sends the configured method as is. So `\"uplinkHTTPMethod\": \"OPTIONS\"` passes config validation, but the server never processes such a request.\n\n**Cause.** `requestHandler.ServeHTTP` answers every `OPTIONS` request with `200` right after writing the padding/CORS headers, treating it as a CORS preflight. An uplink request sent with `OPTIONS` is dropped there, so its body is never read and the session stalls.\n\n**Change.** Treat `OPTIONS` as a preflight only when it carries `Access-Control-Request-Method`, which every browser preflight has. Any other `OPTIONS` request goes through the normal uplink handling (the existing code already treats every non-GET method as an uplink). Behaviour for POST/PUT/GET and for real preflights is unchanged. No config or protocol change; clients need no update.\n\n**Tests** (`transport/internet/splithttp`):\n- `Test_UplinkHTTPMethodOptions`: echo over packet-up, stream-up, stream-one and auto, plain and TLS, with POST, PUT and OPTIONS. Without the change OPTIONS times out or gets EOF in every mode; with it all pass (also 20x with `-race`).\n- `Test_CORSPreflightStillAnswered`: a preflight with `Access-Control-Request-Method` still gets `200` and `Access-Control-Allow-Methods`.\n- `Test_ServerMaxHeaderBytes`: oversized headers are rejected with 431 (this setting had no test).\n\nAlso checked end to end with real binaries: VLESS+XHTTP packet-up, `uplinkHTTPMethod: OPTIONS`, unmodified client against the patched server returns data; the same config against an unpatched server does not.\n\n`go run ./infra/vformat/main.go -mode check -pwd ./`, `go run ./infra/vprotogen/main.go -mode check -pwd ./` and `go test ./...` pass locally (macOS arm64; the TLS cases of the new test were run with the package's arm64 skip lifted).\n"
@@ -225,28 +355,6 @@
      "user": "patterniha",
      "url": "https://github.com/XTLS/Xray-core/pull/6853",
      "body": "Windows sends name queries to the DNS servers of all interfaces, each out through its own interface whatever the routes say, so DNS leaks past the TUN; on Windows 11 even as DNS over HTTPS or TLS, when that is set up for an interface. Other programs reach a resolver on the local network (e.g. 192.168.1.1 from DHCP) through its more specific LAN route. And an IP version that isn't routed to the TUN bypasses it entirely.\r\n\r\nWith `autoSystemWfpBlockLeak`, which needs autoSystemRoutingTable (the config is rejected otherwise), the Windows TUN now adds Windows Filtering Platform filters, all in one transaction and in a dynamic session, so that they are removed when Xray exits, even if it crashes or is killed. The option is a list, and each value blocks one kind of leak, e.g. `\"autoSystemWfpBlockLeak\": [\"dns\", \"misconfigtun\"]`:\r\n\r\n* `\"dns\"` (needs `dns`, the config is rejected otherwise): DNS (port 53) only goes through the TUN, in both directions: its local address, and the interface it leaves or arrives by, must be the TUN's. The only exception is the DNS of the Xray process itself, which may leave through the other interfaces. On Windows 11 and Server 2022 and later, the DNS Client service may only connect through the TUN, so DoH or DoT set up for another interface cannot leave through it either; only its mDNS and LLMNR stay allowed. The filters match the service by its SID, as Windows Firewall's own rules for it do.\r\n* `\"misconfigtun\"`: IPv4 or IPv6 is blocked in both directions when autoSystemRoutingTable has no route of it, the leak of a config that routes only one of them, except for the Xray process, loopback, DHCP, and for IPv6 neighbor and multicast listener discovery. Addresses don't matter: without one of a version in gateway, Windows gives the TUN a link-local one (fe80:: at once, 169.254.x.x after a few seconds), and what is routed to the TUN goes through it.\r\n\r\nEither value works alone, e.g. `[\"dns\"]` to block DNS leaks while an IP version stays out of the TUN on purpose; unknown values are rejected. Xray's own traffic is exempt: its connections out with a hard permit, which Windows Firewall rules do not override, connections to its inbounds with an ordinary one.\r\n\r\nIf the filters cannot be added, Xray does not start. `autoSystemWfpBlockLeak` is empty by default, so no filters are added unless it is set.\r\n\r\nAlso on Windows:\r\n\r\n* With `\"dns\"`, a warning for `dns` servers outside gateway and autoSystemRoutingTable, as queries to them cannot go through the TUN and are blocked.\r\n* While DNS is restricted and autoOutboundsInterface is in use, Xray resolves the names it would ask Windows for itself (Go's resolver on its own sockets). Those lookups, and the `localhost` DNS server whenever autoOutboundsInterface is in use (even without autoSystemWfpBlockLeak), skip the TUN's DNS servers, unless another interface uses them too, instead of looping back into the TUN.\r\n* The DNS cache is flushed when the TUN starts and stops, and DNS registration is turned off on the TUN (through netsh before Windows 10 1809).\r\n* Close no longer panics when registering the route or interface change callbacks failed.\r\n\r\nOn Linux, `autoSystemDNS` (XTLS/Xray-core#6773, not released yet) is renamed to `autoSystemDnsToGateway`, to match, and without an IPv4 address in gateway it now falls back to the first IPv6 one plus one. It now needs gateway (the config is rejected otherwise), and when it cannot set the system DNS, Xray does not start instead of only logging it.\r\n\r\nThe README describes all of it, and XTLS/Xray-docs-next#903 documents the options, what each system does without gateway, and `dns` in more detail.\r\n\r\nTested on Windows 11, elevated: that Windows accepts all the filters (amd64 and 386), and on amd64, DNS arriving through a real Wintun adapter and blocked outside it, DoH set on an adapter (per adapter, per network profile, and by global auto-upgrade) blocked outside the TUN while names still resolve through it, IPv4 and IPv6 blocked or ca"
-    },
-    {
-     "number": 7288,
-     "title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-29T11:38:42Z",
-     "updated_at": "2026-10-29T11:38:42Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7288",
-     "body": "https://github.com/XTLS/Xray-core/pull/6853#issuecomment-6492838227\n\n\"dns\" in autoSystemWfpBlockLeak only blocked port 53 outside the TUN, plus the DNS Client service on Windows 11 and Server 2022 and later, so other programs' DNS over TLS (TCP 853) and DNS over QUIC (UDP 853) could still leave outside the TUN.\n\nautoSystemWfpBlockLeak now takes:\n\n- \"tcp/<port>\", \"udp/<port>\": connections to that port may only go through the TUN (or come from Xray itself).\n- \"windnsclient\": Windows' DNS Client service may only connect through the TUN, except for mDNS and LLMNR. As before, this only applies from Windows 11 and Server 2022 on, where the service may use DoH or DoT to any port; earlier versions only query port 53.\n- \"dns\": stands for \"udp/53\", \"tcp/53\", \"windnsclient\", \"tcp/853\" and \"udp/853\".\n- \"misconfigtun\": unchanged.\n\nValues are case-insensitive, deduplicated, and anything else, such as \"tcp/0\" or \"icmp/1\", is rejected. Keeping the system's DNS inside the TUN, with \"udp/53\", \"tcp/53\" or \"windnsclient\", needs dns to be set, as \"dns\" did; ports like 853 alone do not. Each port gets its own permit-through-TUN and block filters with a protocol condition, where port 53 used to have one for both protocols, and the log lists what is blocked, e.g. \"[tun] blocked outside the TUN: udp/53, tcp/53, tcp/853, udp/853, windnsclient\".\n\nTested on Windows 11 with a Wintun adapter as the outside interface: with \"tcp/853\", \"udp/853\", \"tcp/7215\" and \"udp/7216\", those are blocked outside the TUN over IPv4 and IPv6, while tcp/7216, udp/7215 and 443 are not, port 853 works through the TUN, Xray's own connections to port 853 still leave outside it, and nothing is blocked after Xray stops."
-    },
-    {
-     "number": 7282,
-     "title": "XHTTP server: Raise HTTP/2 receive windows for faster uplink",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-28T18:58:45Z",
-     "updated_at": "2026-10-29T11:36:19Z",
-     "user": "pqhaz3925",
-     "url": "https://github.com/XTLS/Xray-core/pull/7282",
-     "body": "## Summary\n\nThe XHTTP h1/h2 server uses `net/http`'s HTTP/2 defaults: 1 MiB receive window per connection and per stream. All uplink traffic on one h2 connection (stream-up, stream-one, and packet-up over XMUX) shares that window, so uplink is capped at ~1 MiB per RTT, about 160 Mbit/s at 50 ms RTT and lower on longer paths.\n\nThis sets `http.Server.HTTP2` to 10 MiB per connection and per stream (about 1.6 Gbit/s per connection at 52 ms RTT). Buffers are only allocated as data arrives. It's server-only, so existing clients benefit without changes. XHTTP/3 (QUIC windows) is not affected.\n\n## Test\n\nVLESS + XHTTP + REALITY, stock 26.10.21 client (macOS) → Linux server, 52 ms RTT, iperf3 12 s through the tunnel (Mbit/s):\n\n| mode | up ×1 | up ×8 | down ×1 | down ×8 |\n|---|---|---|---|---|\n| stream-one, before | 76 | 171 | 156 | 367 |\n| stream-one, after | 271 | 503 | 191 | 388 |\n| packet-up, before | 140 | 341 | 169 | 421 |\n| packet-up, after | 253 | 459 | 153 | 433 |\n\nDownload differences are within run-to-run noise; uplink improves 1.3–3.6×. (Measured with 64/16 MiB windows; the test link tops out around 500 Mbit/s, below what 10 MiB allows.)\n\n- `go test ./transport/internet/splithttp` passes\n\n"
     },
     {
      "number": 7262,
@@ -876,17 +984,6 @@
      "body": "Regression from #6060 (958eb9e). `blackhole` waits for `buf.Copy(input, buf.Discard)` and relies on the `blockDelay` timer calling `common.Interrupt(input)` to end it. That only works for a pipe: VLESS, Hysteria and other inbounds that use `DispatchLink` pass a reader on the client connection, and `Interrupt` does nothing to it. So a blocked connection stays open until the client closes it, whatever `blockDelay` is. In our tests it was still open after 330 s, longer than `connIdle`.\n\nDrain the input in a goroutine and return once the delay has passed or the input has ended. The inbound then closes the connection, as it does after the blackhole outbound.\n\n`TestVlessBlockDelay` covers `blockDelay` 0 and 1 through a VLESS inbound. Both cases fail on main.\n"
     },
     {
-     "number": 7185,
-     "title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-10-28T13:52:05Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185",
-     "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
-    },
-    {
      "number": 7279,
      "title": "Query every balancer tag passed to api bi",
      "is_pr": true,
@@ -954,6 +1051,87 @@
     }
    ],
    "comments": [
+    {
+     "id": 6510221797,
+     "issue": 4809,
+     "issue_title": "Workflows: Cleaner Docker builds, support for manual exec and pre-release",
+     "created_at": "2026-10-29T22:42:53Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/4809#issuecomment-6510221797",
+     "body": "> ~以后哪天想起来了再向 GitHub 申请把旧包都删了吧，不然太乱了~\r\n\r\n准备开始清了，以前那种 sha-xxx 开头的都删掉，估计要个几天时间，因为有速率限制\r\n不必跟 github 申请\r\n没意见的话我就 push ci 上来"
+    },
+    {
+     "id": 6508423281,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-29T21:11:18Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6508423281",
+     "body": "<img width=\"745\" height=\"537\" alt=\"image\" src=\"https://github.com/user-attachments/assets/113e3cf1-415c-47a4-830f-53f0b1cfd1d7\" />\r\ngithub 肉眼可见的越来越脆弱了，bug 满天飞的样子，下载统计坏了\r\n\r\n@RPRX 撤版的时候漏了 docker"
+    },
+    {
+     "id": 6508172768,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-10-29T20:58:24Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6508172768",
+     "body": "今天的 release 带的是两个完全体的 geodata 实测问题不大因为 image 自带压缩\r\n<img width=\"727\" height=\"190\" alt=\"image\" src=\"https://github.com/user-attachments/assets/e6530965-6b68-4e5f-96f6-eab191b6f614\" />\r\n\r\n试了下 geoip-full 拉到 gzip6 体积可以下降 80%\r\n以后有空再 PR"
+    },
+    {
+     "id": 6507229727,
+     "issue": 7288,
+     "issue_title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
+     "created_at": "2026-10-29T20:11:55Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7288#issuecomment-6507229727",
+     "body": "> TUN 的 README.md 也带上那些 PR [#6853 (comment)](https://github.com/XTLS/Xray-core/pull/6853#issuecomment-6492838227) 的内容，以及近期其它与 TUN 相关的改动\r\n\r\nDone, the TUN README now covers #7173, #7214, #7230, and also #7130, #6874, #6811 and #6883 (#7092 and autoSystemWfpBlockLeak were already there)."
+    },
+    {
+     "id": 6507185140,
+     "issue": 6535,
+     "issue_title": "在Windows上TUN疑似无法正确嗅探高权限进程的名称引发error",
+     "created_at": "2026-10-29T20:09:51Z",
+     "user": "debugzxcv",
+     "url": "https://github.com/XTLS/Xray-core/issues/6535#issuecomment-6507185140",
+     "body": "有任何进展吗？"
+    },
+    {
+     "id": 6505914770,
+     "issue": 7282,
+     "issue_title": "XHTTP server: Raise HTTP/2 receive windows for faster uplink",
+     "created_at": "2026-10-29T19:08:07Z",
+     "user": "pqhaz3925",
+     "url": "https://github.com/XTLS/Xray-core/pull/7282#issuecomment-6505914770",
+     "body": "Thanks for reopening. On Fangliding's point about observability: the current 1 MiB window is itself a fingerprint (it's the Go net/http default, so it identifies a Go h2 server just as well), and it is only visible after the TLS/REALITY handshake, so a passive or active prober doesn't see it before authenticating. Behind nginx nothing changes, as noted.\n\nIf changing the default is still a concern, I can make it opt-in instead: `xhttpSettings.serverMaxUploadWindow` (or similar), default = current behaviour, so only users who need fast uplink set it. Which would you prefer?\n"
+    },
+    {
+     "id": 6505903524,
+     "issue": 7288,
+     "issue_title": "TUN inbound: Support \"tcp/port\" and \"udp/port\" in `autoSystemWfpBlockLeak` on Windows; \"dns\" covers DoT and DoQ as well",
+     "created_at": "2026-10-29T19:07:34Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7288#issuecomment-6505903524",
+     "body": "TUN 的 README.md 也带上那些 PR https://github.com/XTLS/Xray-core/pull/6853#issuecomment-6492838227 的内容，以及近期其它与 TUN 相关的改动"
+    },
+    {
+     "id": 6505848077,
+     "issue": 7282,
+     "issue_title": "XHTTP server: Raise HTTP/2 receive windows for faster uplink",
+     "created_at": "2026-10-29T19:04:51Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7282#issuecomment-6505848077",
+     "body": "仍需讨论"
+    },
+    {
+     "id": 6505845186,
+     "issue": 7290,
+     "issue_title": "XHTTP transport: Accept OPTIONS as uplinkHTTPMethod",
+     "created_at": "2026-10-29T19:04:42Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7290#issuecomment-6505845186",
+     "body": "可以加"
+    },
     {
      "id": 6501763705,
      "issue": 7290,
@@ -2033,29 +2211,22 @@
      "user": "KobeArthurScofield",
      "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6459554298",
      "body": "是，分类上是这样的关系\r\n\r\n> 有必要把它们统一成 blacklist-xx/whitelist-xx 吗？ \r\n\r\n也不是不行，虽然目前已经部分程度上统一了（黑名单用的 blocked-in 反冲突词缀，白名单没有统一词缀）\r\n\r\n> 扩展版是否应该沿用分类名称，不搞 `expand` 词缀？\r\n\r\nir 的白名单里面，小表四万多条，大表五万多条，重合部分会比较多，分开完全是受原来对应设计的影响\r\nru 的黑名单比较麻烦，antifilter-list-full 源文件 ~30 MB，百万条，如果不区分的话在不小心从标准版切换成扩展版的时候会炸掉部分设备\r\n\r\n> 我看了一下 v2fly/domain-list-community 那边没有 geosite:ru geosite:ir 似乎可以把它们当白名单用，这样 cn 也不用改名了，语义统一\r\n\r\n~geosite:cn 现在完全是用来兼容古老设计的产物，如果真的不用考虑兼容问题我估计上游会比较想铲掉它~\r\n"
-    },
-    {
-     "id": 6456463467,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-27T23:49:10Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6456463467",
-     "body": "我看了一下 v2fly/domain-list-community 那边没有 geosite:ru geosite:ir\r\n似乎可以把它们当白名单用，这样 cn 也不用改名了，语义统一"
-    },
-    {
-     "id": 6456170438,
-     "issue": 7185,
-     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
-     "created_at": "2026-10-27T23:30:54Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6456170438",
-     "body": "| 类型               | 分类名称               | 标准版 | 扩展版 |\r\n| ------------------ | ---------------------- | ------ | ------ |\r\n| 中国大陆黑名单     | `blocked-in-cn`        | 包含   | 包含   |\r\n| 俄罗斯黑名单       | `blocked-in-ru`        | 包含   | 包含   |\r\n| 俄罗斯白名单       | `available-only-in-ru` | 包含   | 包含   |\r\n| 伊朗白名单         | `mainly-ir`            | 包含   | 包含   |\r\n| 中国大陆扩展黑名单 | `blocked-in-cn-expand` | 不包含 | 包含   |\r\n| 俄罗斯扩展黑名单   | `blocked-in-ru-expand` | 不包含 | 包含   |\r\n| 中国大陆扩展白名单 | `expand-cn`            | 不包含 | 包含   |\r\n| 伊朗扩展白名单     | `expand-ir`            | 不包含 | 包含   |\r\n\r\n@KobeArthurScofield 弄那边仓库 README 的时候我理了一下，是这个意思吗？\r\n有必要把它们统一成 blacklist-xx/whitelist-xx 吗？\r\n扩展版是否应该沿用分类名称，不搞 `expand` 词缀？"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3192,
+     "title": "У кого то работает свой впс на протоколе awg?",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-21T18:33:22Z",
+     "updated_at": "2026-10-29T21:37:14Z",
+     "user": "ssouuu2k",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192",
+     "body": "На стороне сервера вроде проблем никаких нет, но впн не работает."
+    },
     {
      "number": 3354,
      "title": "fix(import): preserve single DNS server in WireGuard configs",
@@ -2110,17 +2281,6 @@
      "user": "wetlabac",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3351",
      "body": "804 error many times\nWin 11\n2026-10-29 14:48:28.371Z] [DEBUG] AmneziaVPN  : [tun2socks]: \"unexpected fault address 0x1c60c185e0\\nfatal error: fault\\n\"\n[2026-10-29 14:48:28.374Z] [DEBUG] AmneziaVPN  : [tun2socks]: \"[signal 0xc0000005 code=0x1 addr=0x1c60c185e0 pc=0x7ff7ea670933]\\n\\ngoroutine 696 gp=0x72560e2d680 m=17 mp=0x72560c85808 [running]:\\nruntime.throw({0x7ff7eaa6d0bf?, 0x7ff7ea533285?})\\n\\truntime/panic.go:1229 +0x4d fp=0x72560fbf8b8 sp=0x72560fbf888 pc=0x7ff7ea51fdad\\nruntime.sigpanic()\\n\\truntime/signal_windows.go:398 +0xd0 fp=0x72560fbf900 sp=0x72560\n\n[AmneziaVPN.log](https://github.com/user-attachments/files/34138751/AmneziaVPN.log)\n\nfbf8b8 pc=0x7ff7ea502650"
-    },
-    {
-     "number": 3192,
-     "title": "У кого то работает свой впс на протоколе awg?",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-21T18:33:22Z",
-     "updated_at": "2026-10-29T14:36:40Z",
-     "user": "ssouuu2k",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192",
-     "body": "На стороне сервера вроде проблем никаких нет, но впн не работает."
     },
     {
      "number": 3350,
@@ -2319,20 +2479,36 @@
      "user": "ARS1510",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1630",
      "body": "**Describe the bug**\nIn the Amnezia VPN client for macOS, when the WireGuard configuration includes both an IPv4 and an IPv6 address in the Address field, like:\n```\nAddress = 192.0.2.2/32, 2001:db8::2/128\n```\nthe VPN interface is created, but the connection does not work — traffic does not go through the tunnel. Removing the IPv6 address from the config solves the issue. The same configuration works without any issues in the Amnezia VPN client for Windows.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Open Amnezia VPN on macOS  \n2. Import a WireGuard config with:\n```\nAddress = 192.0.2.2/32, 2001:db8::2/128\n```\n3. Start the VPN connection\n4. Observe that the tunnel is established but there is no traffic\n\n**Expected behavior**\nTunnel should work properly with both IPv4 and IPv6 addresses in the Address field — just like on Windows.\n\n**Log files**\nNo log files attached — the issue is reproducible with any config that includes both address types.\n\n**Screenshots**\nN/A\n\n**Desktop (please complete the following information):**\n - OS: macOS Sequoia 15.5\n - Amnezia VPN Version: 4.8.7.2\n\n**Smartphone (please complete the following information):**\n N/A\n\n**Server (please complete the following information):**\n N/A\n\n**Additional context**\nRemoving the IPv6 part from the Address field (so it only contains IPv4) allows the connection to work properly.\nThis issue does not occur:\n- when using the same configuration on the Amnezia VPN client for Windows  \n- or when using the AmneziaWG client on macOS"
-    },
-    {
-     "number": 3339,
-     "title": "feat(ui): show AmneziaWG connection status and location history",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-27T19:05:14Z",
-     "updated_at": "2026-10-27T19:05:14Z",
-     "user": "DominikTobureto",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3339",
-     "body": "## Summary\n\nAdds live AmneziaWG connection stats and per-location connection history to the premium location picker.\n\n- Poll WireGuard/AWG status once per second while connected and forward `tx/rx` counters through `VpnProtocol` → `ConnectionController` → `ConnectionUiController`.\n- Expose connection duration, setup time, and current download/upload speed.\n- Persist the last connection result per gateway server/country: success/failure, setup time, timestamp, and error.\n- Show a status dot and subtitle in `PageSettingsApiAvailableCountries`:\n  - `Connected · 12 s · ↓ 1.2 MB/s ↑ 300 KB/s`\n  - `Last connected 2 h ago · setup 0.4 s`\n  - `Last attempt failed: <reason>`\n  - `Config ready` / `Update available` plus available protocols (`AmneziaWG`, `VLESS`).\n\nNo API or backend changes. No keys or secrets are added to the source; the AGW public keys remain build-time environment inputs.\n\n## Evidence\n\n- **Before:** country rows had no status; AWG traffic always showed `0 B`.\n- **After:** on Windows 11 with Qt 6.10.1 / MSVC 2022, an active AWG connection shows non-zero live speed, country switching works, and successful/failed connection attempts are remembered per location.\n- Build: `cmake --build build --config Release --target AmneziaVPN` succeeds.\n- The status poll runs only while a connection is active and stops on disconnect/deactivate.\n\n## Merge Danger\n\n**Door:** two-way\n\n**Blast Radius:** UI and connection telemetry only; no VPN protocol or API behavior changes.\n"
     }
    ],
    "comments": [
+    {
+     "id": 6508908650,
+     "issue": 3192,
+     "issue_title": "У кого то работает свой впс на протоколе awg?",
+     "created_at": "2026-10-29T21:37:14Z",
+     "user": "Vitalik93",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192#issuecomment-6508908650",
+     "body": "Российские VPS уже начали поджимать и думаю дальше будет только хуже. Конечно лучше иностранный брать."
+    },
+    {
+     "id": 6507866377,
+     "issue": 3192,
+     "issue_title": "У кого то работает свой впс на протоколе awg?",
+     "created_at": "2026-10-29T20:42:52Z",
+     "user": "igogosha131",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192#issuecomment-6507866377",
+     "body": "Сегодня на firstvds один сервак полностью перестал пинговаться и SSH пропал, развернул новый - SSH есть, но 305 ошибка везде, и с телефона и с пк, с 3 провайдеров\n\nПолучилось развернуть протоколы только с левым каким-то впном, но ни x-ray ни awg не работает\n\nЯ так понимаю, что вариантов уже нет? Только какие-то покупные брать?"
+    },
+    {
+     "id": 6506939330,
+     "issue": 3192,
+     "issue_title": "У кого то работает свой впс на протоколе awg?",
+     "created_at": "2026-10-29T19:58:01Z",
+     "user": "maksimnelson356-sudo",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192#issuecomment-6506939330",
+     "body": "> 30\\. Упал свой впс Французский\n>      Купил хостнг у другого провайдера Финский, таже самая проблема, timeout\n>      Если в случае с Французским сервером просто заблокировали ip по ТСПУ, то Финский до сих пор доступен, но все равно не работает\n\nФинские тоже отключили "
+    },
     {
      "id": 6501984299,
      "issue": 1658,
@@ -2459,17 +2635,6 @@
      "user": "ruib-7f79mj44pz",
      "url": "https://github.com/HyNetworks/hysteria/pull/1675",
      "body": "## Problem\r\n\r\nOn Windows, after exiting the Hysteria client in TUN mode, starting it again can connect to the server successfully but then stall for approximately 15 seconds before failing to create the TUN interface.\r\n\r\nA representative log excerpt is shown below, with relative timestamps and unrelated connection metadata and terminal color codes omitted:\r\n\r\n```text\r\n+00s INFO  client mode\r\n+01s INFO  connected to server\r\n+01s INFO  TUN listening {\"interface\": \"Hysteria 2\"}\r\n+17s FATAL failed to run TUN {\"error\": \"failed to create tun interface: Cannot create a file when that file already exists.\"}\r\n```\r\n\r\nThe `TUN listening` message is logged before `Server.Serve` is called, so it does not confirm that interface creation succeeded.\r\n\r\nThe existing client shutdown path neither signals the TUN service to stop nor waits for its cleanup. The TUN stack uses `context.Background()`, and its deferred interface and stack cleanup only runs after `Run()` returns. The process can therefore exit before that cleanup executes, potentially interfering with subsequent startup.\r\n\r\n## Changes\r\n\r\n* Pass a cancellable context from `runClient` through `clientTUN` and `Server.Serve` to the TUN stack.\r\n* Use `context.AfterFunc` to close the TUN interface on cancellation and unblock `Run()`. Coordinate the callback with deferred interface cleanup using `sync.Once`, and stop the callback registration when `Serve` exits.\r\n* Cancel the TUN context and wait for `clientTUN` to return, including its deferred cleanup, before completing signal-driven shutdown or calling `logger.Fatal` after a mode failure.\r\n* Treat `Run()` returning while the service context is canceled as normal shutdown.\r\n* Suppress TCP/UDP cancellation event logs only when both the reported error and the service-level context indicate `context.Canceled`. Other TCP/UDP errors remain logged.\r\n\r\n## Validation\r\n\r\n* `git diff --cached --check` passed.\r\n* `go test ./...` passed when run from the `app` directory.\r\n* Repeated manual startup and shutdown tests in TUN mode on Windows confirmed that:\r\n\r\n  * Shutdown completed without hanging.\r\n  * The virtual network adapter was removed after each shutdown.\r\n  * Subsequent startups succeeded without the delay and interface-creation error shown above.\r\n  * No `context canceled` warnings were observed during shutdown.\r\n\r\nManual runtime validation was limited to Windows. The TUN package currently reports `[no test files]`; this PR does not add automated TUN shutdown tests.\r\n"
-    },
-    {
-     "number": 1713,
-     "title": "Salamander and Masquerade",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-27T19:01:53Z",
-     "updated_at": "2026-10-27T19:01:53Z",
-     "user": "VoldemarBeherith",
-     "url": "https://github.com/HyNetworks/hysteria/issues/1713",
-     "body": "Hello. One clown tells me that Salamander and Masquerade can work at the same time. Is this true?"
     }
    ],
    "comments": [

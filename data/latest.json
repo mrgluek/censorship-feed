@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-10-30T22:19:12Z",
- "since": "2026-10-28T22:19:12Z",
+ "generated_at": "2026-10-31T05:39:48Z",
+ "since": "2026-10-29T05:39:48Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -145,6 +145,17 @@
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2101,
+     "title": "Added example docker-compose.yml",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2024-09-25T17:09:22Z",
+     "updated_at": "2026-10-31T03:02:41Z",
+     "user": "imdef",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2101",
+     "body": "I added an example docker-compose.yml file that I used in my own setup to persist the router's data because I read \"You must save the router's data (netdb, configuration, etc.) between runs of the router. I2P does not work well if you must reseed each startup, and that's a huge load on our reseed servers, and not very good for anonymity either. Even if you bundle router infos, I2P needs saved profile data for best performance. Without persistence, your users will have a poor startup experience.\""
+    },
     {
      "number": 2624,
      "title": "OpenWrt build",
@@ -309,6 +320,17 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7295,
+     "title": "Allow custom HTTP2 config for listener",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T13:05:19Z",
+     "updated_at": "2026-10-31T05:15:29Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7295",
+     "body": "https://github.com/XTLS/Xray-core/pull/7282#issuecomment-6523157944\n允许按自身需求调整 HTTP2 config 直接按json解析过去 core 基本不需要代码还自带自动更新\n#6268 的受害者也可以自行调整参数 反正一切风险自负就行了"
+    },
+    {
      "number": 7298,
      "title": "HTTP inbound: Forward short 100 Continue responses promptly",
      "is_pr": true,
@@ -428,17 +450,6 @@
      "user": "mwnydev",
      "url": "https://github.com/XTLS/Xray-core/pull/7270",
      "body": "…t check\n\nPeriodic.Start runs Execute once synchronously while SetTimeout holds t.mu. If a check of the task being replaced is still running it can consume the token posted by Update; the synchronous check then calls finish, which locks t.mu again and deadlocks, leaking the connection's handler (goroutines and the socket). Make the synchronous first run only drain the token.\n\nFound by the akari-agent soak test (77 stuck handlers in one hour).\n\n"
-    },
-    {
-     "number": 7295,
-     "title": "Allow custom HTTP2 config for listener",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-30T13:05:19Z",
-     "updated_at": "2026-10-30T13:05:19Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7295",
-     "body": "https://github.com/XTLS/Xray-core/pull/7282#issuecomment-6523157944\n允许按自身需求调整 HTTP2 config 直接按json解析过去 core 基本不需要代码还自带自动更新\n#6268 的受害者也可以自行调整参数 反正一切风险自负就行了"
     },
     {
      "number": 7282,
@@ -1033,130 +1044,18 @@
      "user": "Radar5404",
      "url": "https://github.com/XTLS/Xray-core/issues/7275",
      "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n在 Xray-core 中使用 VLESS + REALITY + XTLS Vision，并通过 `vlessRoute` 根据 UUID 的第三段选择不同的出站。\n\n配置了两条路由规则：\n\n- `vlessRoute: 1` → `direct`（Freedom 直连）\n- `vlessRoute: 2` → `wgcf`（WireGuard / Cloudflare WARP）\n\n使用 UUID 第三段为 `0001` 的客户端连接时，一切正常；但将其修改为 `0002` 后，客户端无法建立连接，延迟显示为 `-1ms`，并出现如下错误：\n\n```\n[Error] [4184232290] transport/internet/reality:\nREALITY: received real certificate (potential MITM or redirection)\n```\n\n与此同时，服务端没有产生对应的 VLESS 访问日志。\n\n已经确认：\n\n1. `0001 → direct`：可以正常连接。\n2. `0002 → wgcf`：无法连接，客户端提示 REALITY 收到真实证书，服务端没有对应的访问日志。\n3. WireGuard（`wgcf`）出站配置已经确认正确。\n\n由此怀疑 `vlessRoute` 与 WireGuard 出站组合使用时存在兼容性或路由处理方面的问题。\n\n\n### 重现方式\n\n1. 在服务端配置 VLESS + REALITY 入站，启用 `xtls-rprx-vision`，并使用 `mlkem768x25519plus.native.600s` 加密方式。\n2. 添加 `direct`（Freedom）和 `wgcf`（WireGuard）两个出站。\n3. 配置以下路由规则：\n    \n    ```json\n    \"routing\": {\n      \"domainStrategy\": \"AsIs\",\n      \"rules\": [\n        {\n          \"vlessRoute\": 1,\n          \"outboundTag\": \"direct\"\n        },\n        {\n          \"vlessRoute\": 2,\n          \"outboundTag\": \"wgcf\"\n        }\n      ]\n    }\n    ```\n    \n4. 使用 UUID 第三段为 `0001` 的客户端连接，访问网址，可以正常访问，服务端产生对应的访问日志。\n5. 将客户端 UUID 第三段修改为 `0002`，其余客户端连接参数保持不变。\n6. 再次尝试连接，出现 REALITY 证书错误，客户端延迟显示 `1ms`，服务端没有新的访问日志。\n\n### 客户端配置\n\n```json\n{\n  \"outbounds\": [\n    {\n      \"tag\": \"proxy\",\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"address\": \"123.123.123.123\",\n        \"port\": 443,\n        \"email\": \"t@t.tt\",\n        \"id\": \"a1b2c3d4-5678-0001-8abc-def012345678\",\n        \"encryption\": \"mlkem768x25519plus.native.600s.<REDACTED_KEY>\",\n        \"flow\": \"xtls-rprx-vision\"\n      },\n      \"streamSettings\": {\n        \"network\": \"raw\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"serverName\": \"example.com\",\n          \"fingerprint\": \"chrome\",\n          \"show\": false,\n          \"publicKey\": \"<REDACTED_REALITY_PRIVATE_KEY>\",\n          \"shortId\": \"\"\n        }\n      }\n    },\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\",\n      \"streamSettings\": {\n        \"sockopt\": {\n          \"domainStrategy\": \"UseIP\"\n        }\n      }\n    },\n    {\n      \"tag\": \"block\",\n      \"protocol\": \"blackhole\"\n    }\n  ]\n}\n\n```\n\n\n### 服务端配置\n\n```json\n{\n  \"inbounds\": [\n    {\n      \"tag\": \"vless-reality\",\n      \"listen\": \"0.0.0.0\",\n      \"port\": 443,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [\n          {\n            \"id\": \"a1b2c3d4-5678-4df0-8abc-def012345678\",\n            \"flow\": \"xtls-rprx-vision\"\n          }\n        ],\n        \"decryption\": \"mlkem768x25519plus.native.600s.<REDACTED_KEY>\"\n      },\n      \"streamSettings\": {\n        \"network\": \"raw\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"target\": \"example.com:443\",\n          \"serverNames\": [\"example.com\"],\n          \"privateKey\": \"<REDACTED_REALITY_PRIVATE_KEY>\",\n          \"shortIds\": [\"\"]\n        }\n      },\n      \"sniffing\": {\n        \"enabled\": true,\n        \"destOverride\": [\"http\", \"tls\", \"quic\"],\n        \"routeOnly\": true\n      }\n    }\n  ],\n  \"outbounds\": [\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\"\n    },\n    {\n      \"tag\": \"wgcf\",\n      \"protocol\": \"wireguard\",\n      \"settings\": {\n        \"secretKey\": \"sFG6Apt+XBDYUlx3X86saok+YCO5qb8u23NAvn8Fv0g=\",\n        \"address\": [\"172.16.0.2\", \"2606:4700:110:8a17:b707:cae:14bc:bea7\"],\n        \"peers\": [\n          {\n            \"endpoint\": \"engage.cloudflareclient.com:2408\",\n            \"publicKey\": \"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=\",\n            \"allowedIPs\": [\"0.0.0.0/0\", \"::/0\"]\n          }\n        ],\n        \"noKernelTun\": true,\n        \"mtu\": 1420,\n        \"reserved\": [251, 252, 231]\n      }\n    }\n  ],\n  \"routing\": {\n    \"domainStrategy\": \"AsIs\",\n    \"rules\": [\n      {\n        \"vlessRoute\": 1,\n        \"outboundTag\": \"direct\"\n      },\n      {\n        \"vlessRoute\": 2,\n        \"outbou"
-    },
-    {
-     "number": 7283,
-     "title": "你好，这是我简单的一个协议思路，请问可行吗",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-29T04:27:38Z",
-     "updated_at": "2026-10-29T04:53:24Z",
-     "user": "1989year",
-     "url": "https://github.com/XTLS/Xray-core/issues/7283",
-     "body": "using System.Buffers;\nusing System.Buffers.Binary;\nusing System.Net;\nusing System.Net.Security;\nusing System.Net.Sockets;\nusing System.Security.Authentication;\nusing System.Security.Cryptography.X509Certificates;\nusing System.Text;\nusing test;\nusing var listener = new TcpListener(IPAddress.Any, 8443);\nlistener.Start();\n\n// 简易客户端\n_ = Task.Run(async () => {\n    await Task.Delay(1111);\n    using var client = new TcpClient(\"localhost\", 8443);\n    await using var stream = client.GetStream();\n    await using (var sslStream = new SslStream(stream, true, userCertificateValidationCallback: (_, _, _, _) => true)) {\n        await sslStream.AuthenticateAsClientAsync(new SslClientAuthenticationOptions {\n            TargetHost = \"localhost\"\n        });\n        Console.WriteLine(\"[Client] TLS 握手成功！\");\n        var buffer = new ArrayBufferWriter<byte>();\n        var memory = buffer.GetMemory(1024);\n        var span = memory.Span;\n        var offset = 0;\n        var token = Guid.NewGuid();\n        token.TryWriteBytes(span.Slice(offset, 16), true, out _);\n        offset += 16;\n        // command\n        span[offset++] = 0x01;\n        // atype\n        span[offset++] = 0x02;\n        // domain\n        var domainBytes = Encoding.ASCII.GetBytes(\"ipv4.geoip2.com\");\n        span[offset++] = (byte)domainBytes.Length;\n        domainBytes.CopyTo(span.Slice(offset));\n        offset += domainBytes.Length;\n        // port\n        BinaryPrimitives.WriteUInt16BigEndian(span.Slice(offset, 2), 80);\n        offset += 2;\n        buffer.Advance(offset);\n        Console.WriteLine(Convert.ToHexString(buffer.WrittenSpan));\n        await sslStream.WriteAsync(buffer.WrittenMemory);\n    }\n    string httpGetRequest = \n        \"GET / HTTP/1.1\\r\\n\" +\n        \"Host: ipv4.geoip2.com\\r\\n\" +\n        \"User-Agent: curl/1.0\\r\\n\" +\n        \"Connection: close\\r\\n\\r\\n\";\n   await stream.WriteAsync(Encoding.UTF8.GetBytes(httpGetRequest));\n    while (true) {\n        var temp = new byte[10240];\n        var length = await stream.ReadAsync(temp);\n        if (length <= 0) {\n            continue;\n        }\n        Console.WriteLine(length);\n        Console.WriteLine(Encoding.UTF8.GetString(temp, 0, length));\n    }\n});\n\n\nvar pfx = X509CertificateLoader.LoadPkcs12FromFile(\"root.pfx\", string.Empty);\nwhile (true) {\n    var accept = await listener.AcceptTcpClientAsync();\n    _ = Task.Run(() => HandleClientAsync(accept));\n}\n\n\nasync Task HandleClientAsync(TcpClient client)\n{\n    using (client) {\n        try {\n            var buffer = new ArrayBufferWriter<byte>();\n            using (var networkStream = client.GetStream()) {\n                // 1. 仅在握手和读取协议头阶段使用 SslStream\n                await using (var sslStream = new SslStream(networkStream, true)) {\n                    await sslStream.AuthenticateAsServerAsync(new SslServerAuthenticationOptions {\n                        ServerCertificate = pfx,\n                        EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,\n                        RemoteCertificateValidationCallback = (sender, certificate, chain, errors) => true\n                    });\n                    \n                    // 读取客户端发来的第一个二进制包头\n                    var memory = buffer.GetMemory(4096);\n                    var length = await sslStream.ReadAsync(memory);\n                    buffer.Advance(length);\n                } // <--- 离开这个块，SslStream 被释放，但底层的 networkStream 完好无损！\n                \n                \n                if (Utils.TryParseHeader(buffer.WrittenSpan, out var uuid, out var targetEP)) {\n                \n                    Console.WriteLine($\"[Auth Success] 鉴权成功: {uuid} -> 目标: {targetEP}\");\n                    \n                    \n                    // 3. 进入纯净的原生 Socket 透明转发阶段\n                    await  ForwardingAsync(networkStream, targetEP, CancellationToken.None);\n                }\n            }\n        } catch (Exception ex) {\n            Console.WriteLine(ex);\n        }\n    }\n}\n\nasync Task ForwardingAsync(NetworkStream src, EndPoint targetEP, C"
-    },
-    {
-     "number": 7235,
-     "title": "Withdrawn",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-22T22:26:09Z",
-     "updated_at": "2026-10-29T03:42:13Z",
-     "user": "makirov03",
-     "url": "https://github.com/XTLS/Xray-core/issues/7235",
-     "body": "Withdrawn by the author."
-    },
-    {
-     "number": 7236,
-     "title": "WebSocket transport: Treat normal close frames as io.EOF",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-22T23:35:54Z",
-     "updated_at": "2026-10-29T03:42:12Z",
-     "user": "thatssoheil",
-     "url": "https://github.com/XTLS/Xray-core/pull/7236",
-     "body": "## What this fixes\n\nA WebSocket close frame with a normal status (1000) or no status (1005) ends the byte stream the same way a FIN does, but `connection.Read` surfaced gorilla's `*websocket.CloseError` to its callers.\n\nVLESS and Trojan carry payload without framing, so a response copy ended with that error. `app/proxyman/outbound.Handler.Dispatch` treats every error other than `io.EOF` as a failure and calls `common.Interrupt`, which releases the data still buffered in the pipe before the inbound has read it. The client gets a short response that ends with a normal FIN - silent truncation for HTTP/1.0 responses without Content-Length, and a `websocket: close 1000 (normal)` line for every such connection.\n\nFix: map `websocket.IsCloseError(err, CloseNormalClosure, CloseNoStatusReceived)` to `io.EOF` in `connection.Read`. Other close codes keep their error semantics. The same wrapper is used by the XHTTP browser dialer client (`transport/internet/splithttp/browser_client.go`), so that path inherits the fix.\n\nFixes #7235.\n\n## Test record\n\nEnvironment: `1b1647cd` (v26.10.21), linux/amd64. The configs and scripts from the report used verbatim: target answers `HTTP/1.0 200 OK` + 65536 body bytes without Content-Length, then closes; the client fetches through an `http` inbound -> VLESS/ws outbound.\n\n| scenario | base `1b1647cd` | with fix `bba46a28` |\n|---|---|---|\n| 20 sequential fetches, `GOMAXPROCS=1` | 19/20 short (15 x 0 B, 2 x 32749 B, 1 x 8171 B, 1 x 8173 B); 20 `close 1000` log lines | 20/20 complete 65536 B; 0 close lines |\n| 10 rounds x 20 concurrent fetches | ~172/200 short; 200 `close 1000` log lines | 200/200 complete; 0 close lines |\n| raw TCP control (same scripts) | 20/20 complete; 0 close lines | 20/20 complete |\n\nThe byte counts above are from the runs saved for this report; a second base run produced the same shape (18/20 short) with a different byte split.\n\nUnit tests (new `connection_test.go`, real WebSocket server + the production wrapper): RED on base - close 1000 and 1005 come back as `websocket: close 1000 (normal)` / `close 1005 (no status)` instead of `io.EOF`; GREEN with the fix. A 1001 (`going away`) control asserts that other close codes stay errors, before and after.\n\n`go test ./transport/internet/...` - 25 packages pass. `go build ./...`, `gofmt`, `go vet` clean.\n\nKnown boundary: a close frame arriving in the middle of a fragmented message still surfaces as a close error, because that payload is genuinely incomplete; only a close after a complete message is remapped, which is the reported mechanism.\n"
-    },
-    {
-     "number": 7273,
-     "title": "Reverse: Balancer misbehaves when selected as dialerProxy",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-27T14:46:43Z",
-     "updated_at": "2026-10-29T03:11:24Z",
-     "user": "Anderhar",
-     "url": "https://github.com/XTLS/Xray-core/issues/7273",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nWhen balancer is selected as dialerProxy (via loopback) for the outbound with the reverse tag enabled, xray-core chooses one (sometimes two) random option from the selector list right at startup and then never changes it anymore. \nRestarting xray-core is the only effective way to rotate selector for given reverse outbound, regardless of the preferred strategy (Random, RoundRobin, or LeastLoad). \nTemporary forcing an override outbound from the 3X-UI balancer pane also has no effect. \nI’m not even sure that the fallback will be triggered when it necessary. \nOther (non-reverse) connections through the same balancer at the same time are handled as expected. \nRemoving the reverse tag from that same outbound also makes balancer treat it as expected and rotate selector properly. \nSo, only presence of the reverse tag breaks the selector rotation.\n\n### Reproduction Method\n\nRun **iftop** on the opposite side (i.e. public/portal) and observe your connections for more than a couple of minutes. Soon after the xray-core start up you will end up with one or two persistent connections associated with the balancer.\n\n### Client config\n\n```\n{\n  \"outbounds\": [\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-1\"\n    },\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-2\"\n    },\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-3\"\n    },\n    {\n      \"protocol\": \"wireguard\",\n      \"tag\": \"wireguard-4\"\n    },\n    {\n      \"protocol\": \"loopback\",\n      \"settings\": {\n        \"inboundTag\": \"loopback-out\"\n      },\n      \"tag\": \"loopback-in\"\n    },\n    {\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"address\": \"MY_OWN_DOMAIN\",\n        \"encryption\": \"none\",\n        \"flow\": \"\",\n        \"port\": 443,\n        \"reverse\": {\n          \"sniffing\": {},\n          \"tag\": \"reverse-in\"\n        }\n      },\n      \"streamSettings\": {\n        \"network\": \"xhttp\",\n        \"security\": \"reality\",\n        \"sockopt\": {\n          \"dialerProxy\": \"loopback-in\"\n        },\n        \"xhttpSettings\": {\n          \"mode\": \"stream-up\",\n          \"xmux\": {\n            \"cMaxReuseTimes\": 0,\n            \"hKeepAlivePeriod\": 0,\n            \"hMaxRequestTimes\": \"600-900\",\n            \"hMaxReusableSecs\": \"1800-3000\",\n            \"maxConcurrency\": \"\",\n            \"maxConnections\": 3\n          }\n        }\n      },\n      \"tag\": \"vless-reverse\"\n    }\n  ],\n  \"routing\": {\n    \"balancers\": [\n      {\n        \"fallbackTag\": \"wireguard-4\",\n        \"selector\": [\n          \"wireguard-1\",\n          \"wireguard-2\",\n          \"wireguard-3\"\n        ],\n        \"strategy\": {\n          \"settings\": {},\n          \"type\": \"leastLoad\"\n        },\n        \"tag\": \"balancer\"\n      }\n    ],\n    \"rules\": [\n      {\n        \"balancerTag\": \"balancer\",\n        \"inboundTag\": [\n          \"loopback-out\"\n        ],\n        \"type\": \"field\"\n      }\n    ]\n  },\n  \"burstObservatory\": {\n    \"pingConfig\": {\n      \"connectivity\": \"https://www.google.com/generate_204\",\n      \"destination\": \"https://MY_OWN_DOMAIN/generate_204\",\n      \"httpMethod\": \"HEAD\",\n      \"interval\": \"5m\",\n      \"sampling\": 2,\n      \"timeout\": \"5s\"\n    },\n    \"subjectSelector\": [\n      \"wireguard-1\",\n      \"wireguard-2\",\n      \"wireguard-3\",\n      \"wireguard-4\"\n    ]\n  }\n}\n```\n\n### Server config\n\n—\n\n### Client log\n\nNo useful clues, unfortunately.\n\n### Server log\n\n—"
-    },
-    {
-     "number": 7219,
-     "title": "Sockopt: Fix swapped TCP keepalive idle and interval on Darwin",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T16:31:26Z",
-     "updated_at": "2026-10-29T02:54:54Z",
-     "user": "Medium1992",
-     "url": "https://github.com/XTLS/Xray-core/pull/7219",
-     "body": ""
-    },
-    {
-     "number": 7250,
-     "title": "Fix config loading through Windows directory junctions",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T21:39:54Z",
-     "updated_at": "2026-10-29T02:17:53Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7250",
-     "body": "Fixes #7239.\n\nOn Windows, `xray run -c config.json` can fail when its working directory contains a directory junction: opening the file succeeds, but `filepath.EvalSymlinks` returns \"The system cannot find the path specified.\" Reproduced with the official v26.10.21 Windows release and Go 1.27.3 on Windows 11 (build 26100).\n\nResolve the final Windows path from the already opened file handle with `GetFinalPathNameByHandle`, keeping the allowed-extension check on the resolved target. Resolver errors remain fatal. Other platforms retain the existing absolute-path and symlink resolution. The command and regular-file gates are unchanged.\n\nRegression tests use a real directory junction and a child process whose working directory is the junction, covering relative and absolute config paths. Tests also cover UTF-16 buffer growth, closed handles, the extension allowlist, pipe/other-command behavior, and symlink target extensions.\n\nValidation on the submitted commit:\n- Both native Windows junction cases fail on the original implementation and pass with this change. The freshly built CLI reports `Configuration OK` for the physical path and both junction cases.\n- `go test -count=1 ./main/confloader/... ./main/commands/base` and affected `go vet` pass on Windows (Go 1.27.3). The affected suite also passes with `-race` on Linux (Go 1.27.1).\n- Two Windows file-symlink cases skip with error 1314 (symlink privilege unavailable); both target-extension cases run and pass on Linux.\n- Native Windows CLI build, repository format check on the committed LF source bytes, and `git diff --check` pass.\n- The full application suite and macOS runtime tests were not run locally.\n\nAI assistance (OpenAI Codex) was used for implementation, tests, and review; the validation commands above were run locally.\n"
-    },
-    {
-     "number": 7205,
-     "title": "SOCKS and HTTP inbounds: support dynamic user management",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-19T20:38:16Z",
-     "updated_at": "2026-10-29T02:09:03Z",
-     "user": "FearKamikadze",
-     "url": "https://github.com/XTLS/Xray-core/pull/7205",
-     "body": "## Problem\n\nThe `socks` and `http` inbounds keep their accounts in a `map[string]string` on\nthe protobuf config and read it without a lock on every handshake. Neither\nimplements `proxy.UserManager`, so the API refuses them:\n\n```\n$ xray api adu --server=127.0.0.1:10085 ...\nproxy is not a UserManager\n```\n\nThe only way to add an account is to edit the config and restart xray, which\ndrops every live connection on the inbound. On a gateway whose clients hold\nlong-running TCP sessions, adding one account resets all of them.\n\n## What this does\n\nA new `AccountValidator` in `proxy/http` holds the same username/password pairs,\nbuilt from the config at startup and mutable afterwards. The HTTP server owns\none and exposes it through `Validator()`; the SOCKS server takes that same\ninstance instead of building its own, because #3682 made a single SOCKS inbound\nserve both protocols, and two separate stores would diverge on the first API\ncall.\n\nBoth servers then implement the five `UserManager` methods, so `adu`, `rmu` and\n`inbounduser` work against them.\n\n`main/commands/all/api/inbound_user_add.go` needed one change as well:\n`extractInboundUsers` switches on the inbound protocol to find the user list,\nand had no case for the two protocols that keep accounts in a map rather than in\na `Users` field.\n\n## Why a snapshot instead of an RWMutex\n\nHandshakes read the store constantly and the API writes to it rarely, so the\nvalidator replaces the whole map on a write. Readers load the current one with\n`atomic.Pointer.Load` and no lock; a writer clones it under a mutex and swaps the\npointer. A reader holding the old map finishes against a consistent snapshot.\n\nAn `RWMutex` would be simpler, so I measured both before settling on this\n(Apple M3 Max, 13 and 1000 accounts, `-benchtime=300ms`):\n\n| lookup | ns/op |\n|---|---|\n| bare config map, serial (what the handshake did before) | 5.6 |\n| validator, serial | 9.3 |\n| validator, `RunParallel` | 0.9-1.9 |\n| RWMutex, `RunParallel` | 127-137 |\n\nThe handshake path costs about 4 ns more. Under concurrency the snapshot scales\nwhile the RWMutex does not, since every reader writes to the same lock cache\nline. `validator_bench_test.go` carries the first three rows; the RWMutex row\ncame from a throwaway benchmark that is not part of the diff.\n\n## Behaviour notes\n\n- `AddUser` on a SOCKS inbound whose `auth` is not `password` is refused. Such an\n  inbound never consults accounts on the SOCKS side, so the account would do\n  nothing there, while the HTTP side would immediately start demanding\n  credentials from clients that send none.\n- Users are addressed by e-mail and fall back to the username. Accounts loaded\n  from a config file have no separate e-mail, and an operator naming a user has\n  the username at hand.\n- `GetUser` and `RemoveUser` match case-insensitively, as the other inbounds do\n  with e-mail.\n\n## Testing\n\n- `proxy/http/validator_test.go` and `proxy/socks/usermanager_test.go` cover add,\n  remove, duplicate usernames, the empty-username case, the copy returned by\n  `GetAll`, and a concurrent read/write loop for `-race`.\n- `go build ./...` passes, `gofmt` is clean, and `go test ./proxy/...` passes.\n- `TestTagsCache` in `app/proxyman/outbound` fails on my machine, but it fails\n  the same way on a clean `main`, so it is unrelated to this change.\n- Live check on a running instance: a 20 MB download through an existing account\n  ran to completion (HTTP 200, 81.7 s) while three users were added and two\n  removed over the API, and the process kept its pid.\n- In production on eight gateways since 2026-10-19, where accounts are added and\n  removed daily without a restart.\n\n#6360 added the same capability to the WireGuard inbound.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
-    },
-    {
-     "number": 7225,
-     "title": "DNS outbound: Keep hijacked A/AAAA replies within the buffer",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T22:58:24Z",
-     "updated_at": "2026-10-29T00:42:20Z",
-     "user": "Shilmoon",
-     "url": "https://github.com/XTLS/Xray-core/pull/7225",
-     "body": "`handleIPQuery` builds the A/AAAA reply into an 8 KB buffer but doesn't limit the answer count. When a lookup returns more addresses than fit (about 495 A or 282 AAAA), the builder grows into a new slice and `b.Resize` panics, which stops the process. UDP, TCP and QUIC name servers can't return that much; DoH and `localhost` can.\n\nFix: keep at most 256 answers. The worst case (AAAA, longest name) is 7439 bytes.\n\nTest: `TestHandleIPQueryManyIPs` fails on main with `slice bounds out of range [:16271] with capacity 8192`.\n"
-    },
-    {
-     "number": 7267,
-     "title": "Geodata: Limit download size, file extensions, and update frequency",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-26T16:58:53Z",
-     "updated_at": "2026-10-29T00:24:54Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7267",
-     "body": "限制频率，防止恶意订阅拿来当作低配版 ddos 攻击器\r\n限制扩展名，防止本地恶意程序利用 tun 下的特权，替换 `*.cmd` 之类的脚本\r\n限制单文件尺寸纯粹是不可能有那么大的 dat 顺手做了\r\n\r\n---\r\n\r\n最大重定向次数由 10 改为 20 和 chrome 一致 #7265\r\n顺手删掉了 httpClient 死代码因为不允许 http，#6371 改用 uTLS 后它就没用了"
-    },
-    {
-     "number": 7249,
-     "title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-24T18:09:07Z",
-     "updated_at": "2026-10-28T23:45:29Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249",
-     "body": "根据 RFC 完善内置的 geoip:private 列表\n因此需要进一步收紧不加密范围，因为 private 不代表局域网，而是不应该出现在公网的 CIDR"
-    },
-    {
-     "number": 7242,
-     "title": "Direct/Freedom outbound: Warn about migrating `fragment` and `noises` to Finalmask",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-23T12:57:53Z",
-     "updated_at": "2026-10-28T22:50:12Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7242",
-     "body": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6361862358"
     }
    ],
    "comments": [
+    {
+     "id": 6539453432,
+     "issue": 7295,
+     "issue_title": "Allow custom HTTP2 config for listener",
+     "created_at": "2026-10-31T05:15:29Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7295#issuecomment-6539453432",
+     "body": "改名 h2Params 吧，另外你这只给 listener 加了，client 不需要加吗？https://github.com/XTLS/Xray-core/issues/6268 说的是 client\r\n\r\n还有我觉得对于 server 和 client 还是改下默认值更好，之前多次提过 Golang h2 栈也算特征，XDRIVE 和 MASQUE 可能也得上"
+    },
     {
      "id": 6533316259,
      "issue": 7297,
@@ -1806,312 +1705,6 @@
      "body": "我没有尝试复现，首先你这个无论如何都不应当触发 REALITY 层级的错误（REALITY: received real certificate (potential MITM or redirection)）\n\n~~字打到一半你删了刚刚的评论，算了，可能你找到原因了~~"
     },
     {
-     "id": 6488292106,
-     "issue": 7283,
-     "issue_title": "你好，这是我简单的一个协议思路，请问可行吗",
-     "created_at": "2026-10-29T04:53:24Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7283#issuecomment-6488292106",
-     "body": "https://github.com/XTLS/Xray-core/discussions"
-    },
-    {
-     "id": 6488077212,
-     "issue": 7231,
-     "issue_title": "XDRIVE transport: Add \"s3\" storage backend",
-     "created_at": "2026-10-29T04:37:36Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7231#issuecomment-6488077212",
-     "body": "不确定 \"template\" https://github.com/XTLS/Xray-core/pull/7188 是否覆盖 S3 stores，不过既然 https://github.com/XTLS/Xray-core/pull/5645 一开始就提到了它那就加吧，毕竟用起来方便很多，~~测了 CF 没~~\r\n\r\n~~当初还提到了 OpenList、rclone，看看要不要参考它们的代码或者直接 import，你可以 PR~~\r\n\r\n简单看了下 PR 代码应该是同样基于 https://github.com/XTLS/Xray-core/pull/7181 https://github.com/XTLS/Xray-core/pull/7187 的逻辑，另外请确认是否符合我在 https://github.com/XTLS/Xray-core/pull/6748 内提的 domain fronting 相关要求\r\n\r\n至于 https://github.com/XTLS/Xray-core/pull/7182 肯定是有的，话说你有没有对比“直接从 S3 下载大文件”的速度？https://github.com/XTLS/Xray-core/pull/7217 有一些优化以后改成共用，~~终于 [link](https://github.com/XTLS/Xray-core/pull/6745) 完了~~"
-    },
-    {
-     "id": 6488002447,
-     "issue": 7283,
-     "issue_title": "你好，这是我简单的一个协议思路，请问可行吗",
-     "created_at": "2026-10-29T04:32:08Z",
-     "user": "1989year",
-     "url": "https://github.com/XTLS/Xray-core/issues/7283#issuecomment-6488002447",
-     "body": "后续 添加一些扩展 比如 握手包里加入 一些 简单的加密算法， 后续 透明转发的时候也可以 利用这个扩展加密 简单加密～"
-    },
-    {
-     "id": 6486797431,
-     "issue": 7275,
-     "issue_title": "[Bug] VLESS + REALITY 使用 vlessRoute 路由至 WireGuard 出站时连接失败",
-     "created_at": "2026-10-29T03:08:39Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7275#issuecomment-6486797431",
-     "body": "vlessRoute 和 WireGuard 出站间没有特殊耦合代码，你的问题看起来是 REALITY 没连上，像是请求被回落至 target 了，~~但你又是 Chrome 指纹~~\n\n总之你先本地把 REALITY 弄通吧"
-    },
-    {
-     "id": 6486568825,
-     "issue": 7219,
-     "issue_title": "Sockopt: Fix swapped TCP keepalive idle and interval on Darwin",
-     "created_at": "2026-10-29T02:52:49Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7219#issuecomment-6486568825",
-     "body": "~~看了下代码，就挺令人无语的~~"
-    },
-    {
-     "id": 6486464255,
-     "issue": 7282,
-     "issue_title": "XHTTP server: Raise HTTP/2 receive windows for faster uplink",
-     "created_at": "2026-10-29T02:45:27Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7282#issuecomment-6486464255",
-     "body": "~~这样改会不会导致服务端内存占用量爆炸~~\r\n\r\n另外你看看其它传输层/入站的情况"
-    },
-    {
-     "id": 6486184261,
-     "issue": 7171,
-     "issue_title": "TUN inbound: Add disableFakeICMP config option for pongs",
-     "created_at": "2026-10-29T02:26:15Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7171#issuecomment-6486184261",
-     "body": "不对，对于“缓解 APP 探测”还是有点意义，先等一下 @navidmafi 吧，其他人也可以直接 PR @Fangliding "
-    },
-    {
-     "id": 6486131906,
-     "issue": 7171,
-     "issue_title": "TUN inbound: Add disableFakeICMP config option for pongs",
-     "created_at": "2026-10-29T02:22:41Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7171#issuecomment-6486131906",
-     "body": "~~既然没动静了那就等有人说 disable fake pong 能解决实际场景中的问题后再考虑吧，毕竟与计划 https://github.com/XTLS/Xray-core/issues/5178#issuecomment-3326512805 有点冲突~~"
-    },
-    {
-     "id": 6486062574,
-     "issue": 7250,
-     "issue_title": "Fix config loading through Windows directory junctions",
-     "created_at": "2026-10-29T02:17:53Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7250#issuecomment-6486062574",
-     "body": "被蹭了就蹭吧，只是吐槽下"
-    },
-    {
-     "id": 6486030127,
-     "issue": 7250,
-     "issue_title": "Fix config loading through Windows directory junctions",
-     "created_at": "2026-10-29T02:15:48Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7250#issuecomment-6486030127",
-     "body": "跟知名大神 [阿酥在coding](https://github.com/LofiSu) 干的事儿差不多\r\n属于开全自动 Agent 每天扫几个 issue 做最小修复那种\r\n被合并概率比较高，除非修的方向错了就像这个 PR"
-    },
-    {
-     "id": 6485931227,
-     "issue": 7205,
-     "issue_title": "SOCKS and HTTP inbounds: support dynamic user management",
-     "created_at": "2026-10-29T02:09:03Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7205#issuecomment-6485931227",
-     "body": "~~不改就先关了吧，这需求也不急，以后会有别人 PR~~\r\n\r\nLink https://github.com/XTLS/Xray-core/issues/6199"
-    },
-    {
-     "id": 6485805671,
-     "issue": 7263,
-     "issue_title": "GitHub Action CI: Enforce stricter checks on generated protobuf files",
-     "created_at": "2026-10-29T02:00:44Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6485805671",
-     "body": "```sh\r\n$ go run ./infra/vprotogen/main.go\r\n```"
-    },
-    {
-     "id": 6485802318,
-     "issue": 7135,
-     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "created_at": "2026-10-29T02:00:29Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6485802318",
-     "body": "@izislesar 有进展吗"
-    },
-    {
-     "id": 6485787195,
-     "issue": 6769,
-     "issue_title": "XMC: make startup padding lengths configurable",
-     "created_at": "2026-10-29T01:59:24Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6485787195",
-     "body": "@spr334-a rebase 并把 `delay` 改为 string 即可合并"
-    },
-    {
-     "id": 6485736164,
-     "issue": 7263,
-     "issue_title": "GitHub Action CI: Enforce stricter checks on generated protobuf files",
-     "created_at": "2026-10-29T01:55:48Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6485736164",
-     "body": "@Fangliding 话说现在这样之后生成 pb 是什么命令"
-    },
-    {
-     "id": 6485608902,
-     "issue": 7250,
-     "issue_title": "Fix config loading through Windows directory junctions",
-     "created_at": "2026-10-29T01:46:58Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7250#issuecomment-6485608902",
-     "body": "~~啥玩意儿，这种情况别人先开了 PR 的情况，我一般会手动加 co-author，虽然似乎不太相关，不过加了就加了吧~~"
-    },
-    {
-     "id": 6485388648,
-     "issue": 7250,
-     "issue_title": "Fix config loading through Windows directory junctions",
-     "created_at": "2026-10-29T01:32:04Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7250#issuecomment-6485388648",
-     "body": "被他全自动 agent 蹭到了 co-author\r\n俄罗斯版的 阿酥在coding"
-    },
-    {
-     "id": 6484719865,
-     "issue": 7263,
-     "issue_title": "GitHub Action CI: Enforce stricter checks on generated protobuf files",
-     "created_at": "2026-10-29T00:47:29Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6484719865",
-     "body": "> 好处是你不需要再审 .pb.go 了\r\n\r\n~~这倒是~~\r\n\r\n> 不过我不知道目前这个版本能不能防无 .proto 故意弄出的 .pb.go\r\n\r\n对比下 .pb.go 文件数就行，你写一下吧"
-    },
-    {
-     "id": 6484606824,
-     "issue": 7263,
-     "issue_title": "GitHub Action CI: Enforce stricter checks on generated protobuf files",
-     "created_at": "2026-10-29T00:40:20Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6484606824",
-     "body": "好处是你不需要再审 .pb.go 了\r\n\r\n不过我不知道目前这个版本能不能防无 .proto 故意弄出的 .pb.go\r\n之前纯靠 ci 实现的是无脑把所有全删干净了重新生成的"
-    },
-    {
-     "id": 6484506168,
-     "issue": 7263,
-     "issue_title": "GitHub Action CI: Enforce stricter checks on generated protobuf files",
-     "created_at": "2026-10-29T00:33:56Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7263#issuecomment-6484506168",
-     "body": "~~这么改的话 bot update google.golang.org/protobuf 就直接 test fail，得重新生成 .pb.go 文件~~"
-    },
-    {
-     "id": 6484439860,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-29T00:29:48Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6484439860",
-     "body": "~~我是觉得这种出站有一个就够了，把 block 做进 direct 也很合理~~\r\n\r\n进一步说，如果以后有需求想 core 先回复些什么再转发流量到目标，还是要走 direct/freedom 这一套，~~就别 dialerProxy 了~~"
-    },
-    {
-     "id": 6484345745,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-29T00:24:06Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6484345745",
-     "body": "个人感觉黑洞那个出站可以扩成 noise 那样做自定义回复，就显得不那么浪费了\r\n\r\n或者弄一个 filter 出来顺便把 UDP 逐包给滤了\r\n直接在路由做、或者像 loopback 那样重入站"
-    },
-    {
-     "id": 6484281907,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-29T00:20:12Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6484281907",
-     "body": "还得给 protocol `blockhole` 加迁移警告\r\n个人觉得非常奇怪，不够直观。。。不如以前直截了当的黑洞出站\r\n\r\n文档得解释：\r\n你想实现一个黑洞，原理是\r\n流量被导向一个 direct/freedom 然后它被 finalRules block or blockReplay\r\n\r\nfinalRules 自身也出现了例外，本身语义也被破坏了"
-    },
-    {
-     "id": 6484050347,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-29T00:06:32Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6484050347",
-     "body": "只是 Direct/Freedom 出站现在能 block 连接了就能把 Block/Blackhole 出站给扬掉，不然当初讨论的后者也要加 `blockDelay`，实际上就过度重复了，完全没必要，更大的好处是让用户都知道现在有 `finalRules`\r\n\r\n你可以在文档中写明无条件的 \"block\" 走特殊代码，连域名都不会被解析，而 `blockReply` 暂时只针对它生效，想筛选仍靠路由"
-    },
-    {
-     "id": 6483639081,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:41:45Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483639081",
-     "body": "是的\r\n用户硬要干拦不住的，总有一堆办法可以绕过\r\n简单的顺手就做了，xray 内部能自洽就行\r\n做多了会有一堆麻烦事儿就像那个符号链接"
-    },
-    {
-     "id": 6483591550,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:38:52Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483591550",
-     "body": "> 只是看了一眼配置中的 domain 没去解析\r\n\r\n~~想了想还是那句话：算了毕竟 dialerProxy 直接绕 https://github.com/XTLS/Xray-core/issues/6671#issuecomment-5440951244~~"
-    },
-    {
-     "id": 6483501066,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:33:42Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483501066",
-     "body": "不能，纯粹强迫症犯了"
-    },
-    {
-     "id": 6483496644,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:33:26Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483496644",
-     "body": "刚看到 infra/conf/xray.go 的修改，话说 `address == nil || address.Address == nil` 这个实际上真能触发吗"
-    },
-    {
-     "id": 6483478811,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:32:23Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483478811",
-     "body": "这个 PR 用的不再是同一个表了\r\n而是 244 行的 `!ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()`\r\n这样收紧后更科学\r\n\r\n---\r\n\r\n只是看了一眼配置中的 domain 没去解析"
-    },
-    {
-     "id": 6483443293,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:30:18Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483443293",
-     "body": "没细看，不过这改动如果是扩大了 private 范围的话就相当于扩大了“允许未加密出站”的 IP 范围，~~就有了更多绕过姿势~~\r\n\r\n> 这个 PR 只是扩大了 finalrules 封锁范围，缩小了那些协议豁免加密的范围\r\n\r\n~~用的是同一个表，能同时做到这两件事吗~~\r\n\r\n> 域名还是照样走 `geodata.GetPrivateDomainMatcher()` 247 行，跟解析无关\r\n\r\n原来跟 finalRules 那里不一样啊，没有解析域名后再判断一下 IP？"
-    },
-    {
-     "id": 6483382514,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T23:26:48Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6483382514",
-     "body": "对于 freedom 出站自己的 finalrule 来说\r\n仅凭 network + dst ip + dst port 来构造特殊响应\r\n一时半会儿想不到啥具体的场景\r\n\r\n感觉这些条件最多只能满足能不能连接\r\n决定不了应该回复什么\r\n\r\n麻烦的是 UDP 要符合新增的 action 的语义就应该在逐包过滤那边做响应，会十分麻烦"
-    },
-    {
-     "id": 6483317121,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:23:11Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483317121",
-     "body": "以前用 NAT-T、Example IP 啥的都能绕，现在不允许，只有那几个 lan 段和本地链路地址可以\r\n域名还是照样走 `geodata.GetPrivateDomainMatcher()` 247 行，跟解析无关\r\n这个 PR 只是扩大了 finalrules 封锁范围，缩小了那些协议豁免加密的范围"
-    },
-    {
-     "id": 6483255078,
-     "issue": 7249,
-     "issue_title": "Geodata: Update built-in generalized \"private\" IP ranges",
-     "created_at": "2026-10-28T23:19:40Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7249#issuecomment-6483255078",
-     "body": "这么改可能会导致比如说域名被解析成 NAT64 IP（能吗？）就绕过 VLESS 等出站的加密要求了，~~算了毕竟 dialerProxy 直接绕~~"
-    },
-    {
-     "id": 6482226042,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-10-28T22:25:06Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6482226042",
-     "body": "顺便“兜底 ban 内网”还得算上新加的 MASQUE 入站，~~文档侧边栏协议排序我有空得调整下~~"
-    },
-    {
      "id": 5169342420,
      "issue": 6535,
      "issue_title": "在Windows上TUN疑似无法正确嗅探高权限进程的名称引发error",
@@ -2124,6 +1717,39 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3359,
+     "title": "Не могу зайти на сервер Amnezia hosting через amnezia vpn",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-30T22:53:14Z",
+     "updated_at": "2026-10-30T22:53:14Z",
+     "user": "cosycolas",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3359",
+     "body": "При вводе логина и пароля выдаёт ошибку 300, пароль не могу сменить как при включенном сервере так и при выключенном. Также не могу зайти в консоль, при вводе пароля пишет login incorect"
+    },
+    {
+     "number": 3358,
+     "title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-30T22:40:34Z",
+     "updated_at": "2026-10-30T22:47:48Z",
+     "user": "AnatoliySar",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358",
+     "body": "На андроиде 12к адресов спокойно обрабатываются без задержек.\nНа винде уже с 1000 адресов проблема - грузится по 30 секунд.\nЭто несерьёзно, пофиксите это, пожалуйста, темы похожие наблюдаю за последний год неоднократно.\n"
+    },
+    {
+     "number": 3114,
+     "title": "fix(windows): eliminate route-change storms with large split-tunnel e…",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-01T12:23:44Z",
+     "updated_at": "2026-10-30T22:43:53Z",
+     "user": "hgminusone",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3114",
+     "body": "…xclusion lists\r\n\r\nImporting a large IP exclusion list (~8.6k prefixes) made the Windows client unusable: connecting stalled for many minutes, disconnecting hung, and after a forced kill the client could not reconnect until reboot.\r\n\r\nThree related defects in WindowsRouteMonitor:\r\n\r\n1. Quadratic route installation. Every added exclusion route refetched the full routing table and interface metrics. Measured on stock: 500 prefixes = 1.4s, 1000 = 6.4s, 2000 = 33.4s (the kernel itself installs 500 routes in 146ms). Fix: batched add/delete entry points that snapshot the table once per address family; the teardown loop additionally refetched the table per deleted prefix.\r\n\r\n2. Self-sustaining rescan storm. The monitor subscribes to NotifyRouteChange2, but its own rescan rewrites routes (captured clones, flapping next-hops), waking itself: with a large list the monitor rescanned ~4 times/second for the whole session, starving the IPC queue (deactivate took minutes to be processed). The callback filter cannot drop these notifications because the notification rows carry unreliable Protocol/Metric fields. Fix: unsubscribe for the duration of bulk operations and of the rescan itself, then run exactly one manual rescan; real network changes still trigger it via the restored subscription.\r\n\r\n3. Orphaned exclusion routes. After a hard service kill the routes stayed in the system table pointing at the dead tunnel's next-hop, blackholing matching traffic (including the VPN server handshake) until reboot. Fix: purge NETMGMT+EXCLUSION_ROUTE_METRIC rows at monitor creation - that pair is only ever produced by this code.\r\n\r\nResult with an 8658-prefix list: connect in 4-7s (route installation 0.85s), idle monitor after connect, teardown in seconds, reboot no longer needed after a crash."
+    },
     {
      "number": 3008,
      "title": "Windows: VPN does not recover after sleep after 4.8.10.0",
@@ -2335,6 +1961,24 @@
     }
    ],
    "comments": [
+    {
+     "id": 6535083532,
+     "issue": 3358,
+     "issue_title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
+     "created_at": "2026-10-30T22:44:58Z",
+     "user": "AnatoliySar",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358#issuecomment-6535083532",
+     "body": "https://github.com/amnezia-vpn/amnezia-client/pull/3114\nhttps://github.com/amnezia-vpn/amnezia-client/pull/3021\nУже даже за вас написали, куча PR'ов висит по этой проблеме, вам только влить осталось."
+    },
+    {
+     "id": 6535068526,
+     "issue": 3114,
+     "issue_title": "fix(windows): eliminate route-change storms with large split-tunnel e…",
+     "created_at": "2026-10-30T22:43:53Z",
+     "user": "AnatoliySar",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3114#issuecomment-6535068526",
+     "body": "А есть собранный форк под Windows?"
+    },
     {
      "id": 6532677718,
      "issue": 3008,

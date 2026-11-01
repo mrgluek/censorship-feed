@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-01T00:07:24Z",
- "since": "2026-10-30T00:07:24Z",
+ "generated_at": "2026-11-01T06:03:18Z",
+ "since": "2026-10-30T06:03:18Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -459,7 +459,7 @@
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-10-29T20:21:44Z",
-     "updated_at": "2026-10-31T20:47:20Z",
+     "updated_at": "2026-11-01T02:56:53Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7291",
      "body": "关闭被go默认启用的MPTCP 并使核心本来的MPTCP选项重新有效（可以手动开启）\nhttps://thehackernews.com/2026/10/linux-kernel-tcp-flaw-with-98-cvss.html\n不知是否和MPTCP强相关 可以观望一段时间 如果是真的所有go编写的翻墙服务端和caddy可以被一键获取root就搞笑了"
@@ -1094,6 +1094,15 @@
    ],
    "comments": [
     {
+     "id": 6552589018,
+     "issue": 7291,
+     "issue_title": "DefaultListener: Disable MPTCP by default",
+     "created_at": "2026-11-01T02:56:52Z",
+     "user": "Balnea",
+     "url": "https://github.com/XTLS/Xray-core/pull/7291#issuecomment-6552589018",
+     "body": "https://security-tracker.debian.org/tracker/CVE-2026-98432\r\nupdate your kernel to 6.12.113-1 or higher is enough."
+    },
+    {
      "id": 6549301672,
      "issue": 7303,
      "issue_title": "XHTTP: Cancel HTTP requests when streams close",
@@ -1499,24 +1508,6 @@
      "body": "> @patterniha 新加的这些是不是不好做双向 block（因为得排除掉 Xray 接收 DNS 响应的情况）？~虽然“只 block 发送”也够用了~\r\n\r\nNo, they're already blocked in both directions, the same as port 53 before, and Xray is excluded.\r\n\r\nThe filters sit in WFP's ALE (Application Layer Enforcement) layers, which are stateful. ALE connect judges a program's outgoing connection, and for UDP its first packet to each remote IP:port. ALE recv-accept judges incoming connections, and for UDP the first packet from a remote IP:port the socket never sent to. Once a flow is allowed, the rest of it, replies included, is not checked again. Each port gets its filters on both layers, for IPv4 and IPv6, and \"permit Xray\" (by its app ID) is on all of them with the highest weight.\r\n\r\nSo:\r\n- Xray queries a DNS server outside the TUN: allowed at connect, and the replies belong to that flow, so they are never checked.\r\n- Another program queries port 53/853 outside the TUN: blocked at connect, so no reply comes back either.\r\n- Another program queries through the TUN: allowed.\r\n- A packet from port 53/853 arrives outside the TUN without a flow (unsolicited, or a reply from another address than the one queried): blocked at recv-accept, unless it is for Xray.\r\n- The same packet arriving through the TUN: allowed.\r\n- Queries to a local DNS server on port 53 (e.g. one serving the LAN): not matched, as the filters match the remote port, not the local one.\r\n\r\nOnly \"windnsclient\" is outbound-only, since the DNS Client service only opens connections. In the test, Xray's own queries to port 53 and 853 outside the TUN got their replies while other programs were blocked."
     },
     {
-     "id": 6514873788,
-     "issue": 7288,
-     "issue_title": "TUN inbound's `autoSystemWfpBlockLeak`: Support \"tcp/port\" and \"udp/port\"; \"dns\" covers \"tcp/853\" and \"udp/853\" as well",
-     "created_at": "2026-10-30T04:19:27Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7288#issuecomment-6514873788",
-     "body": "@patterniha 新加的这些是不是不好做双向 block（因为得排除掉 Xray 接收 DNS 响应的情况）？~~虽然“只 block 发送”也够用了~~"
-    },
-    {
-     "id": 6514765301,
-     "issue": 7291,
-     "issue_title": "DefaultListener: Disable MPTCP by default",
-     "created_at": "2026-10-30T04:10:49Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7291#issuecomment-6514765301",
-     "body": "> The exploit works in two stages. First, the race makes the kernel send extra bytes back to the attacker. Once one of those replies contains a kernel address, the attacker can get around KASLR, the kernel's memory address randomization.\r\n> \r\n> Second, the same bug overflows a buffer and overwrites a callback pointer with the address of a payload the attacker had already placed in kernel memory. When the kernel calls that pointer, the payload executes a shell command of the attacker's choice as root.\r\n> \r\n> A lost race only fails that one connection attempt and does not crash the system, so an attacker can keep trying, the company said. In its test, leaking a kernel address took 48 minutes, and reaching command execution took 5 more minutes.\r\n\r\n> Red Hat says a remote attacker who can reach an exposed TCP service could trigger the race. Anthropic's root exploit, however, targeted servers with a multipath TCP listener. The post does not say whether servers without one can be taken over the same way.\r\n\r\n~~确实很搞笑，远程提权路径清晰，可以确定的是 Golang 默认开的 MPTCP server 一定能被远程一键 root，只需等待一小时~~\r\n\r\n红帽说普通 TCP server 也能被 trigger the race 但没说能不能被提权，~~如果能的话那就更搞笑了，先等一天看看~~\r\n\r\n~~好消息是安卓 root 又有了新方案，最后希望 TCP client 别受影响吧，不然那就太炸了，个人设备很少积极更新 Linux 内核~~"
-    },
-    {
      "id": 6496289286,
      "issue": 7208,
      "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
@@ -1538,6 +1529,39 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3365,
+     "title": "feat(split-tunneling): support live IPv4 rule additions for WG/AWG",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-01T02:27:57Z",
+     "updated_at": "2026-11-01T02:27:57Z",
+     "user": "ariran5",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3365",
+     "body": "### Problem and scope\n\nAdding a split tunneling address currently requires disconnecting and reconnecting the VPN. This PR introduces an initial, limited implementation that applies additional IPv4 addresses and subnets to an existing WG/AWG connection without restarting the tunnel.\n\nBoth routing modes are covered:\n\n- **Via VPN:** add destinations that should use the tunnel.\n- **Directly:** add destinations that should bypass the tunnel.\n\nSplit tunneling must be enabled before connecting. Removal, clearing or replacing the list, changing the routing mode, and enabling/disabling split tunneling remain unavailable while connected.\n\n### Implementation approach\n\nA dedicated coordinator manages live updates independently of the UI. It receives a backend through constructor injection; a platform factory selects the desktop IPC or Apple Network Extension implementation.\n\nThe coordinator:\n\n- Serializes updates and coalesces pending changes into the latest requested configuration.\n- Associates requests with the active connection session to reject stale updates.\n- Tracks saved, pending, and successfully applied configurations separately.\n- Distinguishes `Applied`, `NotApplied`, and `StateUnknown`. Confirmed failures allow further attempts; an unknown state or timeout disables live updates until manual reconnection.\n\nThe desktop service updates peer configuration, routes, and firewall rules on the existing interface, with compensation for failed operations. Windows uses a separate transactional firewall replacement path for live updates, preserving the existing initial connection behavior.\n\nThere is no automatic reconnect fallback. Unsupported connections retain the existing editing restrictions, avoiding an intentional disconnect/reconnect gap when KillSwitch is enabled.\n\n### Platform coverage\n\n| Backend | Included in this PR | Validation |\n|---|---|---|\n| Windows, Linux, macOS desktop service | Live update path for eligible WG/AWG connections | Full client/service build and user testing on macOS; native Windows/Linux validation pending |\n| iOS and macOS Network Extension | Adapter update path | Partial compilation and syntax checks; full extension builds and device testing pending |\n| Android | Existing behavior retained | Live editing remains disabled |\n\nThe initial desktop implementation is restricted to eligible single-hop connections with the standard initial full-tunnel `AllowedIPs` configuration. Live rule additions are IPv4 only.\n\n### Validation\n\n- Three test suites pass: update coordinator, daemon update/compensation, and Windows firewall transaction policy.\n- The coordinator suite also passes through the main project build.\n- Regression coverage uses production protocol identifiers and WG/AWG configuration serializers.\n- The macOS client and service build successfully for arm64 and x86_64.\n- A user reported successful live addition with macOS/AWG.\n\nCross-platform traffic verification, failure injection on real devices, and KillSwitch continuity testing remain outstanding. Passing unit tests does not establish those guarantees.\n\n### Follow-up plan\n\n1. Complete native platform validation, including failure recovery and KillSwitch behavior.\n2. Add live removal, covering queued additions/removals, shared addresses, and explicit empty-list semantics.\n3. Introduce domain rules with DNS refresh and CDN address lifecycle management, feeding the existing IP update pipeline.\n4. Extend protocol and platform coverage where backends can update an active tunnel without restarting it.\n\nThis PR establishes the update mechanism and deliberately limits the first user-facing operation to additions. Continuous domain/CDN tracking is outside its scope.\n"
+    },
+    {
+     "number": 3356,
+     "title": "[Android] Не отображаются системные приложения в split tunneling",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-30T10:11:39Z",
+     "updated_at": "2026-11-01T01:51:45Z",
+     "user": "xizerlix",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3356",
+     "body": "Не отображаются системные приложения в split tunneling, по этой причине нет возможности выбрать приложухи вроде Gemini, com.google.android.googlequicksearchbox итд"
+    },
+    {
+     "number": 3358,
+     "title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-30T22:40:34Z",
+     "updated_at": "2026-11-01T01:48:40Z",
+     "user": "AnatoliySar",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358",
+     "body": "На андроиде 12к адресов спокойно обрабатываются без задержек.\nНа винде уже с 1000 адресов проблема - грузится по 30 секунд.\nЭто несерьёзно, пофиксите это, пожалуйста, темы похожие наблюдаю за последний год неоднократно.\n"
+    },
     {
      "number": 3364,
      "title": "fix(daemon): bracket IPv6 server endpoint in UAPI config",
@@ -1682,17 +1706,6 @@
      "body": "**Describe the bug**\nWhen you are connected to XRay through the app and use the built in clipboard app (WIN + V hotkey) in Windows 11 it (the clipboard app) can just freeze without any ability to do anything with it. It just stucks there on the screen until you relaunch the explorer (and after that it cannot be accessed until you reload your pc). BUT if you go th the AmnesiaVPN app and click to disconnect from the tunnel it suddenly unfreezes. I had this issue a lot of times and every single time the solution was to disconnect and then reconnect to the vpn. \n\nNote: It does not happen with the AmneziaWG protocol. \n\nAnother Note: The bug will only occur if your clipboard has Screenshots (at least one).\n\nWhy does this happen? Well my guess is because of the telemetry. Didn't try to get rid of it so I can't know for sure.\n\nSystem specs:\nWindows 11 Home Russian\n25H2\n26200.7171\n\n\nSteps to reproduce the behavior:\n1. Connect to the XRay through the AmneziaVPN app (it's self hosted and I'm the admin if it helps)\n2. Start copying and pasting and don't forget to make screenshots\n3. Press Win + V to open the clipboard (if the error does not occur clean it and start over)\n4. The Clipboard should freeze without any ability to interact with it.\n5. Disconnect from the vpn to fix it.\n\n**Expected behavior**\nWell.. It shouldn't freeze\n\n\n**Screenshots**\nDon't have anything.. Sorry\n"
     },
     {
-     "number": 3358,
-     "title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-30T22:40:34Z",
-     "updated_at": "2026-10-30T22:47:48Z",
-     "user": "AnatoliySar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358",
-     "body": "На андроиде 12к адресов спокойно обрабатываются без задержек.\nНа винде уже с 1000 адресов проблема - грузится по 30 секунд.\nЭто несерьёзно, пофиксите это, пожалуйста, темы похожие наблюдаю за последний год неоднократно.\n"
-    },
-    {
      "number": 3114,
      "title": "fix(windows): eliminate route-change storms with large split-tunnel e…",
      "is_pr": true,
@@ -1737,17 +1750,6 @@
      "body": ""
     },
     {
-     "number": 3356,
-     "title": "[Android] Не отображаются системные приложения в split tunneling",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-30T10:11:39Z",
-     "updated_at": "2026-10-30T10:11:39Z",
-     "user": "xizerlix",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3356",
-     "body": "Не отображаются системные приложения в split tunneling, по этой причине нет возможности выбрать приложухи вроде Gemini, com.google.android.googlequicksearchbox итд"
-    },
-    {
      "number": 3355,
      "title": "[API] Статус аккаунта — «Активен», обновление API положительно из инфтерфейса; новые серверы не появляются, конфигурации не скачиваются 1100, подключение не работает на любых устройствах по ключу VPN",
      "is_pr": false,
@@ -1768,20 +1770,27 @@
      "user": "foxidermist",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3302",
      "body": "Здравствуйте!\n\n‎При установке AmneziaWG 3.1 через AmneziaVPN на VPS с Ubuntu Server 24.04.5 LTS обнаружил, что установщик изменяет большое количество глобальных параметров Linux.\n‎\n‎Конфигурация сервера:\n‎\n· ‎Ubuntu Server 24.04.5 LTS, ядро 6.8.0-147-generic.\n· ‎KVM, 4 vCPU, 4 ГБ RAM.\n· ‎Docker Engine 29.9.1.\n· ‎AmneziaWG tools 3.1.20260812.\n· ‎Self-hosted AmneziaWG в Docker-контейнере.\n‎\n‎Изменения выполняются сценарием \"client/server_scripts/setup_host_firewall.sh\" версии 5.0.3.0.\n‎\n‎Из 21 проверенного параметра sysctl после установки изменились 17.\n‎\n‎Наиболее заметные изменения:\n‎\n‎Параметр| До установки| После установки\n‎\"fs.file-max\"| 9223372036854775807| 51200\n‎\"net.ipv4.tcp_congestion_control\"| cubic| hybla\n‎\"net.netfilter.nf_conntrack_max\"| 65536| 262144\n‎\"net.core.rmem_max\"| 212992| 67108864\n‎\"net.core.wmem_max\"| 212992| 67108864\n‎\"net.ipv4.tcp_max_tw_buckets\"| 16384| 5000\n‎\"net.ipv4.ip_local_port_range\"| 32768–60999| 10000–65000\n‎\n‎В исходном коде также присутствует попытка установить \"net.ipv4.tcp_tw_recycle\", хотя этот параметр отсутствует в современных ядрах Linux.\n‎\n‎Заметил, что комментарий в скрипте объясняет увеличение \"nf_conntrack_max\" требованиями Telegram-прокси (MTProxy/TeleMT/TProxy).\n‎\n‎Хотелось бы уточнить:\n‎\n1. ‎Какие из этих изменений действительно необходимы для работы исключительно AmneziaWG 3.1?\n2. ‎Почему установщик снижает \"fs.file-max\" до 51200, если исходное значение значительно выше? Есть ли техническая причина не сохранять более высокий лимит?\n3. ‎Почему для всех TCP-соединений VPS принудительно выбирается \"hybla\" вместо штатного \"cubic\"? Есть ли измерения, показывающие преимущество такой настройки именно для AmneziaWG?\n4. ‎Могут ли изменения TCP-буферов, лимитов соединений и сетевых очередей отрицательно влиять на другие приложения или потребление памяти VPS с 4 ГБ RAM?\n5. ‎Безопасно ли вернуть исходные значения \"fs.file-max\" и \"tcp_congestion_control\", оставив контейнер AmneziaWG работающим?\n6. ‎Возможно ли сделать этот тюнинг необязательным либо применять только параметры, необходимые выбранному протоколу?\n7. ‎Будут ли эти настройки применяться повторно при обновлении или пересоздании AmneziaWG?\n‎\n‎Ожидаемое поведение: установка отдельного VPN-протокола не должна без необходимости менять глобальные параметры работающего сервера либо должна предупреждать администратора о таких изменениях.\n‎\n‎Буду признателен за техническое объяснение и рекомендации для VPS, на котором AmneziaWG работает одновременно с другими Docker-сервисами."
-    },
-    {
-     "number": 2997,
-     "title": "Linux: endpoint exclusion route skipped after switching servers due to failed default-gateway detection",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-08-17T17:50:28Z",
-     "updated_at": "2026-10-30T04:14:36Z",
-     "user": "samdark",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2997",
-     "body": "Related to #2048, but not fixed by #2840.\n\nI have two AWG2 server connections in the Linux client:\n\n- The first server works normally.\n- The second server reports `Connected` and completes the handshake, but no traffic passes.\n- The same second connection works on a phone connected to the same LAN.\n- Recreating the second server from scratch did not help.\n\nThe client log shows that it fails to install the endpoint exclusion route:\n\n```\nAmnezia LinuxRouteMonitor : Adding exclusion route for <VPN_SERVER_IP>/32\nAmnezia LinuxRouteMonitor : No default gateway available, skipping exclusion route\n```\n\nIt then installs the full-tunnel routes:\n\n```\nAdding route to 0.0.0.0/1\nAdding route to 128.0.0.0/1\n```\n\nConsequently, traffic to the VPN endpoint itself is routed into `amn0`. The initial handshake succeeds before the full-tunnel routes are installed, so the UI misleadingly reports that the connection is active.\n\nThe working server already had a correct endpoint route through the physical interface. Adding the missing route manually fixed the second connection immediately:\n\n```\nsudo ip route replace <VPN_SERVER_IP>/32 via <LAN_GATEWAY> dev <PHYSICAL_INTERFACE>\n```\n\nAfter this command, AWG2 traffic through the second server works normally.\n\nThe logs also contain:\n\n```\nError: argument \"amnvpnrt\" is wrong: invalid table ID\nmkdir: No such file or directory: /sys/fs/cgroup/net_cls/amnvpnexclusions/\n```\n\nEnvironment\n\n- AmneziaVPN: `5.0.0.5` (`4d28f81`, built July 26, 2026)\n- OS: Ubuntu 26.04 LTS (Resolute Raccoon)\n- Kernel: `7.0.0-29-generic`\n- Architecture: x86_64\n- VPN interface: `amn0`\n- Protocol: AmneziaWG v2\n\nThis appears to be a Linux client bug in default-gateway detection or endpoint exclusion-route management, particularly when multiple server connections are configured or switched between.\n\n#2840 does not cover the missing endpoint exclusion-route variant.\n"
     }
    ],
    "comments": [
+    {
+     "id": 6551989389,
+     "issue": 3356,
+     "issue_title": "[Android] Не отображаются системные приложения в split tunneling",
+     "created_at": "2026-11-01T01:51:45Z",
+     "user": "Vitalik93",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3356#issuecomment-6551989389",
+     "body": "В WG Tunnel есть. Там вообще много чё есть, чего нет в Amnezia."
+    },
+    {
+     "id": 6551960032,
+     "issue": 3358,
+     "issue_title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
+     "created_at": "2026-11-01T01:48:39Z",
+     "user": "Vitalik93",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358#issuecomment-6551960032",
+     "body": "Недавний ответ их человека на Rutracker: \"Для корректной работы туннелирования, рекомендуем создавать список, в который водит не более 800 IP-адресов.\" И всё..."
+    },
     {
      "id": 6549146870,
      "issue": 3304,
@@ -1898,15 +1907,6 @@
      "user": "impaxel",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3302#issuecomment-6517274653",
      "body": "Похоже корректировка этих параметров осталась с давних времен и скорее всего не относится к awg. Изменения почти полностью повторяют рекомендации из гайда https://github.com/shadowsocks/shadowsocks/wiki/Optimizing-Shadowsocks. Если сервер перезагрузить, то все параметры вернутся к исходным значениям"
-    },
-    {
-     "id": 6514400528,
-     "issue": 2997,
-     "issue_title": "Linux: endpoint exclusion route skipped after switching servers due to failed default-gateway detection",
-     "created_at": "2026-10-30T03:41:38Z",
-     "user": "odmin4eg",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2997#issuecomment-6514400528",
-     "body": "я столкнулся с этой же штуковиной :( \n\nAdditional occurrence on AmneziaVPN 5.0.3.0 / Ubuntu 26.04.1 LTS\n\nEnvironment:\n- AmneziaVPN 5.0.3.0 (installed package metadata)\n- Ubuntu 26.04.1 LTS, x86_64, kernel 7.0.0-38-generic\n- Ethernet uplink; many Docker bridges/routes\n- Self-hosted server; the server also works from a macOS client on another network\n\nObserved during a failed connection:\n- amn0 was UP with IPv4 10.8.1.4/32, MTU 1376.\n- Full-tunnel routes 0.0.0.0/1 and 128.0.0.0/1 selected amn0.\n- No endpoint /32 exclusion route was present.\n- `ip route get <VPN_SERVER_IP>` selected amn0 instead of the physical uplink.\n- amn0 had 0 RX bytes and approximately 2.7 GB TX / 3.3 million packets shortly after connecting, with many TX drops.\n- Both DNS and HTTPS pinned to 1.1.1.1 (curl --resolve, verified TLS) timed out.\n\nWorkaround tested:\n1. Added `sudo ip route add <VPN_SERVER_IP>/32 via <LAN_GATEWAY> dev <UPLINK>`.\n2. Fully restarted the Amnezia client and connected again.\n3. Endpoint route then selected the physical uplink; `ip route get 1.1.1.1` selected amn0.\n4. HTTPS by hostname and HTTPS with --resolve both returned HTTP/2 200.\n5. amn0 had bidirectional traffic and no interface drops in the verification snapshot.\n\nCode review:\n- LinuxRouteMonitor::rtmSendRoute() skips endpoint exclusion when getGatewayAndIface() returns an empty gateway.\n- It treats a successful sendto() as success; kernel errors are only logged asynchronously by nlsockReady().\n- WireguardUtilsLinux::updatePeer() does not check addExclusionRoute()'s result.\n- Confirmed in freshly fetched dev commit 7f9b7db4 (2026-10-29): client/core/utils/networkUtilities.cpp:294 uses a fixed 8192-byte buffer; line 338 receives into its remaining capacity.\n- A read-only AF_UNSPEC RTM_GETROUTE dump on this machine returned 120 routes, 9276 bytes including netlink headers:\n  chunk=0 bytes=3756 total=3756\n  chunk=1 bytes=5500 total=9256\n  chunk=2 bytes=20 total=9276\n- The route messages alone exceed the client buffer. With this response layout, after receiving the first datagram only 4436 bytes remain for the 5500-byte second datagram. recv() without MSG_PEEK/MSG_TRUNC handling can discard the truncated remainder. The buffer then has no space left for the completion message, and the client cannot reliably complete/parse the dump.\n- This confirms the oversized-dump condition on this host and strongly supports the failure described above. It is not a replay of the installed client's function; service logs from the original failed connection are unavailable, so the original failure path has not been directly traced.\n\nExpected behavior:\nVerify that the endpoint exclusion is installed successfully before redirecting all public traffic into amn0. If gateway detection or route installation fails, retry or show an actionable error rather than silently leaving the endpoint routed through its own tunnel.\n"
     }
    ]
   },

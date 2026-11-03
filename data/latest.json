@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-02T21:42:12Z",
- "since": "2026-10-31T21:42:12Z",
+ "generated_at": "2026-11-03T06:46:36Z",
+ "since": "2026-11-01T06:46:36Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -129,17 +129,6 @@
      "user": "neilalexander",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/37",
      "body": "Currently the FreeBSD and OpenBSD code are making calls to `ifconfig` to set the interface address.\r\n\r\nIt should be possible to adapt the same `SIOCAIFADDR_IN6` code from `tun_darwin.go` to set the interface addresses instead without relying on `ifconfig`."
-    },
-    {
-     "number": 1412,
-     "title": "Should the network itself hide message size and timing, or is that a layer above it?",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-31T22:01:55Z",
-     "updated_at": "2026-10-31T22:11:03Z",
-     "user": "winchtester",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1412",
-     "body": "Every Yggdrasil relay sees three things about each packet: who sent it, who it is for, and how big it is. The contents are encrypted — that part works — but size and rhythm still say a lot. A video stream and a password reset look different. A calm conversation and a panicked one look different.\n\nThree plain ideas could change that:\n\n- **Same size.** If cells are padded to a shared size, payloads of different kinds stop being distinguishable by length.\n- **Same rhythm.** If cells leave on a shared beat instead of the moment an application writes, timing stops describing the user.\n- **A crowd.** A shared pool mixes traffic from many participants and adds empty cells, so traffic volume itself is not a signal. One person carrying an envelope stands out; a hundred do not.\n\nThe honest boundary: this does not hide from someone watching the whole network that two nodes talk, and it does not protect against a peer you already trusted. It is not anonymity in the \"cannot be found\" sense. It is a smaller, real promise: a passer-by cannot tell what you are carrying or how much of it.\n\nMy question: should \"does not reveal size and rhythm\" be a property of the network itself, or is that by design something for layers above Yggdrasil?\n\nI am not sending code and not asking for a v0.5 change. If this is a direction worth considering, it shapes what v0.6 could be; if it is out of scope by design, that is a useful answer too — I would rather know than keep guessing.\n"
     }
    ],
    "comments": [
@@ -214,15 +203,6 @@
      "user": "tribals",
      "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1333#issuecomment-6555747590",
      "body": "Current DPI systems are very intellectual, so this simple obfuscation would be not enough. Making Yggdrasil to establish a \"real\" TLS connection would help exactly in obfuscation, bypassing simple detection based on comparison of CN of cert with SNI. PKI is hard, yes, but if it is optional an operator of node could make a decision based on it's technical abilities."
-    },
-    {
-     "id": 6549807575,
-     "issue": 1412,
-     "issue_title": "Should the network itself hide message size and timing, or is that a layer above it?",
-     "created_at": "2026-10-31T22:11:03Z",
-     "user": "neilalexander",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1412#issuecomment-6549807575",
-     "body": "Traffic obfuscation is not something we are aiming for, just like we don't make any promise whatsoever of anonymity (unlike e.g. Tor or I2P). Our goal is to research and improve upon the routing."
     }
    ]
   },
@@ -334,6 +314,50 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7319,
+     "title": "UDPHop: avoid spurious error logs for closed hop sockets",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-02T19:06:45Z",
+     "updated_at": "2026-11-03T05:18:17Z",
+     "user": "OneMiny",
+     "url": "https://github.com/XTLS/Xray-core/pull/7319",
+     "body": "### Problem\nWhen local port hopping (`intervalLocal`) retires the previous UDP socket, its `ReadFrom` returns a wrapped `net.ErrClosed` while the overall hop session remains active. \n\nIn `recv()`, the code only checks `c.closed()` (which describes the entire session state, not individual retired sockets) and consequently logs this expected socket closure as an unexpected error:\n```text\n[Error] transport/internet/finalmask/udphop: recv err > read udp4 ...: use of closed network connection\n"
+    },
+    {
+     "number": 7321,
+     "title": "Feature Request: Add udp+local:// DNS scheme (plain UDP local mode)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-03T00:37:42Z",
+     "updated_at": "2026-11-03T00:37:42Z",
+     "user": "fengyuluoye",
+     "url": "https://github.com/XTLS/Xray-core/issues/7321",
+     "body": "# Feature Request: Add `udp+local://` DNS scheme (plain UDP local mode)\n\n## Summary\n\nXray's DNS configuration supports `+local` variants for HTTPS, h2c, QUIC and TCP, but there is **no `udp+local` scheme** for plain UDP DNS in local mode. This means there is currently **no way to send plain UDP DNS queries to a local resolver while bypassing the routing/dispatcher stack**.\n\n## Current state\n\n`app/dns/nameserver.go`, `NewServer()` switch (main branch):\n\n```go\ncase strings.EqualFold(u.Scheme, \"https\"):      // DoH remote\ncase strings.EqualFold(u.Scheme, \"h2c\"):        // DoH h2c remote\ncase strings.EqualFold(u.Scheme, \"https+local\"): // DoH local\ncase strings.EqualFold(u.Scheme, \"h2c+local\"):   // DoH h2c local\ncase strings.EqualFold(u.Scheme, \"quic+local\"):  // DoQ local\ncase strings.EqualFold(u.Scheme, \"tcp\"):         // TCP remote\ncase strings.EqualFold(u.Scheme, \"tcp+local\"):   // TCP local\ncase strings.EqualFold(u.String(), \"fakedns\"):\n```\n\nEvery protocol except plain UDP has a `+local` form. Plain UDP falls through to the default branch:\n\n```go\nif dest.Network == net.Network_UDP {\n    return NewClassicNameServer(dest, dispatcher, ...)\n}\n```\n\nNote that `NewClassicNameServer` receives the `dispatcher`, so plain UDP **always goes through the routing stack** — there is no way to bypass it.\n\n## Why this matters (measured data)\n\nFor a local resolver (e.g. smartdns on `127.0.0.1`), bypassing the dispatcher matters. Measured on a local resolver over loopback, one A + one AAAA query for the same domain:\n\n| Path | p50 | Notes |\n|---|---|---|\n| `tcp+local://` (current workaround) | ~810µs | 2 TCP handshakes + 2 closes |\n| `tcp+local://` pipelined on 1 conn | ~680µs | would need connection pooling, not implemented |\n| **plain UDP, 2 packets sent in parallel** | **~376µs** | no handshake, no teardown |\n\nThe UDP path is ~2x faster than the current `tcp+local` workaround because it avoids TCP handshake/teardown entirely. Pairing responses by DNS ID worked in 200/200 trials with zero mismatch.\n\nFor users running a local caching resolver, this overhead is paid on every cache-miss lookup.\n\n## Secondary issue: port parsing for bare `udp://` schemes\n\nRelated bug found while investigating. With:\n\n```json\n\"dns\": { \"servers\": [\"udp://127.0.0.1:5353\"] }\n```\n\nxray logs:\n\n```\nDNS: created UDP client initialized for udp://127.0.0.1:5353:53\n```\n\nThe port becomes `5353:53` — the `:5353` is swallowed into the address (as a domain string) and then a default `:53` is appended by:\n\n```go\n// app/dns/nameserver_udp.go:41\nif address.Port == 0 {\n    address.Port = net.Port(53)\n}\n```\n\nThis is because `infra/conf/dns.go` builds the endpoint with `Address` and `Port` as separate fields, and `Address.Build()` calls `net.ParseAddress()` on the whole string including `:5353`, while `Port` stays 0.\n\nAttempting `udp://127.0.0.1` (no port) resolves to `udp://127.0.0.1:53`, which happens to work, but the scheme is still parsed as a domain so the connection fails with:\n\n```\nfailed to open connection to udp:udp://127.0.0.1:53\n> too many colons in address\n```\n\nContrast with `tcp+local`, which parses correctly because it uses `url.Hostname()` and `url.Port()` separately (`app/dns/nameserver_tcp.go:75-81`).\n\n## Proposed change\n\nAdd a `udp+local` case that mirrors `tcp+local` — parse host/port via `url.Hostname()` / `url.Port()` and pass `nil` as the dispatcher:\n\n```go\ncase strings.EqualFold(u.Scheme, \"udp+local\"): // DNS-over-UDP Local mode\n    return NewUDPNameServer(u, nil, disableCache, serveStale, serveExpiredTTL, clientIP), nil\n```\n\nWhere the new constructor resolves the destination the same way `baseTCPNameServer` does:\n\n```go\nport := net.Port(53)\nif url.Port() != \"\" {\n    if port, err = net.PortFromString(url.Port()); err != nil {\n        return nil, err\n    }\n}\ndest := net.UDPDestination(net.ParseAddress(url.Hostname()), port)\n```\n\nThis would also give users a documented way to hit a local resolver on a non-53 port without the address-swallowing bug.\n\n## Environment"
+    },
+    {
+     "number": 7296,
+     "title": "XHTTP server: unblock writes and serialize connection close",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T19:48:48Z",
+     "updated_at": "2026-11-02T22:14:58Z",
+     "user": "ODtian",
+     "url": "https://github.com/XTLS/Xray-core/pull/7296",
+     "body": "## Summary\n\nAn XHTTP response write can hold the connection mutex while blocked on a slow reader. Closing the logical connection then waits on that mutex, including when a proxy inactivity timeout cancels the business context while the HTTP request stays open.\n\nSignal closure before waiting for the writer and interrupt an active write using `http.ResponseController`. Serialize the complete transition with `sync.Once` so concurrent business/handler closes join the deadline call and the writer before `ServeHTTP` returns.\n\n```text\nClose (once)\n  signal closure\n  interrupt active write\n  wait for writer completion\n```\n\n## Evidence\n\n- Added `TestConcurrentCloseWaitsForDeadline`, using a real HTTP test server and a gated response writer. The gates ensure the business close owns the first deadline call before the handler closes.\n- Upstream implementation: fails with `Close waited for the blocked writer without interrupting it`.\n- An unserialized close transition: fails with `deadline call outlived ServeHTTP during concurrent Close`.\n- Commit `8628110`, rebuilt with Go 1.27.3 on Linux/amd64: `go test -buildvcs=false ./transport/internet/splithttp -count=1` passes (`ok`, 2.434s).\n- Bounded loopback `packet-up` fixtures run against a binary rebuilt from commit `8628110`: peer half-close and an internal inactivity timeout with the HTTP request still open both finish with `CLOSE_FRAMES=0`, `WRITE_FRAMES=0`, and `CLOSE_WAIT_CONNECTIONS=0`.\n\n## Merge Danger\n\n**Door:** Two-way.\n\n**Blast Radius:** XHTTP shutdown. Active I/O is interrupted on close; the existing transport tests cover normal completion.\n"
+    },
+    {
+     "number": 7316,
+     "title": "XDRIVE transport: Retry \"local\" Get on Windows sharing violations",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-02T10:38:41Z",
+     "updated_at": "2026-11-02T22:02:23Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7316",
+     "body": "Fixes a Windows-only flake in `transport/internet/xdrive`, seen in a full `go test ./...` run:\n\n```\nxdrive_test.go:143: ReadFull: transport/internet/xdrive: failed to read streams/<id>/c2s/000000001.seg > open ...\\000000001.seg: The process cannot access the file because it is being used by another process.\n```\n\n### Cause\n\nIt's Go's own rename, not Defender. On Windows, `os.Rename` (`MoveFileEx`) opens the file with `DELETE` access, renames it, then closes that handle, but the new name already shows up in directory listings before the close. `os.ReadFile` opens files without `FILE_SHARE_DELETE`, so opening the file in that moment fails with `ERROR_SHARING_VIOLATION`. The WAL reader `Get`s each segment as soon as `List` shows it, and any error other than \"not found\" ends the stream.\n\nMeasured on Windows 11 (Defender real-time protection on, 22 logical CPUs) with a reader that keeps opening the new name during each rename:\n\n- 98.6% of 5,001 renames hit the error, and every failed open started before `MoveFileEx` returned.\n- None failed once `FILE_SHARE_DELETE` was added to the open.\n- The window is about 0.3 ms when idle, but 10 ms median and up to 124 ms with all CPUs busy, which is why it shows up in full test runs.\n\nWith all CPUs busy (22 busy-loop processes), `TestRoundTrip`, `TestMultiSegmentTransfer`, `TestInterleaved` and `TestCloseEOF` failed 4 of 60 runs before this change and 0 of 120 after.\n\n### Change\n\n- On Windows, `Get` in the \"local\" backend (`\"service\": \"local\"`) retries `os.ReadFile` on `ERROR_SHARING_VIOLATION` for up to 2 seconds, as `cmd/internal/robustio` does. It backs off from 1 ms to 100 ms and stops early once `ctx` is done. Other errors return at once, as before, and a violation that doesn't clear still fails after 2 seconds.\n- Other platforms still call `os.ReadFile` once.\n- New `TestLocalSharingViolation` holds a segment open with `DELETE` access, as `MoveFileEx` does, and checks that `Get` returns the sharing violation while the file is held and succeeds once the handle is closed.\n\n### Not changed\n\n- No `FILE_SHARE_DELETE` open: it would avoid the conflict, but `os.Open` can't set the share mode, and calling `CreateFile` directly would skip `os.Open`'s long-path handling.\n- `Put`'s rename isn't retried: none of about 63,000 renames failed during these measurements, idle or under load.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+    },
+    {
      "number": 7315,
      "title": "TUN inbound's `autoSystemWfpBlockLeak`: Add \"all\", \"allexceptlan\", port alone, port range, \"tcp\"/\"udp\" alone or with port range, \"icmp\", and a CIDR in front of any value; Always allow loopback, DHCP and IPv6 neighbor discovery",
      "is_pr": true,
@@ -343,17 +367,6 @@
      "user": "patterniha",
      "url": "https://github.com/XTLS/Xray-core/pull/7315",
      "body": "autoSystemWfpBlockLeak now also takes:\r\n\r\n- \"all\": everything outside the TUN, IPv4 and IPv6, in both directions, so nothing but Xray leaves except through the TUN.\r\n- \"allexceptlan\": like \"all\", but traffic to and from the local network stays allowed (see below).\r\n- \"tcp\", \"udp\": all ports of that protocol.\r\n- \"tcp/<low>-<high>\", \"udp/<low>-<high>\": a range of ports, both ends within 1-65535, the left not greater than the right.\r\n- \"<port>\" or \"<low>-<high>\" alone: TCP and UDP, e.g. \"53\" or \"10-20\". \"dns\" now stands for \"53\", \"853\" and \"windnsclient\".\r\n- \"icmp\": ICMP and ICMPv6, e.g. ping.\r\n- A CIDR in front of any value, to limit it to those addresses, an IPv6 one in brackets, e.g. \"1.1.1.0/24:53\", \"[2001:db8::/32]:tcp/853\", \"8.8.8.8/32:all\", \"0.0.0.0/0:icmp\" (IPv4 only) or \"[::/0]:misconfigtun\" (IPv6 only). It limits what the value stands for or includes as well: \"0.0.0.0/0:dns\" is \"0.0.0.0/0:53\", \"0.0.0.0/0:853\" and \"0.0.0.0/0:windnsclient\". Like autoSystemRoutingTable, it takes CIDRs only (a single address as \"8.8.8.8/32\") and no GeoIP; IPv4-mapped IPv6 ones are refused, as Windows checks such connections as IPv4. Without one, a value covers all addresses, as before.\r\n\r\n\"allexceptlan\" keeps printers, the router's settings page, casting to a TV, etc. working: private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), link-local (169.254.0.0/16, fe80::/10), multicast (224.0.0.0/4, ff00::/8) and broadcast (255.255.255.255) addresses stay allowed in both directions. It includes \"dns\", so DNS on the local network stays blocked, as a resolver there (like the router) would forward the queries outside the TUN, and the other values still apply there, e.g. \"tcp/445\" blocks Windows file sharing, and \"192.168.1.5/32:all\" one device. \"0.0.0.0/0:allexceptlan\" includes \"0.0.0.0/0:dns\" only, so \"dns\" has to be added to block DNS over IPv6 as well. \"all\" overrides it.\r\n\r\nValues are normalized: lower case, \"tcp/1-65535\" becomes \"tcp\", \"tcp/53-53\" becomes \"tcp/53\", CIDRs are masked (\"1.1.1.1/24:53\" becomes \"1.1.1.0/24:53\"), and repeated values are dropped.\r\n\r\nWhatever is blocked, loopback, which cannot leave the system, and what Windows itself needs on the local link always stay allowed: DHCP, DHCPv6, and IPv6 neighbor and multicast listener discovery. Before, these were only allowed along with \"misconfigtun\"; otherwise \"udp\" or \"icmp\" would cut DHCP or IPv6 neighbor discovery, and \"tcp\" any local proxy, Xray's own inbounds included. With \"dns\", a local resolver on 127.0.0.1:53 now works for other programs as well (its own queries to port 53 or 853 outside the TUN stay blocked), and it can be the TUN's dns server: loopback servers no longer get the \"blocked\" warning, and the warning only names servers that a value actually blocks.\r\n\r\nThe filters, from the heaviest, which wins:\r\n1. Permit Xray, by its app ID.\r\n2. Permit loopback, DHCP, DHCPv6, IPv6 neighbor discovery, and everything through the TUN (one permit per layer, in both directions).\r\n3. Block what the values say: protocols and ports, \"all\", and \"misconfigtun\" over an IP version without routes to the TUN.\r\n4. Permit the DNS Client service's mDNS and LLMNR on the local network.\r\n5. Block the DNS Client service (\"windnsclient\").\r\n6. Permit the local network (\"allexceptlan\").\r\n7. Block everything (\"all\").\r\n\r\n\"allexceptlan\" is the two lightest filters: 7 blocks everything, and 6 lets the local network through. Every other value is heavier, so it still applies on the local network: e.g. the \"53\" that \"allexceptlan\" brings along blocks the router's DNS, and \"192.168.1.5/32:all\" blocks that one device. Likewise, 4 lets mDNS and LLMNR past \"windnsclient\" (5), but not past another value (3) like \"udp\". So adding a value can only block more, never open what another value blocks.\r\n\r\nDependencies on other TUN options:\r\n- \"all\", \"allexceptlan\", \"dns\", \"windnsclient\", or anything covering TCP or UDP port 53, even to some addresses only (\"udp\", \"53\", \"1.1.1.1/32:53\", \"[::/0]:all\", \"tcp/50-60\", "
-    },
-    {
-     "number": 7319,
-     "title": "UDPHop: avoid spurious error logs for closed hop sockets",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T19:06:45Z",
-     "updated_at": "2026-11-02T19:06:45Z",
-     "user": "OneMiny",
-     "url": "https://github.com/XTLS/Xray-core/pull/7319",
-     "body": "### Problem\nWhen local port hopping (`intervalLocal`) retires the previous UDP socket, its `ReadFrom` returns a wrapped `net.ErrClosed` while the overall hop session remains active. \n\nIn `recv()`, the code only checks `c.closed()` (which describes the entire session state, not individual retired sockets) and consequently logs this expected socket closure as an unexpected error:\n```text\n[Error] transport/internet/finalmask/udphop: recv err > read udp4 ...: use of closed network connection\n"
     },
     {
      "number": 5824,
@@ -409,17 +422,6 @@
      "user": "heimdallrxzy",
      "url": "https://github.com/XTLS/Xray-core/issues/7317",
      "body": "### 描述与范围\n\n这是一次**诊断咨询，尚未确认是 Xray-core 缺陷**。访问某个自有 VPS 的公网 HTTP 管理页面时，经一个第三方 VLESS/TCP/REALITY/Vision 节点返回 HTTP 503；同一个 HTTP 代理访问普通 HTTP 网站正常。希望确认还应采集哪些证据，以区分节点侧策略、路径上的连接重置和客户端问题。\n\n已搜索仓库中 503、HTTP inbound、failed to read response 等相关反馈，未找到与下述 GET 请求和对照结果一致的已确认修复。#7180 是 XHTTP/Nginx 上传问题，本例不使用 XHTTP，也不上传请求体。#7240 涉及私有地址目标，本例目标是公网 IPv4。\n\n### 环境与已做测试\n\n- Windows 11，系统构建 26200；客户端二进制为 windows/386。\n- v2rayN 从 7.25.1 更新到 7.25.6 后问题仍存在。\n- 独立运行官方 Xray-core **26.10.10** 和最新 Release **26.10.31**，使用相同的精简出站配置，均返回 503。独立测试不经过 v2rayN 前端。\n- 26.10.31 测试包为官方 Xray-windows-32.zip，已核对 GitHub 发布资源中的 SHA-256。\n- 出站为第三方 VLESS/TCP/REALITY/Vision；无法取得该第三方节点的服务端版本、配置和日志。\n\n### 复现方式\n\n目标用示例地址替代，真实公网 IPv4、管理路径和节点凭据均未公开：\n\n```sh\ncurl --proxy http://127.0.0.1:10859 --noproxy \"\" \\\n  --connect-timeout 5 --max-time 8 \\\n  http://203.0.113.10:16888/PANEL_PATH/\n```\n\n结果为 HTTP 503，Connection: close、Proxy-Connection: close、Content-Length: 0。独立 26.10.31 运行中，连接建立并记录 tunneling request 后，出现 wsarecv remote reset，随后 HTTP inbound 生成 503。\n\n### 对照结果和限制\n\n| 请求路径 | 实测结果 |\n| --- | --- |\n| 原节点 + HTTP 代理，访问目标管理页面 | 503 |\n| 原节点 + HTTP CONNECT，访问相同页面 | curl 52 / Empty reply from server |\n| 原节点 + SOCKS5，访问相同页面 | curl 52 / Empty reply from server |\n| 原节点 + HTTP 代理，访问 http://example.com/ | 200 |\n| 原节点 + HTTP CONNECT，访问 http://example.com/ | 200 |\n| 同一 26.10.10 核心，出站改为 freedom，SOCKS 访问目标 | 3/3 返回 200 |\n| 另一个自建 VLESS/REALITY 节点，访问相同目标 | 2 次超时、1 次 200 |\n| SSH 本地端口转发至目标面板 | 200 |\n\n**本地到该 VPS 的直连也有独立的间歇超时**：另一次使用系统代理绕过该 IP 的 Windows WinINet 测试为 4/6 返回 200、2/6 超时。这不支持断言所有异常都是核心 Bug，也没有证明 HTTP、SOCKS、CONNECT 之间存在解析差异。\n\n当前只把目标 VPS IP 加入系统代理绕过列表，以避免原节点路径上的 503；直连间歇超时仍未解决。SSH 转发可用。\n\n### 客户端配置\n\n以下是实际独立测试配置的完整结构；真实代理地址、SNI、UUID、public key、short ID 已替换为示例，**示例不能用于连接实际节点，也不是他人可独立运行的最小复现环境**。没有附带生产凭据。\n\n<details><summary>脱敏配置</summary>\n\n```json\n{\n  \"log\": {\n    \"loglevel\": \"debug\",\n    \"dnsLog\": true\n  },\n  \"inbounds\": [\n    {\n      \"listen\": \"127.0.0.1\",\n      \"port\": 10859,\n      \"protocol\": \"http\",\n      \"tag\": \"http-in\"\n    }\n  ],\n  \"outbounds\": [\n    {\n      \"tag\": \"proxy\",\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"vnext\": [\n          {\n            \"address\": \"proxy.example.invalid\",\n            \"port\": 443,\n            \"users\": [\n              {\n                \"id\": \"f12f9132-7ab3-4e61-a4ee-4d361b7802fc\",\n                \"encryption\": \"none\",\n                \"flow\": \"xtls-rprx-vision\"\n              }\n            ]\n          }\n        ]\n      },\n      \"streamSettings\": {\n        \"network\": \"tcp\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"serverName\": \"reality.example.invalid\",\n          \"fingerprint\": \"chrome\",\n          \"publicKey\": \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE\",\n          \"shortId\": \"0123456789abcdef\"\n        }\n      }\n    }\n  ]\n}\n```\n</details>\n\n### 最新版本客户端 debug 日志\n\n本段为单次隔离测试的日志，IP/主机名/目标路径/本地文件路径已脱敏。未启用其他流量或浏览器会话。\n\n<details><summary>Xray 26.10.31</summary>\n\n```text\nXray 26.10.31 (Xray, Penetrates Everything.) a4a3dff (go1.27.3 windows/386)\nA unified platform for anti-censorship.\n2026/11/02 20:29:05.134588 [Info] infra/conf/serial: Reading config: &{Name:[LOCAL_CONFIG].json Format:json}\n2026/11/02 20:29:05.137591 [Debug] app/log: Logger started\n2026/11/02 20:29:05.137591 [Debug] app/proxyman/inbound: creating stream worker on [IP]:10859\n2026/11/02 20:29:05.143041 [Info] transport/internet/tcp: listening tcp on [IP]:10859\n2026/11/02 20:29:05.143041 [Warning] core: Xray 26.10.31 started\n2026/11/02 20:29:06.111054 [Info] [2435105786] proxy/http: request to Method [GET] Host [[IP]:16888] with URL [http://[IP]:16888/[PANEL_PATH]/]\n2026/11/02 20:29:06.111054 [Info] [2435105786] app/dispatcher: default route for tcp:[IP]:16888\n2026/11/02 20:29:06.111054 [Info] [2435105786] transport/internet/tcp: dialing TCP to tcp:[PROXY_HOST]:443\n2026/11/02 20:29:06.111054 from [IP]:55287 accepted http://[IP]:16888/[PANEL_PATH]/ [http-in >> proxy]\n2026/11/02 20:29:06.111054 [Debug] [2435105786] transport/internet: dialing to tcp:[PROXY_HOST]:443\n2026/11/02 20:29"
-    },
-    {
-     "number": 7316,
-     "title": "XDRIVE transport: Retry \"local\" Get on Windows sharing violations",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T10:38:41Z",
-     "updated_at": "2026-11-02T11:00:44Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7316",
-     "body": "Fixes a Windows-only flake in `transport/internet/xdrive`, seen in a full `go test ./...` run:\n\n```\nxdrive_test.go:143: ReadFull: transport/internet/xdrive: failed to read streams/<id>/c2s/000000001.seg > open ...\\000000001.seg: The process cannot access the file because it is being used by another process.\n```\n\n### Cause\n\nIt's Go's own rename, not Defender. On Windows, `os.Rename` (`MoveFileEx`) opens the file with `DELETE` access, renames it, then closes that handle, but the new name already shows up in directory listings before the close. `os.ReadFile` opens files without `FILE_SHARE_DELETE`, so opening the file in that moment fails with `ERROR_SHARING_VIOLATION`. The WAL reader `Get`s each segment as soon as `List` shows it, and any error other than \"not found\" ends the stream.\n\nMeasured on Windows 11 (Defender real-time protection on, 22 logical CPUs) with a reader that keeps opening the new name during each rename:\n\n- 98.6% of 5,001 renames hit the error, and every failed open started before `MoveFileEx` returned.\n- None failed once `FILE_SHARE_DELETE` was added to the open.\n- The window is about 0.3 ms when idle, but 10 ms median and up to 124 ms with all CPUs busy, which is why it shows up in full test runs.\n\nWith all CPUs busy (22 busy-loop processes), `TestRoundTrip`, `TestMultiSegmentTransfer`, `TestInterleaved` and `TestCloseEOF` failed 4 of 60 runs before this change and 0 of 120 after.\n\n### Change\n\n- On Windows, `Get` in the \"local\" backend (`\"service\": \"local\"`) retries `os.ReadFile` on `ERROR_SHARING_VIOLATION` for up to 2 seconds, as `cmd/internal/robustio` does. It backs off from 1 ms to 100 ms and stops early once `ctx` is done. Other errors return at once, as before, and a violation that doesn't clear still fails after 2 seconds.\n- Other platforms still call `os.ReadFile` once.\n- New `TestLocalSharingViolation` holds a segment open with `DELETE` access, as `MoveFileEx` does, and checks that `Get` returns the sharing violation while the file is held and succeeds once the handle is closed.\n\n### Not changed\n\n- No `FILE_SHARE_DELETE` open: it would avoid the conflict, but `os.Open` can't set the share mode, and calling `CreateFile` directly would skip `os.Open`'s long-path handling.\n- `Put`'s rename isn't retried: none of about 63,000 renames failed during these measurements, idle or under load.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
     },
     {
      "number": 7223,
@@ -1274,20 +1276,33 @@
      "user": "hxehex",
      "url": "https://github.com/XTLS/Xray-core/pull/7248#issuecomment-6555840991",
      "body": "> **Disclosure:** the text below was generated and sent by an AI assistant on my behalf. The reproduction, log data and dates are real and verifiable with the commands given.\n\n**Re: proving the CDN was fingerprinting XHTTP's default responses**\n\nI can't show their internal decision logs — nobody outside can. What I can show is that the fingerprint is objective, one request away, and that our timeline is consistent with it.\n\n**1. The default surface is a one-request detector**\n\nStock core, xhttp inbound (`path: /api/v2/stream`, `security: none`). Every probe — unknown path, our own path without a valid session, POST with garbage, HEAD — gets the same thing:\n\n```\n$ curl -si http://127.0.0.1:18080/anything\nHTTP/1.1 404 Not Found\nDate: Sun, 01 Nov 2026 08:46:11 GMT\nContent-Length: 0\n```\n\nNo `Content-Type`, no `Server`, no body. That's a bare `writer.WriteHeader(...)`: 404 at `hub.go:99,105`; 400 at `147,156,201,243,262,282`; 409 at `214`; 413 at `292` (line refs: main @ v26.10.21; repro on 26.10.17, behaviour identical). On real responses the hub additionally writes `X-Accel-Buffering: no` + `Cache-Control: no-store` (`hub.go:216-217,345,358,362`), `Content-Type: text/event-stream` (`:366`), and the CORS block (`config.go:99-115`) — `Access-Control-Allow-Origin: *` on every response when no `Origin` is present.\n\nThe edge terminates TLS, so it sees all of this in plaintext. Telling \"XHTTP hub\" from \"normal web origin\" costs one GET to a random path: any real stack answers with a body, a `Content-Type` and usually a `Server`. This is `curl -I` plus a diff, not a sophisticated detector.\n\n**2. Timeline** (Beeline-CDN family — the free tiers share infrastructure)\n\n- Several accounts/domains burned while serving xhttp through these fronts.\n- Oct 24: nginx put in front of the origin (static cover on `/`, `/api/v2/stream/*` → xray on loopback), and the origin switched to a core carrying #7247 + #7248 to remove the markers nginx can't reach.\n- Oct 26: the account was banned.\n- Counter-evidence I'm not hiding: origin logs for that day show ~100k requests/day through the CDN egress plus 5xx bursts (a few thousand total, peaks around 100/s). An unhealthy origin is an alternative or additional trigger.\n\n**3. What I'm claiming, narrowly**\n\nNot \"I have their detector\". Rather: the default response shape is trivially distinguishable from any normal service, the CDN sees it in plaintext by design, and xhttp-serving origins on this CDN family don't survive in our experience. #7248 removes the bare-status half of that for about ten lines of config. It doesn't make xhttp invisible — it stops the origin failing the cheapest possible check.\n\n**On \"this can be done in nginx\"**: on our origin nginx *already* fronts xhttp, and the hub's headers still pass straight through. You need a `proxy_hide_header` per marker plus `error_page`/custom bodies for every status the hub can emit (400/404/405/409/413/500), and none of that touches what the hub writes on the SSE downlink itself. For xhttp exposed directly (REALITY on :443, or a CDN pulling straight to the VPS) there is no proxy in the path at all.\n\nHappy to add the reproduction above as a test fixture if that helps.\n"
-    },
-    {
-     "id": 6552589018,
-     "issue": 7291,
-     "issue_title": "DefaultListener: Disable MPTCP by default",
-     "created_at": "2026-11-01T02:56:52Z",
-     "user": "Balnea",
-     "url": "https://github.com/XTLS/Xray-core/pull/7291#issuecomment-6552589018",
-     "body": "https://security-tracker.debian.org/tracker/CVE-2026-98432\r\nupdate your kernel to 6.12.113-1 or higher is enough."
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3387,
+     "title": "[Windows][Xray] TUN adapter is created with MTU 65535 — large TLS handshakes are corrupted in transit (`bad_record_mac`), YouTube/Discord unusable. Setting MTU 1280/1200 fixes it",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-03T04:53:06Z",
+     "updated_at": "2026-11-03T04:53:06Z",
+     "user": "winkyBrain",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3387",
+     "body": "## Summary\n\nOn Windows, the Xray connection creates the `tun2` adapter (tun2socks) **without setting an MTU**, so Windows falls back to **65535**. With that MTU the segment sizes (MSS) handed to the userspace TCP stack (tun2socks) are absurdly large, and TLS records above a certain size reach the server corrupted — the server itself answers with an alert `bad_record_mac`, i.e. the corruption happens in the **client → server** direction.\n\nResult: the client shows \"Connected\", plain sites (google.com, github.com, wikipedia, netflix, instagram, ya.ru) work, but every domain with a large TLS handshake fails — `youtube.com`, `m.youtube.com`, `youtu.be`, `googlevideo.com`, `i.ytimg.com` all fail with `ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC`, `discord.com` fails with `ERR_SSL_INVALID_SESSION_ID`. For a user this looks like \"Xray breaks YouTube\" while AmneziaWG on the same server and network works fine.\n\nSetting the adapter MTU manually fixes it completely:\n\n```\nnetsh interface ipv4 set subinterface \"tun2\" mtu=1200 store=active\n```\n\n## Environment\n\n| Item           | Value                                                                |\n|----------------|----------------------------------------------------------------------|\n| Client         | AmneziaVPN 5.0.3.0     |\n| OS             | Windows 10 Pro 22H2, build `10.0.19045.6456`                         |\n| Protocol       | Xray (VLESS + REALITY), port 443/tcp, default SNI/fingerprint        |\n| Tunnel adapter | `tun2`, description \"tun2socks Tunnel 2\"         |\n| Server         | Self-hosted VPS, Ubuntu + Docker; the same server also runs AWG      |\n| Network        | Home Wi-Fi/Ethernet, 1500-byte path; same key on Android LTE works   |\n\nServer-side is proven healthy: with AmneziaWG against the same server, same device, same network:\n\n- `https://www.youtube.com` → 200, 0.97 MB, 802 ms\n- 3 MB download → 200, 546 ms (~44 Mbps), `latest handshake` present in `awg show`\n\n## Steps to reproduce\n\n1. Install Xray (VLESS + REALITY) on a self-hosted server and connect from AmneziaVPN 5.0.3.0 on Windows.\n2. Check the adapter MTU:\n\n   ```\n   netsh interface ipv4 show subinterfaces\n   ```\n\n   ```\n   MTU    MediaSenseState   Bytes In    Bytes Out   Interface\n   -----  ---------------   ----------  ----------  ---------\n   65535  1                 14492795    20015835    tun2\n   ```\n\n3. Try to open `https://www.youtube.com` (or Discord) → the handshake fails; `google.com` opens fine.\n4. Set the MTU, nothing else:\n\n   ```\n   netsh interface ipv4 set subinterface \"tun2\" mtu=1200 store=active\n   ```\n\n5. Repeat step 3 → everything works.\n\n## A/B on the adapter MTU (same machine, same server, same network, back-to-back)\n\n| MTU             | youtube.com                | i.ytimg.com         | github.com       | DNS A        | 3-10 MB download |\n|-----------------|----------------------------|---------------------|------------------|--------------|------------------|\n| 65535 (default) | FAIL bad_record_mac 338 ms | FAIL bad_record_mac | FAIL timeout 8 s | FAIL timeout | 3 MB / 2023 ms   |\n| 1380            | FAIL bad_record_mac 338 ms | FAIL bad_record_mac | OK 338 ms        | OK           | 3 MB / 1127 ms   |\n| **1200**        | OK 200, ~1.1 s             | OK 334 ms           | OK 330 ms        | OK           | 10 MB / ~5.0 s   |\n\nNote that the failure is **not** a timeout but a deterministic protocol error at ~330 ms, and reducing MTU 65535 → 1380 already fixed github and DNS while leaving YouTube broken — the breakage depends on the size of the TLS flight, not on reachability.\n\n## Throughput is not affected by the workaround\n\nLowering the TUN MTU costs nothing in practice — it only increases the packet count per byte, and the tunnel is not packet-rate bound:\n\n- Speedtest (browser) with `mtu=1200`: **214 Mbps down / 498 Mbps up**\n- Parallel HTTPS downloads through the tunnel from the same machine at `mtu=1200`:\n\n| Streams | Transferred | Time    | Aggregate |\n|---------|-------------|---------|--"
+    },
+    {
+     "number": 3386,
+     "title": "feat(ui): add split tunneling toggle to tray menu",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-02T22:52:58Z",
+     "updated_at": "2026-11-02T22:54:50Z",
+     "user": "Broklam",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3386",
+     "body": "### Problem\r\n\r\nSite-based split tunneling can only be switched on the Settings → Split tunneling page, and that page refuses changes during an active connection. Turning it on or off for a moment means opening the window, disconnecting, flipping the switch and connecting again.\r\n\r\n### Solution\r\n\r\n- The tray menu gets a checkable **Split tunneling** item under Connect / Disconnect.\r\n- The item mirrors the site-based setting. It follows changes made on the settings page, by a backup restore or by a settings reset through `SecureAppSettingsRepository::sitesSplitTunnelingEnabledChanged`. A click goes through `IpSplitTunnelingUiController::toggleSplitTunneling`, so the Home label and the split tunneling drawer update as well.\r\n- Split tunneling is written into the VPN configuration when the connection is prepared, so a change made while connected applies only to a new connection. When the item is clicked while connected, the client disconnects and connects again (`ConnectionUiController::reconnect()`), reusing the tray's existing connect path (`openConnection()`). `VpnConnection::reconnectToVpn()` is not used because it restarts the protocol with the configuration that was already prepared.\r\n- The item is disabled while a connection is being prepared, established or closed, so it cannot be clicked again in the middle of a reconnect.\r\n\r\n### Related issues\r\n\r\n- #3104 asks to toggle split tunneling while staying connected. This PR covers the tray; the settings page still blocks changes during an active connection.\r\n\r\n### Not included\r\n\r\n- The new tray string has no translations yet, so it shows in English.\r\n- Only the site-based mode is switched. App-based split tunneling on Windows stays on its settings page.\r\n- The item is not disabled for servers whose container has split tunneling on the server side (`isDefaultServerDefaultContainerHasSplitTunneling`). There the setting has no effect, as it has none today when changed on the settings page of such a server.\r\n\r\n### Testing\r\n\r\n- macOS (arm64 + x86_64), Qt 6.10.1: `AMNEZIA_BUILD_TESTS=ON deploy/build.sh --generator Ninja` builds; `ctest` passes 31/31.\r\n- Not built or run on Windows, Linux or `MACOS_NE`.\r\n<img width=\"193\" height=\"222\" alt=\"image\" src=\"https://github.com/user-attachments/assets/e93c9311-dff5-470b-924d-b1b348fba7bd\" />\r\n\r\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\r\n"
+    },
     {
      "number": 3385,
      "title": "fix: align xray settings with core defaults and add contract tests",
@@ -1595,39 +1610,6 @@
      "user": "Kwentin3",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3366",
      "body": "Related: #3233 (outdated OpenVPN image). This report covers other self-hosted components and the upgrade workflow.\n\nAn audit of an existing Linux/amd64 self-hosted deployment on 2026-11-01 found outdated container userspace and embedded runtimes. Updating the VPS packages alone does not update them. Please refresh the server images and provide a supported security-upgrade path that preserves existing server/client identities and profiles.\n\n### Observed versions\n\nThese are runtime observations from that deployment, cross-checked against AmneziaVPN **5.0.3.0, commit `de93650a90739b87bb47a632872ea9d0adc9412f`**, and the referenced parent-image sources. They are not a claim that every fresh installation using mutable `latest` tags has identical contents.\n\n| Component | Observed before remediation | Maintenance gap |\n| --- | --- | --- |\n| Xray | Alpine 3.15.11; Xray 26.7.28 / Go 1.26.5; OpenSSL 1.1.1w | The [5.0.3 installer Dockerfile](https://github.com/amnezia-vpn/amnezia-client/blob/de93650a90739b87bb47a632872ea9d0adc9412f/client/server_scripts/xray/Dockerfile) pins Alpine 3.15 and Xray 26.7.28. An APK upgrade within the old branch does not migrate the base or replace the pinned Xray release. |\n| AmneziaWG | Alpine 3.19.9; tools `v3.1.20260812`; static daemon built with Go 1.25.12 | The [parent Dockerfile](https://github.com/amnezia-vpn/amneziawg-go/blob/b5928efb6ca19f0153958460c3d141f04abc5c2e/Dockerfile) still builds with Go 1.25.12. Refreshing only the runtime base leaves the old Go/C runtime inside the static executable. |\n| AmneziaDNS | Unbound 1.22.0, built with OpenSSL 3.3.2 | The [installer inherits `mvance/unbound:latest`](https://github.com/amnezia-vpn/amnezia-client/blob/de93650a90739b87bb47a632872ea9d0adc9412f/client/server_scripts/dns/Dockerfile). Updating Debian's libssl package does not replace Unbound's private embedded OpenSSL. Later [Unbound security advisories](https://nlnetlabs.nl/projects/unbound/security-advisories/) include fixes absent from 1.22.0. |\n| MTProxy | Debian 12; libssl3 `3.0.19-1~deb12u2`, libc6 `2.36-9+deb12u13` | Newer vendor security packages were available. The [native parent](https://github.com/amnezia-vpn/MTProxy/blob/512bc66f07787afc664b35bb88abb1118574a475/Dockerfile) copies the daemon separately, so runtime packages can be refreshed without rebuilding the proxy. |\n| SOCKS5 | Minimal image with Debian glibc `2.36-9+deb12u9`, without a full package database | Checking only the BusyBox/3proxy versions misses the bundled loader/libc. Please include these files in the image's dependency inventory and update process. |\n\nFor AWG, this was verified beyond version strings: the official amd64 parent manifest `sha256:c68009d33df3aef4654db72bf1a7880cfa0a631fe866c50d9ae3dd34ddd7c13a` contained daemon SHA-256 `6177066f0e35b1cb44945136d9a10841dd3ce30fdf16009c9a815cd943a982fe`, matching the deployed binary. Its registry-attached build provenance points to source commit `b5928efb6ca19f0153958460c3d141f04abc5c2e`. This is a provenance/byte match, not a claim of independent signature verification.\n\n### Requested behavior\n\n1. Publish refreshed server images on supported bases, rebuilding static Go components with a supported, patched toolchain as well as updating OS libraries.\n2. Provide a documented **upgrade-existing-server** operation that preserves keys, peer/client profiles, ports, DNS settings and persistent data. Keep security upgrades distinct from removing/reprovisioning a protocol, and make replacement of administrator-managed components explicit.\n3. Expose installed component/toolchain versions and image identities, and periodically rebuild/check images against vendor advisories. Include embedded libraries and scratch-image dependencies, not only the package-manager inventory.\n4. Validate actual protocol readiness after upgrading, with rollback, and document host-kernel updates separately from container updates.\n\n### Local validation of the approach\n\nManual remediation retained the existing key"
-    },
-    {
-     "number": 3356,
-     "title": "[Android] Не отображаются системные приложения в split tunneling",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-30T10:11:39Z",
-     "updated_at": "2026-11-01T01:51:45Z",
-     "user": "xizerlix",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3356",
-     "body": "Не отображаются системные приложения в split tunneling, по этой причине нет возможности выбрать приложухи вроде Gemini, com.google.android.googlequicksearchbox итд"
-    },
-    {
-     "number": 3358,
-     "title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-30T22:40:34Z",
-     "updated_at": "2026-11-01T01:48:40Z",
-     "user": "AnatoliySar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358",
-     "body": "На андроиде 12к адресов спокойно обрабатываются без задержек.\nНа винде уже с 1000 адресов проблема - грузится по 30 секунд.\nЭто несерьёзно, пофиксите это, пожалуйста, темы похожие наблюдаю за последний год неоднократно.\n"
-    },
-    {
-     "number": 3364,
-     "title": "fix(daemon): bracket IPv6 server endpoint in UAPI config",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-31T22:42:47Z",
-     "updated_at": "2026-10-31T23:16:36Z",
-     "user": "svartoS",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3364",
-     "body": "Fixes #2607\r\n\r\n## Problem\r\nWhen a WireGuard/AmneziaWG config uses an IPv6 endpoint (e.g. `Endpoint = [2001:db8::2]:51820`), the daemon fails to bring the tunnel up: the UAPI `set` returns `-22` (EINVAL) and the connection drops right after connecting.\r\n\r\nIn `updatePeer()` the server address ends up in `m_serverIpv4AddrIn` even when it is an IPv6 literal, so it is written to the IPC stream without brackets:\r\n\r\n```\r\nendpoint=2001:db8::2:51820\r\n```\r\n\r\nThe userspace WireGuard implementation cannot parse that as `host:port`.\r\n\r\n## Fix\r\nIf the address in `m_serverIpv4AddrIn` contains `:` and is not already bracketed, wrap it in `[...]` before appending the port. IPv4 addresses and hostnames are unchanged. The existing `m_serverIpv6AddrIn` branch already brackets correctly and is left as is.\r\n\r\nThe same pattern exists in all three desktop daemons, so the fix is applied to:\r\n- `client/platforms/linux/daemon/wireguardutilslinux.cpp`\r\n- `client/platforms/macos/daemon/wireguardutilsmacos.cpp`\r\n- `client/platforms/windows/daemon/wireguardutilswindows.cpp`\r\n\r\n## Testing\r\nThe bug was reproduced on Linux Mint 22.3 with AmneziaVPN 5.0.3.0 (IPv6 endpoint fails with IPC error -22; the same server over IPv4 works). I have not built the client with this patch yet. The macOS and Windows changes are the same code change and have not been tested on those platforms."
     }
    ],
    "comments": [
@@ -1729,24 +1711,6 @@
      "user": "agmitron",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3352#issuecomment-6556886180",
      "body": "Thanks for the workaround!"
-    },
-    {
-     "id": 6551989389,
-     "issue": 3356,
-     "issue_title": "[Android] Не отображаются системные приложения в split tunneling",
-     "created_at": "2026-11-01T01:51:45Z",
-     "user": "Vitalik93",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3356#issuecomment-6551989389",
-     "body": "В WG Tunnel есть. Там вообще много чё есть, чего нет в Amnezia."
-    },
-    {
-     "id": 6551960032,
-     "issue": 3358,
-     "issue_title": "[Windows] Split tunneling start is very slow / медленно подключается к серверу при указании даже 1000 адресов",
-     "created_at": "2026-11-01T01:48:39Z",
-     "user": "Vitalik93",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3358#issuecomment-6551960032",
-     "body": "Недавний ответ их человека на Rutracker: \"Для корректной работы туннелирования, рекомендуем создавать список, в который водит не более 800 IP-адресов.\" И всё..."
     }
    ]
   },

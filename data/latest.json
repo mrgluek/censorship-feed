@@ -1,39 +1,39 @@
 {
- "generated_at": "2026-11-04T17:14:10Z",
- "since": "2026-11-02T17:14:10Z",
+ "generated_at": "2026-11-04T23:39:27Z",
+ "since": "2026-11-02T23:39:27Z",
  "repos": {
   "net4people/bbs": {
    "issues": [],
    "comments": []
   },
   "yggdrasil-network/yggdrasil-go": {
-   "issues": [
-    {
-     "number": 1333,
-     "title": "Feature request: using TLS, instead of FakeTLS in tls:// and wss://",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-03-24T10:45:51Z",
-     "updated_at": "2026-11-02T18:25:54Z",
-     "user": "Orbit173",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1333",
-     "body": "I know that Yggdrasil uses E2E data encryption, but as an additional layer in tls:// and wss:// schemes, FakeTLS 1.3 encryption is used to hide metadata.\nFakeTLS means that a temporary certificate is generated each time Yggdrasil is launched. The validity of this certificate is not verified by Ygg clients. This allows for a MiTM attack.\n\n[src/core/tls.go](https://github.com/yggdrasil-network/yggdrasil-go/tree/develop/src/core/tls.go)\n```\nfunc (c *Core) generateTLSConfig(cert *tls.Certificate) (*tls.Config, error) {\n\tconfig := &tls.Config{\n\t\tCertificates: []tls.Certificate{*cert},\n\t\tClientAuth:   tls.NoClientCert,\n\t\tGetClientCertificate: func(cri *tls.CertificateRequestInfo) (*tls.Certificate, error) {\n\t\t\treturn cert, nil\n\t\t},\n\t\tVerifyPeerCertificate: c.verifyTLSCertificate,\n\t\tVerifyConnection:      c.verifyTLSConnection,\n\t\tInsecureSkipVerify:    true,\n\t\tMinVersion:            tls.VersionTLS13,\n\t}\n\treturn config, nil\n}\n\nfunc (c *Core) verifyTLSCertificate(_ [][]byte, _ [][]*x509.Certificate) error {\n\treturn nil\n}\n\nfunc (c *Core) verifyTLSConnection(_ tls.ConnectionState) error {\n\treturn nil\n}\n```\n\n[src/core/link_tls.go](https://github.com/yggdrasil-network/yggdrasil-go/blob/develop/src/core/link_tls.go)\n```\ntype linkTLS struct {\n\tphony.Inbox\n\t*links\n\ttcp      *linkTCP\n\tlistener *net.ListenConfig\n\tconfig   *tls.Config\n}\n\nfunc (l *links) newLinkTLS(tcp *linkTCP) *linkTLS {\n\tlt := &linkTLS{\n\t\tlinks: l,\n\t\ttcp:   tcp,\n\t\tlistener: &net.ListenConfig{\n\t\t\tControl:   tcp.tcpContext,\n\t\t\tKeepAlive: -1,\n\t\t},\n\t\tconfig: l.core.config.tls.Clone(),\n\t}\n\treturn lt\n}\n```\n\nA simple example of MiTM using [SSLproxy](https://github.com/sonertari/SSLproxy) tool:\n10.4.4.6 (Client) , 10.4.4.10/10.5.5.10 - gateway (Attacker) and 10.5.5.5 (Server)\n\n```\nStarting main event loop.\nSNI peek: [n/a] [complete], fd=31\nConnecting to [10.5.5.5]:443\n===> Original server certificate:\nSubject DN: /C=YG/CN=0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nCommon Names: 0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nFingerprint: D7:FF:54:E6:1A:6C:CD:F3:29:87E1:8B:D4:17:DA:D7:0A:C9:6C:01\nCertificate cache: MISS\n===> Forged server certificate:\nSubject DN: /C=YG/CN=0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nCommon Names: 0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae\nFingerprint: 9C:E5:0A:52:FC:6E:82:B2:05:7E42:D0:F2:F6:EF:67:E5:91:CA:39\nCONN: ssl 10.4.4.6 37756 10.5.5.5 443 sni:- names:0c1776253aaeb16cf4c4651e031addfe3f2b5db26f82fb43ebd5990b2dd357ae sproto:TLSv1.3:TLS_AES_128_GCM_SHA256 dproto:TLSv1.3:TLS_AES_128_GCM_SHA256 origcrt:D7FF54E61A6CCDF32987E18BD417DAD70AC96C01 usedcrt:9CE50A52FC6E82B2057E42D0F2F6EF67E591CA39 user:-\nSSL connected to [10.5.5.5]:443 TLSv1.3 TLS_AES_128_GCM_SHA256\nCLIENT_RANDOM 59B962A56443027ED25643AF713B1B0A20C6F1555F75B8ECD6DA0B9D83533384 70995292118DA3214E7E11ECCBB4E53F9742DBD32762869458E838F71999DE9800000000000000000000000000000000\nSSL_free() in state 00000001 = 0001 = SSLOK (SSL negotiation finished successfully) [connect socket]\nSSL_free() in state 00000001 = 0001 = SSLOK (SSL negotiation finished successfully) [accept socket]\n```\n#### Inside TLS\n![Image](https://github.com/user-attachments/assets/2fcaedd9-379c-42cd-8dbd-9b8d553ef9c3)\n\n#### Handshake\n<img width=\"1484\" height=\"676\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1ded657f-ffa2-456f-9ad0-2a41f86e902a\" />\n\n\n### My suggestions:\n1. Add a path to certificate in yggdrasil.conf\n2. Add the key `-tlshash` when adding a peer (tls/wss), and make it mandatory.\n3. Compare `-tlshash` and server certificate hash, if not match - reject the connection.\n4. Hash output in server logs."
-    }
-   ],
-   "comments": [
-    {
-     "id": 6584953893,
-     "issue": 1333,
-     "issue_title": "Feature request: using TLS, instead of FakeTLS in tls:// and wss://",
-     "created_at": "2026-11-02T18:25:54Z",
-     "user": "Orbit173",
-     "url": "https://github.com/yggdrasil-network/yggdrasil-go/issues/1333#issuecomment-6584953893",
-     "body": "In this case, I think it would be correct to completely remove TLS support so as not to mislead users. Or explicitly state in the documentation that TLS transport does not guarantee the integrity and confidentiality of metadata !"
-    }
-   ]
+   "issues": [],
+   "comments": []
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2631,
+     "title": "torrent client: add an option to move completed torrents to another folder",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-04T19:25:01Z",
+     "updated_at": "2026-11-04T21:32:13Z",
+     "user": "Elcoid",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2631",
+     "body": "First off, thank you for writing the new bittorrent client built in i2pd. So far, it seems to be very complete and to work well!\n\nEnhancement idea:\nThere should be an option for the `[torrents]` section in the tunnels config file for specifying a directory where the torrents that are finished downloading would be moved (maybe `completeddir`?). This would be useful for exposing the completed torrents on the LAN using Lanstash or a similar tool, without the risk that someone accidentally downloads an incomplete file."
+    },
+    {
+     "number": 2632,
+     "title": "TorrentsRPC: make two msgs warnings instead of debugs",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-04T19:50:50Z",
+     "updated_at": "2026-11-04T20:11:05Z",
+     "user": "Elcoid",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2632",
+     "body": "I think seeing these messages in the log as warnings instead of having to enable debug messages makes troubleshooting easier."
+    },
     {
      "number": 2630,
      "title": "arm64 binaries for macOS?",
@@ -58,6 +58,42 @@
     }
    ],
    "comments": [
+    {
+     "id": 6642644561,
+     "issue": 2631,
+     "issue_title": "torrent client: add an option to move completed torrents to another folder",
+     "created_at": "2026-11-04T21:32:13Z",
+     "user": "Elcoid",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2631#issuecomment-6642644561",
+     "body": "Yes, but I still think it would be a nice option."
+    },
+    {
+     "id": 6642492001,
+     "issue": 2631,
+     "issue_title": "torrent client: add an option to move completed torrents to another folder",
+     "created_at": "2026-11-04T21:24:46Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2631#issuecomment-6642492001",
+     "body": "In i2pd incomplete torrents are always end with .part extension."
+    },
+    {
+     "id": 6641475743,
+     "issue": 2631,
+     "issue_title": "torrent client: add an option to move completed torrents to another folder",
+     "created_at": "2026-11-04T20:35:49Z",
+     "user": "Elcoid",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2631#issuecomment-6641475743",
+     "body": "Yes, I think so.\n\nFor example, XD works this way: a `storage.downloads` folder for incomplete torrents and a `storage.completed` folder where files are moved when the download is complete. In both cases, torrents are seeded.\n\nAdditional suggestion: If `completeddir` (or whatever it will be called) is missing or empty, then completed torrents are not moved, since some people might not want this behaviour."
+    },
+    {
+     "id": 6640992948,
+     "issue": 2631,
+     "issue_title": "torrent client: add an option to move completed torrents to another folder",
+     "created_at": "2026-11-04T20:12:55Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2631#issuecomment-6640992948",
+     "body": "Should we seed in this case?"
+    },
     {
      "id": 6620533777,
      "issue": 2630,
@@ -84,6 +120,72 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7334,
+     "title": "Docker: Download geodata from GitHub Releases",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-04T22:10:37Z",
+     "updated_at": "2026-11-04T22:49:45Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334",
+     "body": "由于 https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6633801536 导致 geosite 扩展版规则集单文件体积超过 100MiB\r\n无法推到 \"release\" 分支，不能再用 gh raw 下载，改用 gh releases\r\n\r\n检测到仍在用 xtls/xray-rules-dat 仓库 dat 版，自动迁移到 dat.gz 并打印警告"
+    },
+    {
+     "number": 7332,
+     "title": "TUN inbound: IPv6 entries in `dns` keep the TUN from starting on Windows when IPv6 cannot be set up, as in `gateway` and `autoSystemRoutingTable`",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-04T17:53:15Z",
+     "updated_at": "2026-11-04T22:44:14Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7332",
+     "body": "https://github.com/XTLS/Xray-core/pull/7325#issuecomment-6628514757\n\nAn IPv6 server in `dns` now counts like IPv6 in `gateway` and `autoSystemRoutingTable`: when IPv6 can't be set up, the TUN doesn't start, instead of silently dropping that server.\n"
+    },
+    {
+     "number": 4809,
+     "title": "Workflows: Cleaner Docker builds, support for manual exec and pre-release",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2025-06-11T14:27:02Z",
+     "updated_at": "2026-11-04T22:13:51Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/4809",
+     "body": "- 中间产物用 digest 而非 -usa 这种临时标签来标记，这样不污染 registry，专治 @RPRX 强迫症\r\n- pre-release 时不打 latest 标签，只有版本号\r\n- pre-release 转为 latest 时自动打 latest\r\n- 支持手动运行\r\n\r\n---\r\n\r\n![image](https://github.com/user-attachments/assets/5f036d6d-0aae-4097-aef2-d309547a86f6)"
+    },
+    {
+     "number": 7331,
+     "title": "XHTTP client: Send only http/1.1 ALPN with uTLS fingerprint when using HTTP/1.1",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-04T17:30:37Z",
+     "updated_at": "2026-11-04T22:00:45Z",
+     "user": "barney2022",
+     "url": "https://github.com/XTLS/Xray-core/pull/7331",
+     "body": "## Problem\n\nXHTTP client with TLS, `\"alpn\": [\"http/1.1\"]` and any uTLS `fingerprint` (including the default, since an empty fingerprint now means `chrome`) never works:\n\n```\ntransport/internet/splithttp: failed to GET https://example.com/path/ > Get \"...\": net/http: HTTP/1.x transport connection broken: malformed HTTP response \"\\x00\\x00\\x12\\x04\\x00\\x00...\"\n```\n\n`decideHTTPVersion()` picks HTTP/1.1 from the configured ALPN, but the dialer calls `UConn.HandshakeContext()`, so the ClientHello carries the fingerprint's own ALPN. A packet capture shows `h2, http/1.1` in the ClientHello although the config only has `http/1.1`. Any h2-capable server (nginx with `http2 on`, Cloudflare) then negotiates h2 and answers with a SETTINGS frame, which Go's HTTP/1.1 transport cannot parse.\n\nWS, HTTPUpgrade and RAW already handle this case with `WebsocketHandshakeContext()`, which rewrites the uTLS ALPN extension to `http/1.1` (and keeps the existing ECH behavior).\n\n## Fix\n\nUse `WebsocketHandshakeContext()` in the XHTTP dialer when the HTTP version is 1.1. Other HTTP versions are unchanged.\n\n## Testing\n\nClient: XHTTP + TLS, mode `auto` (resolves to `packet-up` for HTTP/1.1). Server: nginx (`http2 on`, `grpc_pass` to the XHTTP inbound), both direct and behind Cloudflare.\n\n| alpn | fingerprint | before | after |\n|---|---|---|---|\n| `http/1.1` | chrome | fails, malformed HTTP response | works |\n| `http/1.1` | firefox | fails, malformed HTTP response | works |\n| `h2` | chrome / firefox | works | works |\n\n`go test ./transport/internet/splithttp/ ./transport/internet/tls/` passes.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
+    },
+    {
+     "number": 7318,
+     "title": "VMess outbound ends the request when the client sends nothing for 100 ms (`TimeoutWrapperReader` returns no error on timeout)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-02T17:16:03Z",
+     "updated_at": "2026-11-04T21:45:20Z",
+     "user": "lika-vorobeva",
+     "url": "https://github.com/XTLS/Xray-core/issues/7318",
+     "body": "### What happens\n\nWith an inbound that dispatches through `DispatchLink`, such as SOCKS, and a VMess outbound, a TCP connection whose\nclient sends nothing in its first 100 ms (about 300 ms with sniffing on) has its request ended for it. The VMess server reads the end of the request body, data the client sends afterwards never reaches the destination, and the connection is closed 1 to 2 s after the destination's last data (the server's `downlinkOnly` timeout).\n\nProtocols where the server speaks first break: an SSH client that waits for the server's banner, SMTP, IMAP and POP3 without implicit TLS, FTP, MySQL. Clients that speak first (HTTP, TLS) are not affected.\n\n### Cause\n\n`TimeoutWrapperReader.ReadMultiBufferTimeout` in `common/buf/io.go` returns `nil, nil` when its wait runs out, where`pipe.Reader` returns `buf.ErrReadTimeout`, as the interface it implements says:\n\n```go\n// TimeoutReader is a reader that returns error if Read() operation takes longer than the given timeout.\n```\n```go\n\tcase <-timeout:\n\t\treturn nil, nil\n```\n\n`WrapLink` puts the reader of every link passed to `DispatchLink` behind this wrapper. The VMess outbound's first-payload step then gets no error:\n\n```go\nif err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {\n```\n\nso `CopyOnceTimeout` passes the empty `MultiBuffer` to `bodyWriter.WriteMultiBuffer`, and\n`AuthenticationWriter.WriteMultiBuffer` (`common/crypto/auth.go`) seals an empty buffer as an empty chunk: the VMess server takes it as the end of the request body. With sniffing on, the sniffer's 200 ms wait comes first, then the outbound's 100 ms.\n\n### Reproduction\n\n1. Server: a VMess inbound over TCP, a `freedom` outbound, no `policy`.\n2. Client: a SOCKS inbound on `127.0.0.1:10808` (sniffing on or off) and a VMess outbound to the server.\n3. Through the SOCKS port, connect to an SSH server and send the client's line half a second in, as a client that waits for the banner does, keeping the connection open:\n   `(sleep 0.5; printf 'SSH-2.0-test\\r\\n'; sleep 10) | nc -X 5 -x 127.0.0.1:10808 <ssh-server> 22`\n\nExpected: after the banner, the SSH server answers with its key exchange, and the connection stays open until the server or `nc` closes it.\n\nActual: the banner arrives, nothing comes back for the line, and the connection is closed 1 to 2 s after the banner.\nSending nothing ends the same way. Without the `sleep 0.5`, the server answers and the connection stays open.\n\n### Fix\n\n```diff\n--- a/common/buf/io.go\n+++ b/common/buf/io.go\n@@ -73,7 +73,7 @@\n \t\t}\n \t\treturn r.mb, r.err\n \tcase <-timeout:\n-\t\treturn nil, nil\n+\t\treturn nil, ErrReadTimeout\n \t}\n }\n```\n\nThis is `pipe.Reader`'s behaviour, and every caller already handles it: `CopyOnceTimeout` in the VMess, Trojan and Shadowsocks outbounds and in mux, the VLESS outbound's first-payload read, and the dispatcher's sniffer, which then stops at its first timed-out wait, after the same 200 ms. With the change, the reproduction above works: the late line reaches the server, which answers, and the connection stays open.\n\n### Versions\n\nSince v25.8.29: the wrapper came with the move of the SOCKS, HTTP and Tunnel inbounds to `DispatchLink` (`56a45ad578`), and returns `nil, nil` on timeout from its first version. Still on `main` at `7c8dbcb4bb`. Seen with a build of commit\n`52a412d9e2f5`.\n\n### Related\n\n#7233 met the same `nil, nil` from the sniffer's side, treated an empty read as a valid result and changed only the sniffer (closed, not merged). VMess cannot take it that way: its empty write ends the request. #7238 fixed another place where a reader passed to `DispatchLink` behaves unlike a pipe.\n"
+    },
+    {
+     "number": 7327,
+     "title": "common/buf/io.go: TimeoutWrapperReader returns ErrReadTimeout when timeout",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-03T15:45:52Z",
+     "updated_at": "2026-11-04T21:45:19Z",
+     "user": "dajiaohuang",
+     "url": "https://github.com/XTLS/Xray-core/pull/7327",
+     "body": "Fixes #7318.\n\nWhen `TimeoutWrapperReader` reaches its deadline, returning `(nil, nil)` makes `CopyOnceTimeout` treat the timeout as a successful empty read and write an empty request body. For VMess, that seals the request before a server-first client sends payload.\n\nReturn `ErrReadTimeout` to preserve the timeout contract. The current VMess, Trojan, Shadowsocks, and mux callers already handle this error as an expected timeout.\n\nChecks: not run (no target-required check was specified for this one-line correction).\n"
+    },
     {
      "number": 7208,
      "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
@@ -112,21 +214,10 @@
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-10-17T06:19:36Z",
-     "updated_at": "2026-11-04T15:34:29Z",
+     "updated_at": "2026-11-04T20:10:16Z",
      "user": "KobeArthurScofield",
      "url": "https://github.com/XTLS/Xray-core/pull/7185",
      "body": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173654844\nhttps://github.com/XTLS/Xray-core/pull/5824#issuecomment-6173813105\n\n不要求下游跟进\n\n因为现在 GitHub Actions 的定时任务不太准时，因此不更改更新频率"
-    },
-    {
-     "number": 7327,
-     "title": "common/buf: report timeout from wrapper reader",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-03T15:45:52Z",
-     "updated_at": "2026-11-04T15:05:31Z",
-     "user": "dajiaohuang",
-     "url": "https://github.com/XTLS/Xray-core/pull/7327",
-     "body": "Fixes #7318.\n\nWhen `TimeoutWrapperReader` reaches its deadline, returning `(nil, nil)` makes `CopyOnceTimeout` treat the timeout as a successful empty read and write an empty request body. For VMess, that seals the request before a server-first client sends payload.\n\nReturn `ErrReadTimeout` to preserve the timeout contract. The current VMess, Trojan, Shadowsocks, and mux callers already handle this error as an expected timeout.\n\nChecks: not run (no target-required check was specified for this one-line correction).\n"
     },
     {
      "number": 7329,
@@ -178,7 +269,7 @@
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-11-03T13:03:16Z",
-     "updated_at": "2026-11-04T10:37:53Z",
+     "updated_at": "2026-11-04T17:54:10Z",
      "user": "YOIMIYA66",
      "url": "https://github.com/XTLS/Xray-core/pull/7325",
      "body": "### Problem Description\nOn Windows 11 24H2 (OS Build 26100+), starting Xray in native TUN mode fails with:\n```\nproxy/tun: xray_tun up: failed to set dns: Access is denied.\n```\n\n### Root Cause Analysis\n1. In Windows 11 24H2, the NSI/TCP stack allocates an MIB row for IPv6 on newly created Wintun virtual adapters even if IPv6 is systemically disabled or has `DisabledComponents = 0x28`.\n2. As a result, `t.luid.IPInterface(windows.AF_INET6)` returns `nil` instead of `windows.ERROR_NOT_FOUND`.\n3. Execution then reaches `t.luid.SetDNS(windows.AF_INET6, dns, nil)`, which invokes `SetInterfaceDnsSettings` with `DNS_INTERFACE_SETTINGS_VERSION1` and `DNS_SETTING_IPV6`.\n4. Windows kernel rejects this call with Win32 Error 5 (`ERROR_ACCESS_DENIED`) because the Wintun interface possesses no unicast IPv6 address (`unicastAddresses` is empty).\n\n### Changes in this PR\n1. **Guard Loop by Configured State**: Check whether the address or route is actually configured for the protocol family. If neither `address` nor `route` is present, safely skip `IPInterface` and `SetDNS`.\n2. **SetDNS Guard by Unicast Address**: Skip `SetDNS()` on families without assigned unicast IP addresses, which prevents Win32 Error 5.\n3. **Preserve Empty DNS Clearing Semantics**: Distribute configured DNS servers into `familyDNS`. If an addressed family is provided with an empty DNS list, it still passes the empty slice to `SetDNS()` to clear existing DNS servers, maintaining proper DNS lifecycle semantics.\n\n### Test Verification\nTested on Windows 11 24H2 (Build 26100.2161) with Wintun 0.14.1 across 6 scenarios:\n- [x] **IPv4-only TUN**: Successfully creates and configures the adapter without `Access is denied`.\n- [x] **Dual-stack IPv4 + IPv6**: Correctly applies routes and DNS to both families.\n- [x] **IPv4 DNS + IPv6 Route (`::/0`)**: Sets IPv4 DNS while skipping IPv6 `SetDNS` on unaddressed IPv6 interface.\n- [x] **Empty DNS clearing**: Correctly passes empty slice to addressed interfaces to reset DNS.\n- [x] **Process SIGKILL & rapid restart**: Rapid recovery on existing adapter name without registry corruption.\n- [x] **External IPv6 leak prevention**: WFP block leak rules verified 100% effective.\n"
@@ -646,17 +737,6 @@
      "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
     },
     {
-     "number": 4809,
-     "title": "Workflows: Cleaner Docker builds, support for manual exec and pre-release",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2025-06-11T14:27:02Z",
-     "updated_at": "2026-11-04T02:57:22Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/4809",
-     "body": "- 中间产物用 digest 而非 -usa 这种临时标签来标记，这样不污染 registry，专治 @RPRX 强迫症\r\n- pre-release 时不打 latest 标签，只有版本号\r\n- pre-release 转为 latest 时自动打 latest\r\n- 支持手动运行\r\n\r\n---\r\n\r\n![image](https://github.com/user-attachments/assets/5f036d6d-0aae-4097-aef2-d309547a86f6)"
-    },
-    {
      "number": 7328,
      "title": "Bump github.com/klauspost/cpuid/v2 from 2.4.1 to 2.4.2",
      "is_pr": true,
@@ -688,42 +768,189 @@
      "user": "funhunter",
      "url": "https://github.com/XTLS/Xray-core/issues/7240",
      "body": "### 完整性要求 / Integrity Requirements\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n- [x] I have read all the notes in the issue template and ensured my submission meets the requirements.\n- [x] I guarantee that I have read the documentation and understand the meaning of all the configuration file entries I have written, rather than simply stacking a large number of potentially useful options or defaults.\n- [x] I have provided the complete configuration file and logs, rather than just providing snippets based on my own judgment.\n- [x] I have searched the issues and have not found a similar issue already reported.\n- [x] The issue can be successfully reproduced in the latest Release version.\n\n### 描述 / Description\n\n最新版[Xray-core v26.10.21] 无法连接 127.0.0.1:10068 ssh 端口\n我在服务器端，nc -zv 127.0.0.1 10068\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\n说明127.0.0.1:10068 是正常的\n\n我上一个版本Xray-core v26.3.27,没有这个问题\nconfig.json配置文件没有任何改变\n\nThe latest version [Xray-core v26.10.21] is unable to connect to the 127.0.0.1:10068 SSH port.\nOn the server side, running `nc -zv 127.0.0.1 10068` yields:\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\nThis indicates that 127.0.0.1:10068 is functioning correctly.\n\nI did not have this problem in the previous version, Xray-core v26.3.27.\nThe config.json configuration file has not been changed.\n\n### 重现方式 / Steps to Reproduce\n\n我想通过xray vless tcp tls vison 连接服务器的10068 ssh 端口，我将转发地址设置为127.0.0.1\n我在本地客户端配置了\n\nI want to connect to the server's 10068 SSH port via xray vless tcp tls vision, and I have set the forwarding address to 127.0.0.1.\nI configured the local client as follows:\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"127.0.0.1\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n服务器通过freedom 发出，测试时，没有其他任何路由规则\n\n然后通过命令 ssh -p 2503 root@127.0.0.1， 2503是我本地dokodemo-door 监听地址\n实际效果是，ssh 连接失败\n\n修改客户端配置，127.0.0.1改为服务器实际公网ip，例如 \"address\": \"xxx.xx.x.x\",\n\nThe server sends traffic via freedom, and there are no other routing rules during testing.\n\nThen, I run the command `ssh -p 2503 root@127.0.0.1`, where 2503 is the address my local dokodemo-door is listening on.\nThe actual result is that the SSH connection fails.\n\nModifying the client configuration by changing 127.0.0.1 to the server's actual public IP, e.g., \"address\": \"xxx.xx.x.x\":\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"xxx.xx.x.x\",\n    \"port\": 22,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n然后，还是这条命令， ssh -p 2503 root@127.0.0.1 连接成功\n\n我上一个版本Xray-core v26.3.27,没有这个问题\n\nThen, using the same command, `ssh -p 2503 root@127.0.0.1`, the connection succeeds.\n\nI did not have this problem in the previous version, Xray-core v26.3.27.\n\n### 客户端配置 / Client Configuration\n\n原客户端配置\n\nOriginal client configuration\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"127.0.0.1\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n修改后客户端配置\n\nModified client configuration\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"x.x.x.x\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n### 服务端配置 / Server Configuration\n\n```json\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\"\n    },\n```\n\n### 客户端日志 / Client Logs\n\n```log\n2026/10/23 14:33:39.242258 [Info] [3883811706] transport/internet/tcp: dialing TCP to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.242262 [Debug] [3883811706] transport/internet: dialing to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.276779 [Info] [3883811706] proxy/vless/outbound: tunneling request to tcp:127.0.0.1:10068 via x.x.x.x:xxxx\n```\n\n### 服务端日志 / Server Logs\n\n```log\n2026/10/23 14:00:02.512766 [Warning] core: Xray 26.10.21 started\n2026/10/23 14:01:06.327524 [Info] [450590513] "
-    },
-    {
-     "number": 7316,
-     "title": "XDRIVE transport: Retry \"local\" Get on Windows sharing violations",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-02T10:38:41Z",
-     "updated_at": "2026-11-02T22:02:23Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7316",
-     "body": "Fixes a Windows-only flake in `transport/internet/xdrive`, seen in a full `go test ./...` run:\n\n```\nxdrive_test.go:143: ReadFull: transport/internet/xdrive: failed to read streams/<id>/c2s/000000001.seg > open ...\\000000001.seg: The process cannot access the file because it is being used by another process.\n```\n\n### Cause\n\nIt's Go's own rename, not Defender. On Windows, `os.Rename` (`MoveFileEx`) opens the file with `DELETE` access, renames it, then closes that handle, but the new name already shows up in directory listings before the close. `os.ReadFile` opens files without `FILE_SHARE_DELETE`, so opening the file in that moment fails with `ERROR_SHARING_VIOLATION`. The WAL reader `Get`s each segment as soon as `List` shows it, and any error other than \"not found\" ends the stream.\n\nMeasured on Windows 11 (Defender real-time protection on, 22 logical CPUs) with a reader that keeps opening the new name during each rename:\n\n- 98.6% of 5,001 renames hit the error, and every failed open started before `MoveFileEx` returned.\n- None failed once `FILE_SHARE_DELETE` was added to the open.\n- The window is about 0.3 ms when idle, but 10 ms median and up to 124 ms with all CPUs busy, which is why it shows up in full test runs.\n\nWith all CPUs busy (22 busy-loop processes), `TestRoundTrip`, `TestMultiSegmentTransfer`, `TestInterleaved` and `TestCloseEOF` failed 4 of 60 runs before this change and 0 of 120 after.\n\n### Change\n\n- On Windows, `Get` in the \"local\" backend (`\"service\": \"local\"`) retries `os.ReadFile` on `ERROR_SHARING_VIOLATION` for up to 2 seconds, as `cmd/internal/robustio` does. It backs off from 1 ms to 100 ms and stops early once `ctx` is done. Other errors return at once, as before, and a violation that doesn't clear still fails after 2 seconds.\n- Other platforms still call `os.ReadFile` once.\n- New `TestLocalSharingViolation` holds a segment open with `DELETE` access, as `MoveFileEx` does, and checks that `Get` returns the sharing violation while the file is held and succeeds once the handle is closed.\n\n### Not changed\n\n- No `FILE_SHARE_DELETE` open: it would avoid the conflict, but `os.Open` can't set the share mode, and calling `CreateFile` directly would skip `os.Open`'s long-path handling.\n- `Put`'s rename isn't retried: none of about 63,000 renames failed during these measurements, idle or under load.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-    },
-    {
-     "number": 7315,
-     "title": "TUN inbound's `autoSystemWfpBlockLeak`: Add \"all\", \"allexceptlan\", port alone, port range, \"tcp\"/\"udp\" alone or with port range, \"icmp\", and a CIDR in front of any value; Always allow loopback, DHCP and IPv6 neighbor discovery",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-02T08:47:00Z",
-     "updated_at": "2026-11-02T21:40:37Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7315",
-     "body": "autoSystemWfpBlockLeak now also takes:\r\n\r\n- \"all\": everything outside the TUN, IPv4 and IPv6, in both directions, so nothing but Xray leaves except through the TUN.\r\n- \"allexceptlan\": like \"all\", but traffic to and from the local network stays allowed (see below).\r\n- \"tcp\", \"udp\": all ports of that protocol.\r\n- \"tcp/<low>-<high>\", \"udp/<low>-<high>\": a range of ports, both ends within 1-65535, the left not greater than the right.\r\n- \"<port>\" or \"<low>-<high>\" alone: TCP and UDP, e.g. \"53\" or \"10-20\". \"dns\" now stands for \"53\", \"853\" and \"windnsclient\".\r\n- \"icmp\": ICMP and ICMPv6, e.g. ping.\r\n- A CIDR in front of any value, to limit it to those addresses, an IPv6 one in brackets, e.g. \"1.1.1.0/24:53\", \"[2001:db8::/32]:tcp/853\", \"8.8.8.8/32:all\", \"0.0.0.0/0:icmp\" (IPv4 only) or \"[::/0]:misconfigtun\" (IPv6 only). It limits what the value stands for or includes as well: \"0.0.0.0/0:dns\" is \"0.0.0.0/0:53\", \"0.0.0.0/0:853\" and \"0.0.0.0/0:windnsclient\". Like autoSystemRoutingTable, it takes CIDRs only (a single address as \"8.8.8.8/32\") and no GeoIP; IPv4-mapped IPv6 ones are refused, as Windows checks such connections as IPv4. Without one, a value covers all addresses, as before.\r\n\r\n\"allexceptlan\" keeps printers, the router's settings page, casting to a TV, etc. working: private (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, fc00::/7), link-local (169.254.0.0/16, fe80::/10), multicast (224.0.0.0/4, ff00::/8) and broadcast (255.255.255.255) addresses stay allowed in both directions. It includes \"dns\", so DNS on the local network stays blocked, as a resolver there (like the router) would forward the queries outside the TUN, and the other values still apply there, e.g. \"tcp/445\" blocks Windows file sharing, and \"192.168.1.5/32:all\" one device. \"0.0.0.0/0:allexceptlan\" includes \"0.0.0.0/0:dns\" only, so \"dns\" has to be added to block DNS over IPv6 as well. \"all\" overrides it.\r\n\r\nValues are normalized: lower case, \"tcp/1-65535\" becomes \"tcp\", \"tcp/53-53\" becomes \"tcp/53\", CIDRs are masked (\"1.1.1.1/24:53\" becomes \"1.1.1.0/24:53\"), and repeated values are dropped.\r\n\r\nWhatever is blocked, loopback, which cannot leave the system, and what Windows itself needs on the local link always stay allowed: DHCP, DHCPv6, and IPv6 neighbor and multicast listener discovery. Before, these were only allowed along with \"misconfigtun\"; otherwise \"udp\" or \"icmp\" would cut DHCP or IPv6 neighbor discovery, and \"tcp\" any local proxy, Xray's own inbounds included. With \"dns\", a local resolver on 127.0.0.1:53 now works for other programs as well (its own queries to port 53 or 853 outside the TUN stay blocked), and it can be the TUN's dns server: loopback servers no longer get the \"blocked\" warning, and the warning only names servers that a value actually blocks.\r\n\r\nThe filters, from the heaviest, which wins:\r\n1. Permit Xray, by its app ID.\r\n2. Permit loopback, DHCP, DHCPv6, IPv6 neighbor discovery, and everything through the TUN (one permit per layer, in both directions).\r\n3. Block what the values say: protocols and ports, \"all\", and \"misconfigtun\" over an IP version without routes to the TUN.\r\n4. Permit the DNS Client service's mDNS and LLMNR on the local network.\r\n5. Block the DNS Client service (\"windnsclient\").\r\n6. Permit the local network (\"allexceptlan\").\r\n7. Block everything (\"all\").\r\n\r\n\"allexceptlan\" is the two lightest filters: 7 blocks everything, and 6 lets the local network through. Every other value is heavier, so it still applies on the local network: e.g. the \"53\" that \"allexceptlan\" brings along blocks the router's DNS, and \"192.168.1.5/32:all\" blocks that one device. Likewise, 4 lets mDNS and LLMNR past \"windnsclient\" (5), but not past another value (3) like \"udp\". So adding a value can only block more, never open what another value blocks.\r\n\r\nDependencies on other TUN options:\r\n- \"all\", \"allexceptlan\", \"dns\", \"windnsclient\", or anything covering TCP or UDP port 53, even to some addresses only (\"udp\", \"53\", \"1.1.1.1/32:53\", \"[::/0]:all\", \"tcp/50-60\", "
-    },
-    {
-     "number": 7318,
-     "title": "VMess outbound ends the request when the client sends nothing for 100 ms (`TimeoutWrapperReader` returns no error on timeout)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-02T17:16:03Z",
-     "updated_at": "2026-11-02T17:20:04Z",
-     "user": "lika-vorobeva",
-     "url": "https://github.com/XTLS/Xray-core/issues/7318",
-     "body": "### What happens\n\nWith an inbound that dispatches through `DispatchLink`, such as SOCKS, and a VMess outbound, a TCP connection whose\nclient sends nothing in its first 100 ms (about 300 ms with sniffing on) has its request ended for it. The VMess server reads the end of the request body, data the client sends afterwards never reaches the destination, and the connection is closed 1 to 2 s after the destination's last data (the server's `downlinkOnly` timeout).\n\nProtocols where the server speaks first break: an SSH client that waits for the server's banner, SMTP, IMAP and POP3 without implicit TLS, FTP, MySQL. Clients that speak first (HTTP, TLS) are not affected.\n\n### Cause\n\n`TimeoutWrapperReader.ReadMultiBufferTimeout` in `common/buf/io.go` returns `nil, nil` when its wait runs out, where`pipe.Reader` returns `buf.ErrReadTimeout`, as the interface it implements says:\n\n```go\n// TimeoutReader is a reader that returns error if Read() operation takes longer than the given timeout.\n```\n```go\n\tcase <-timeout:\n\t\treturn nil, nil\n```\n\n`WrapLink` puts the reader of every link passed to `DispatchLink` behind this wrapper. The VMess outbound's first-payload step then gets no error:\n\n```go\nif err := buf.CopyOnceTimeout(input, bodyWriter, time.Millisecond*100); err != nil && err != buf.ErrNotTimeoutReader && err != buf.ErrReadTimeout {\n```\n\nso `CopyOnceTimeout` passes the empty `MultiBuffer` to `bodyWriter.WriteMultiBuffer`, and\n`AuthenticationWriter.WriteMultiBuffer` (`common/crypto/auth.go`) seals an empty buffer as an empty chunk: the VMess server takes it as the end of the request body. With sniffing on, the sniffer's 200 ms wait comes first, then the outbound's 100 ms.\n\n### Reproduction\n\n1. Server: a VMess inbound over TCP, a `freedom` outbound, no `policy`.\n2. Client: a SOCKS inbound on `127.0.0.1:10808` (sniffing on or off) and a VMess outbound to the server.\n3. Through the SOCKS port, connect to an SSH server and send the client's line half a second in, as a client that waits for the banner does, keeping the connection open:\n   `(sleep 0.5; printf 'SSH-2.0-test\\r\\n'; sleep 10) | nc -X 5 -x 127.0.0.1:10808 <ssh-server> 22`\n\nExpected: after the banner, the SSH server answers with its key exchange, and the connection stays open until the server or `nc` closes it.\n\nActual: the banner arrives, nothing comes back for the line, and the connection is closed 1 to 2 s after the banner.\nSending nothing ends the same way. Without the `sleep 0.5`, the server answers and the connection stays open.\n\n### Fix\n\n```diff\n--- a/common/buf/io.go\n+++ b/common/buf/io.go\n@@ -73,7 +73,7 @@\n \t\t}\n \t\treturn r.mb, r.err\n \tcase <-timeout:\n-\t\treturn nil, nil\n+\t\treturn nil, ErrReadTimeout\n \t}\n }\n```\n\nThis is `pipe.Reader`'s behaviour, and every caller already handles it: `CopyOnceTimeout` in the VMess, Trojan and Shadowsocks outbounds and in mux, the VLESS outbound's first-payload read, and the dispatcher's sniffer, which then stops at its first timed-out wait, after the same 200 ms. With the change, the reproduction above works: the late line reaches the server, which answers, and the connection stays open.\n\n### Versions\n\nSince v25.8.29: the wrapper came with the move of the SOCKS, HTTP and Tunnel inbounds to `DispatchLink` (`56a45ad578`), and returns `nil, nil` on timeout from its first version. Still on `main` at `7c8dbcb4bb`. Seen with a build of commit\n`52a412d9e2f5`.\n\n### Related\n\n#7233 met the same `nil, nil` from the sniffer's side, treated an empty read as a valid result and changed only the sniffer (closed, not merged). VMess cannot take it that way: its empty write ends the request. #7238 fixed another place where a reader passed to `DispatchLink` behaves unlike a pipe.\n"
     }
    ],
    "comments": [
+    {
+     "id": 6643930058,
+     "issue": 7332,
+     "issue_title": "TUN inbound: IPv6 entries in `dns` keep the TUN from starting on Windows when IPv6 cannot be set up, as in `gateway` and `autoSystemRoutingTable`",
+     "created_at": "2026-11-04T22:37:25Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6643930058",
+     "body": "> How is this different from reverting to the behavior prior to [#7325 ?](https://github.com/XTLS/Xray-core/pull/7325)\r\n\r\nSetting no IPv6 DNS in the `dns` list doesn't mean doing nothing for IPv6 DNS; it means clearing it.\r\n\r\nSo before #7325, on some systems with globally disabled IPv6 or where changing IPv6 settings is prohibited, we encountered an error when setting up the TUN, because Xray tried to clear IPv6 DNS that doesn't exist at all or that we don't have access to.\r\n\r\nNow, with this PR, when users don't set IPv6 at all (in `gateway`, `autoSystemRoutingTable` or `dns`), we just ignore the error from clearing the IPv6 DNS. Otherwise we still return the error.\r\n\r\nIn #7325, we only looked at `gateway` and `autoSystemRoutingTable`, and if they had no IPv6, we ignored the error from setting the IPv6 DNS. The change relative to #7325: now, if users set IPv6 in the `dns` list, we don't ignore the error from setting the IPv6 DNS, even if `gateway` and `autoSystemRoutingTable` have no IPv6."
+    },
+    {
+     "id": 6643919007,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:36:51Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643919007",
+     "body": "https://github.com/XTLS/Xray-core/pull/6470"
+    },
+    {
+     "id": 6643905695,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:36:09Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643905695",
+     "body": "我要 link"
+    },
+    {
+     "id": 6643781644,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:29:43Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643781644",
+     "body": "因为 gh 的 ci 搞的一坨 xx 现在能稳定联动做了很多 workaround\r\n因此必须搞个新的 ci 不能在之前上面弄，当时结论是应该在新仓库做 nightly\r\ndocker tag 类似于 git 移到别的 hash 上，旧的还在也不会自动删除"
+    },
+    {
+     "id": 6643723113,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:26:38Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643723113",
+     "body": "~~你找下那个讨论贴看看讨论了什么，之前想弄成直接挤掉 docker tag 但据说不行，必须要先传成 image hash~~"
+    },
+    {
+     "id": 6643683981,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:24:35Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643683981",
+     "body": "看以前 sha- 就知道了没啥下载量\r\n还会污染仓库，除非搞个新的包 ghcr.io/xtls/xray-core-nightly"
+    },
+    {
+     "id": 6643666247,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:23:39Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643666247",
+     "body": "~~虽然话说之前似乎说 release 也要搞 nightly build，不知道合不合适~~"
+    },
+    {
+     "id": 6643618285,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:21:07Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643618285",
+     "body": "~~那你先清吧，sha-xxx 没多少下载量~~"
+    },
+    {
+     "id": 6643609160,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:20:38Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643609160",
+     "body": "删不掉的，除非你给 GH 开工单，巨麻烦应该\r\n清干净 sha- 之后其实还好"
+    },
+    {
+     "id": 6643593871,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:19:50Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643593871",
+     "body": "> 下载次数超 5000 就不让删了 那个 ci 只能删除之前留下的 n 多每次合并到 main 留下的无人下载的镜像\r\n\r\n那你先把 sha- 的 action 删了，然后下次发版前我删掉整个包重来？"
+    },
+    {
+     "id": 6643558279,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:17:59Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643558279",
+     "body": "> 万一用户喜欢用别人的规则集\r\n\r\n~~那就检测到 Xray-rules-dat 字样就自动加 .gz 后缀，需要 URL 重组~~"
+    },
+    {
+     "id": 6643555946,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:17:52Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643555946",
+     "body": "下载次数超 5000 就不让删了\r\n那个 ci 只能删除之前留下的 n 多每次合并到 main 留下的无人下载的镜像"
+    },
+    {
+     "id": 6643534246,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:16:45Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643534246",
+     "body": "> 以及 [#4809 (comment)](https://github.com/XTLS/Xray-core/pull/4809#issuecomment-6510221797) 待批准\r\n\r\n这个我也想清掉，顺便每个 commit 的 build 就别弄了，~~其实可以把整个包删掉重来，只留 v26.10.31~~"
+    },
+    {
+     "id": 6643505201,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:15:16Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643505201",
+     "body": "万一用户喜欢用别人的规则集"
+    },
+    {
+     "id": 6643493104,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:14:39Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643493104",
+     "body": "既然有 .gz 了干脆就只允许下载 .dat.gz 吧，.dat 只供这里打包用"
+    },
+    {
+     "id": 6643492241,
+     "issue": 7334,
+     "issue_title": "Docker: Download geodata from GitHub Releases",
+     "created_at": "2026-11-04T22:14:37Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7334#issuecomment-6643492241",
+     "body": "以及 https://github.com/XTLS/Xray-core/pull/4809#issuecomment-6510221797 待批准"
+    },
+    {
+     "id": 6643376103,
+     "issue": 7332,
+     "issue_title": "TUN inbound: IPv6 entries in `dns` keep the TUN from starting on Windows when IPv6 cannot be set up, as in `gateway` and `autoSystemRoutingTable`",
+     "created_at": "2026-11-04T22:08:39Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6643376103",
+     "body": "这和回退到 https://github.com/XTLS/Xray-core/pull/7325 之前的行为有什么区别？"
+    },
+    {
+     "id": 6643215132,
+     "issue": 7331,
+     "issue_title": "XHTTP client: Send only http/1.1 ALPN with uTLS fingerprint when using HTTP/1.1",
+     "created_at": "2026-11-04T22:00:44Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7331#issuecomment-6643215132",
+     "body": "https://github.com/XTLS/Xray-core/discussions/4113 设计如此，XHTTP ALPN 选仅 `http/1.1` 只决定内层 HTTP 版本、不影响 uTLS 指纹，适用于服务端只支持 h1 的情况\r\n\r\n[即使不久后这样改](https://github.com/XTLS/Xray-core/pull/7170#issuecomment-6204133548)，XHTTP 也不会支持 uTLS 指纹的 ALPN 仅有 `http/1.1`"
+    },
+    {
+     "id": 6640936674,
+     "issue": 7185,
+     "issue_title": "GitHub Actions: Switch geodata to XTLS/Xray-rules-dat",
+     "created_at": "2026-11-04T20:10:15Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7185#issuecomment-6640936674",
+     "body": "我把 https://xtls.github.io/tools/geofileviewer.html 的回退调了下顺序\r\n优先 ghraw 免得 jsdelivr 缓存，方便你改完之后马上看得到结果，这样就没必要看 yml 了\r\n会使用 fastly.jsdelivr.net 而不是 cdn.jsdelivr.net 因为后者被封锁了\r\n\r\n现在的 release 分支的职责其实就是给它服务\r\n大 dat 就是尽力而为，超限了就不推，主要是老旧浏览器不支持 gzip api 否则可以删掉 root 下的 dat\r\n\r\nrelease 分支的另一个职责就是极少数人想要下载某些单分类或增量 dat"
+    },
+    {
+     "id": 6637932641,
+     "issue": 7325,
+     "issue_title": "TUN inbound: Ignore `dns` IPv6 setup error when neither `gateway` nor `autoSystemRoutingTable` has an IPv6 entry on Windows",
+     "created_at": "2026-11-04T17:54:09Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7325#issuecomment-6637932641",
+     "body": "> @patterniha 更新文档 [XTLS/Xray-docs-next#903](https://github.com/XTLS/Xray-docs-next/pull/903)\r\n> \r\n> 虽然这么改跟 `autoSystemWfpBlockLeak` \"misconfigtun\" 一样抽象，如果用户那两项都没配置 IPv6，为什么配置 IPv6 `dns`？\r\n> \r\n> 况且 `gateway` 都没有 IPv6 的话，`dns` 有 IPv6 真的实际有用吗？以及 Windows 上自动分配 `gateway`，这个判断结果可靠吗？\r\n> \r\n> 再说如果 IPv6 被系统级 disable 了，`gateway` 和 `autoSystemRoutingTable` 含 IPv6 不退出吗？为什么 `dns` 搞特殊？\r\n> \r\n> ~如果追求即使 IPv6 被系统级 disable 了，那些设置项含 IPv6 也不会阻止 TUN 启动，也不是这么改，虽然可能不该追求这个~\r\n\r\nXray sets the TUN's IPv6 DNS on every start, and just clears it when `dns` has no IPv6 server or isn't set at all. That clearing is what failed for the reporter, so even a TUN with no IPv6 anywhere couldn't start. The check is the same as for the missing IPv6 interface, so it doesn't depend on the addresses Windows assigns.\r\n\r\nBut you're right that `dns` shouldn't be special: in https://github.com/XTLS/Xray-core/pull/7332, IPv6 servers in `dns` also keep the TUN from starting, like IPv6 in `gateway` and `autoSystemRoutingTable`. Docs updated in XTLS/Xray-docs-next#903."
+    },
     {
      "id": 6634955793,
      "issue": 7208,
@@ -772,7 +999,7 @@
     {
      "id": 6634105144,
      "issue": 7327,
-     "issue_title": "common/buf: report timeout from wrapper reader",
+     "issue_title": "common/buf/io.go: TimeoutWrapperReader returns ErrReadTimeout when timeout",
      "created_at": "2026-11-04T15:05:31Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7327#issuecomment-6634105144",
@@ -808,7 +1035,7 @@
     {
      "id": 6631618371,
      "issue": 7327,
-     "issue_title": "common/buf: report timeout from wrapper reader",
+     "issue_title": "common/buf/io.go: TimeoutWrapperReader returns ErrReadTimeout when timeout",
      "created_at": "2026-11-04T13:16:05Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7327#issuecomment-6631618371",
@@ -1409,15 +1636,6 @@
      "body": "不是啊，finalRules 可以当常规 block 来用，流量的意图也并不一定是恶意，比如用户把 block cn 的规则放服务端 finalRules"
     },
     {
-     "id": 6621301130,
-     "issue": 4809,
-     "issue_title": "Workflows: Cleaner Docker builds, support for manual exec and pre-release",
-     "created_at": "2026-11-04T02:57:22Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/4809#issuecomment-6621301130",
-     "body": "@RPRX"
-    },
-    {
      "id": 6621272228,
      "issue": 7281,
      "issue_title": "New Blackhole",
@@ -1535,33 +1753,6 @@
      "body": "建议将\n2026/11/03 15:40:49.609578 [Info] [763628597] proxy/freedom: blocked target: tcp:10.0.0.1:5666, blackholing connection for 30s\n这种日志加入到WARN级别，这两天更新了一下docker排查了半天开DEBUG才发现是更新了安全策略。。。"
     },
     {
-     "id": 6588253141,
-     "issue": 7315,
-     "issue_title": "TUN inbound's `autoSystemWfpBlockLeak`: Add \"all\", \"allexceptlan\", port alone, port range, \"tcp\"/\"udp\" alone or with port range, \"icmp\", and a CIDR in front of any value; Always allow loopback, DHCP and IPv6 neighbor discovery",
-     "created_at": "2026-11-02T20:56:31Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7315#issuecomment-6588253141",
-     "body": "本来还想支持区分 IP 子协议，不过这样的话又要 \"allexcept...\" 呃有点烧脑了，况且 TUN 的典型配置是将系统所有 IPv4v6 流量路由进 TUN，除了 TCP、UDP、ICMP 外其它的全没处理，~~貌似也没啥大问题，还是说 Windows 不会将某些 IP 子协议路由进来~~\r\n\r\n如果有如此复杂的“挖洞”需求（CIDR、选项），最佳实践是再出一个 excluded 数组，以后再说吧，remote/local、out/in 也是"
-    },
-    {
-     "id": 6586119004,
-     "issue": 7315,
-     "issue_title": "TUN inbound's `autoSystemWfpBlockLeak`: Add \"all\", \"allexceptlan\", port alone, port range, \"tcp\"/\"udp\" alone or with port range, \"icmp\", and a CIDR in front of any value; Always allow loopback, DHCP and IPv6 neighbor discovery",
-     "created_at": "2026-11-02T19:14:54Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7315#issuecomment-6586119004",
-     "body": "> @patterniha [](https://github.com/XTLS/Xray-core/commit/f5cc086d6cdd8af287d29eb33f2d2bbb751a7a4f)What does[ f5cc086 mean?](https://github.com/XTLS/Xray-core/commit/f5cc086d6cdd8af287d29eb33f2d2bbb751a7a4f)\r\n> \r\n> ~I thought about it again.~The \"ipv4:\" notation is no longer needed; replace it with \"CIDR/single-IP:\" for more powerful functionality.~Also, does this feature support GeoIP? If it's too much trouble, then forget it.~\r\n> \r\n> As for syntactic sugar, simply writing \"CIDR\" is not supported, since \"all\" is included, so IPv6 must include it `[]`. However, \"CIDR:10-20\" can be supported, as the classic syntax is intuitive.\r\n\r\n@RPRX f5cc086: \"allexceptlan\" includes \"dns\", and with \"ipv4:\" in front it only included \"ipv4:dns\", so DNS over IPv6 stayed open unless \"dns\" was added too. The line said that; now it's part of the CIDR sentence (\"0.0.0.0/0:allexceptlan\" leaves DNS over IPv6 open).\r\n\r\nDone in 9638715:\r\n- A CIDR in front of any value instead of \"ipv4:\"/\"ipv6:\", IPv6 in brackets: \"1.1.1.0/24:53\", \"[2001:db8::/32]:tcp/853\", \"[::/0]:all\". \"0.0.0.0/0:\" and \"[::/0]:\" are the old \"ipv4:\" and \"ipv6:\".\r\n- autoSystemRoutingTable takes CIDRs only (netip.ParsePrefix on every system), no single IP and no GeoIP, so the same here: one address is \"8.8.8.8/32\".\r\n- \"53\" or \"10-20\" alone is TCP and UDP, so \"dns\" is \"53\", \"853\", \"windnsclient\" now.\r\n- \"all\" with a CIDR also beats the local network that \"allexceptlan\" leaves open, e.g. [\"allexceptlan\", \"192.168.1.5/32:all\"] blocks only that device there."
-    },
-    {
-     "id": 6584263723,
-     "issue": 5824,
-     "issue_title": "Build: Build list adjustment and compatibility code cleaning",
-     "created_at": "2026-11-02T17:53:01Z",
-     "user": "KobeArthurScofield",
-     "url": "https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6584263723",
-     "body": "在考虑这样调整<span title=\"not all i can decide\">（没确定之前都不会写回上面）</span>\r\n\r\n- macos arm64 最低指令集版本 v8.4\r\n- windows arm64 最低指令集版本 v8.2 （v8.0 似乎意义不大）\r\n- macos x64 最低指令集版本 v2/v3\r\n- windows x64 最低指令集版本 v2（不确定，可能意义不是特别大）\r\n\r\n构建表调整的话\r\nfreebsd 和 openbsd 不再预先构建 32 位版本（freebsd 要不要暂时留一段时间 arm32 待定）\r\nmips64 和 mips64le 考虑早于 mips32 和 mips32le 择机移除预先构建\r\nlinux arm32 v5 和 v6 后续择机处理\r\nwindows x86 需要有合适的时间点才能移除\r\nwin7 考虑 1.29 或者 1.31 开始移除，不过会不会突然变成 1.28 移除暂时处在很不好说的阶段，上游引入了新的老系统没有的 api\r\n**以上没有任何一个系统架构组合被移除支持**，只是不再预先构建\r\n\r\n附加内容\r\n移除老式 build tag（初期相对现在来说已经很古老了，代码早就不太能在老版本 go 编译）\r\n移除早已无法编译的系统架构组合的支持（第三方库无法支持），这是真移除支持\r\n"
-    },
-    {
      "id": 6540309985,
      "issue": 7291,
      "issue_title": "DefaultListener: Disable MPTCP by default",
@@ -1592,6 +1783,39 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3256,
+     "title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-04T06:16:41Z",
+     "updated_at": "2026-11-04T22:44:11Z",
+     "user": "Rev0Lucius",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256",
+     "body": "При попытках подключения к селф-хост серверу и amnezia free - коннекта не происходит.\nНа пк, при этом, все в порядке и ключ рабочий\nIPhone 8\niOS 16.7.16\nAmnezia ver. 5.0.3.0 (Sep 18 2026)\n"
+    },
+    {
+     "number": 3163,
+     "title": "fix: install on immutable linux",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-13T12:06:33Z",
+     "updated_at": "2026-11-04T22:35:50Z",
+     "user": "nexcode",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3163",
+     "body": "Since the **icon** is already present at `/opt/AmneziaVPN/AmneziaVPN.png`, the **icon** reference in the `.desktop` file now points directly to it.\r\n\r\nPreviously, the `.desktop` file was installed to `/usr/share/applications`, which breaks the installation on immutable distributions (such as Fedora Silverblue) and is generally the wrong path anyway, since this isn't a package-based installation.\r\n\r\nThe `.desktop` file should therefore live in `/usr/local/share/applications` instead, which also avoids breaking the installation on immutable distributions."
+    },
+    {
+     "number": 2744,
+     "title": "Installer fails on clean macOS / without Rosetta on Apple Silicon (Intel build requires Rosetta)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-06-16T20:49:30Z",
+     "updated_at": "2026-11-04T19:28:02Z",
+     "user": "naumenkoff",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2744",
+     "body": "## Describe the bug\n\nOn a clean macOS installation, or on macOS without Rosetta installed, the AmneziaVPN `.pkg` installer fails during installation. The installer completes partially, but the postinstall script ends with a package script error.\n\nThis appears to happen because the app inside the package is built for Intel only. When the app is extracted from the package and launched directly from `Payload/Applications`, macOS prompts to install Rosetta. After Rosetta is installed, the installer completes successfully.\n\n## To Reproduce\n\n1. Use a clean macOS installation on Apple Silicon, or remove Rosetta if it is not installed.\n2. Run the AmneziaVPN `.pkg` installer.\n3. The installation fails with a postinstall/script error.\n4. Optionally, unpack the `.pkg`, open `AmneziaVPN_install.pkg`, navigate to `Payload/Applications`, and launch `AmneziaVPN`.\n5. macOS prompts to install Rosetta because the application is Intel-only.\n6. After installing Rosetta, rerun the installer and it completes successfully.\n\n## Expected behavior\n\nThe installer should either:\n\n* detect that Rosetta is missing and prompt the user to install it before continuing,\n* provide an ARM-native build so Rosetta is not required,\n* or clearly document in the installation instructions that Rosetta is required.\n\n## Log files\n\nRelevant log lines from the installation:\n\n```text\nSun Jun 14 02:47:33 MSK 2026 CMD: launchctl bootout system /Library/LaunchDaemons/AmneziaVPN.plist\nBoot-out failed: 5: Input/output error\nSun Jun 14 02:47:33 MSK 2026 EXIT: 5\n...\nSun Jun 14 02:47:33 MSK 2026 CMD: launchctl kickstart -k system/AmneziaVPN-service\n```\n\n```text\n2026-06-14 02:53:18+03 Noutbuk-Stanislaw softwareupdated[83293]: Package Authoring: error running installation-check script: TypeError: null is not an object (evaluating 'cpuFeatures.split') at x-distribution:///installer-gui-script[1]/installation-check[1]/@script\n```\n\n```text\n2026-06-14 02:57:33+03 Noutbuk-Stanislaw package_script_service[6448]: PackageKit: Terminating PKInstallTask(pid:6449). Task has exceeded its 600 seconds of runtime.\n2026-06-14 02:57:38+03 Noutbuk-Stanislaw installd[1377]: PackageKit: Install Failed: Error Domain=PKInstallErrorDomain Code=112 \"При запуске скриптов из пакета «AmneziaVPN_4.8.18.0_macos.pkg» произошла ошибка.\"\n```\n\n## Screenshots\n\nN/A\n\n## Desktop (please complete the following information):\n\n* OS: macOS 27 Beta 27.0\n* Architecture: Apple Silicon\n* Rosetta: Not installed initially\n\n## Additional context\n\nThe installer works after Rosetta is installed. This strongly suggests the current build/package depends on Intel compatibility and should either:\n\n* check for Rosetta before installation,\n* offer to install Rosetta automatically,\n* ship an ARM-native build,\n* or clearly state Rosetta as a requirement in the documentation."
+    },
     {
      "number": 3401,
      "title": "[iOS][5.1.0.6] AWG 3.1: connected but no traffic — path-update loop rebinds UDP socket every 2–3 s (works in 5.0.3.0 and AmneziaWG)",
@@ -1701,17 +1925,6 @@
      "user": "Damnboychi1",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3097",
      "body": "## Что не так\n\n`VpnConnection::appendSplitTunnelingConfig()` требует, чтобы `AllowedIPs` содержал одновременно `0.0.0.0/0` **и** `::/0`, прежде чем разрешить сайт-based split tunneling для AWG/WireGuard-подключений:\n\n```cpp\nif (allowedIpsJsonArray.contains(\"0.0.0.0/0\") && allowedIpsJsonArray.contains(\"::/0\")) {\n    allowSiteBasedSplitTunneling = true;\n}\n```\n\nЛюбой полностью-IPv4-туннель без единого IPv6-маршрута (частый случай для self-hosted серверов без настроенного IPv6) никогда не проходит это условие. В итоге `allowSiteBasedSplitTunneling` остаётся `false`, `sitesJsonArray` остаётся пустым, и `routeMode` тихо откатывается на `VpnAllSites` — вся функция «Sites» (раздельное туннелирование по сайтам) молча отключается, хотя она включена и настроена в приложении. Пользователь не получает никакого предупреждения об этом.\n\n## Почему это баг, а не защита\n\nСама функция split-tunneling по сайтам работает только с IPv4-адресами — `IpSplitTunnelingController::onHostResolved` собирает исключительно `QAbstractSocket::IPv4Protocol`-адреса:\n\n```cpp\nfor (const QHostAddress &addr : addresses) {\n    if (addr.protocol() == QAbstractSocket::NetworkLayerProtocol::IPv4Protocol) {\n        allIpv4.append(addr.toString());\n    }\n}\n```\n\nПоэтому требование наличия `::/0` для включения этой (по факту IPv4-only) функции не имеет технического обоснования — оно просто отсекает валидный, часто встречающийся сценарий (IPv4-only self-hosted туннель).\n\n## Как обнаружено\n\nДиагностировано на реальном self-hosted AmneziaWG сервере: сайт был добавлен в список split-tunneling («в обход VPN»), DNS для него корректно резолвился через сам VPN-туннель (подтверждено tcpdump на сервере), но в таблице маршрутизации Windows-клиента не оказалось ни одного исключающего маршрута для реальных IP этого сайта — то есть соединение всё равно шло через VPN. Трассировка кода привела к этому условию.\n\n## Исправление\n\n```diff\n-if (allowedIpsJsonArray.contains(\"0.0.0.0/0\") && allowedIpsJsonArray.contains(\"::/0\")) {\n+if (allowedIpsJsonArray.contains(\"0.0.0.0/0\")) {\n     allowSiteBasedSplitTunneling = true;\n }\n```\n\nПатч из 1 условия, поведение для конфигов с IPv6 не меняется (там оно и раньше проходило по `0.0.0.0/0`)."
-    },
-    {
-     "number": 3256,
-     "title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-04T06:16:41Z",
-     "updated_at": "2026-11-04T10:26:20Z",
-     "user": "Rev0Lucius",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256",
-     "body": "При попытках подключения к селф-хост серверу и amnezia free - коннекта не происходит.\nНа пк, при этом, все в порядке и ключ рабочий\nIPhone 8\niOS 16.7.16\nAmnezia ver. 5.0.3.0 (Sep 18 2026)\n"
     },
     {
      "number": 3289,
@@ -1833,86 +2046,36 @@
      "user": "winkyBrain",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3387",
      "body": "## Summary\n\nOn Windows, the Xray connection creates the `tun2` adapter (tun2socks) **without setting an MTU**, so Windows falls back to **65535**. With that MTU the segment sizes (MSS) handed to the userspace TCP stack (tun2socks) are absurdly large, and TLS records above a certain size reach the server corrupted — the server itself answers with an alert `bad_record_mac`, i.e. the corruption happens in the **client → server** direction.\n\nResult: the client shows \"Connected\", plain sites (google.com, github.com, wikipedia, netflix, instagram, ya.ru) work, but every domain with a large TLS handshake fails — `youtube.com`, `m.youtube.com`, `youtu.be`, `googlevideo.com`, `i.ytimg.com` all fail with `ERR_SSL_DECRYPTION_FAILED_OR_BAD_RECORD_MAC`, `discord.com` fails with `ERR_SSL_INVALID_SESSION_ID`. For a user this looks like \"Xray breaks YouTube\" while AmneziaWG on the same server and network works fine.\n\nSetting the adapter MTU manually fixes it completely:\n\n```\nnetsh interface ipv4 set subinterface \"tun2\" mtu=1200 store=active\n```\n\n## Environment\n\n| Item           | Value                                                                |\n|----------------|----------------------------------------------------------------------|\n| Client         | AmneziaVPN 5.0.3.0     |\n| OS             | Windows 10 Pro 22H2, build `10.0.19045.6456`                         |\n| Protocol       | Xray (VLESS + REALITY), port 443/tcp, default SNI/fingerprint        |\n| Tunnel adapter | `tun2`, description \"tun2socks Tunnel 2\"         |\n| Server         | Self-hosted VPS, Ubuntu + Docker; the same server also runs AWG      |\n| Network        | Home Wi-Fi/Ethernet, 1500-byte path; same key on Android LTE works   |\n\nServer-side is proven healthy: with AmneziaWG against the same server, same device, same network:\n\n- `https://www.youtube.com` → 200, 0.97 MB, 802 ms\n- 3 MB download → 200, 546 ms (~44 Mbps), `latest handshake` present in `awg show`\n\n## Steps to reproduce\n\n1. Install Xray (VLESS + REALITY) on a self-hosted server and connect from AmneziaVPN 5.0.3.0 on Windows.\n2. Check the adapter MTU:\n\n   ```\n   netsh interface ipv4 show subinterfaces\n   ```\n\n   ```\n   MTU    MediaSenseState   Bytes In    Bytes Out   Interface\n   -----  ---------------   ----------  ----------  ---------\n   65535  1                 14492795    20015835    tun2\n   ```\n\n3. Try to open `https://www.youtube.com` (or Discord) → the handshake fails; `google.com` opens fine.\n4. Set the MTU, nothing else:\n\n   ```\n   netsh interface ipv4 set subinterface \"tun2\" mtu=1200 store=active\n   ```\n\n5. Repeat step 3 → everything works.\n\n## A/B on the adapter MTU (same machine, same server, same network, back-to-back)\n\n| MTU             | youtube.com                | i.ytimg.com         | github.com       | DNS A        | 3-10 MB download |\n|-----------------|----------------------------|---------------------|------------------|--------------|------------------|\n| 65535 (default) | FAIL bad_record_mac 338 ms | FAIL bad_record_mac | FAIL timeout 8 s | FAIL timeout | 3 MB / 2023 ms   |\n| 1380            | FAIL bad_record_mac 338 ms | FAIL bad_record_mac | OK 338 ms        | OK           | 3 MB / 1127 ms   |\n| **1200**        | OK 200, ~1.1 s             | OK 334 ms           | OK 330 ms        | OK           | 10 MB / ~5.0 s   |\n\nNote that the failure is **not** a timeout but a deterministic protocol error at ~330 ms, and reducing MTU 65535 → 1380 already fixed github and DNS while leaving YouTube broken — the breakage depends on the size of the TLS flight, not on reachability.\n\n## Throughput is not affected by the workaround\n\nLowering the TUN MTU costs nothing in practice — it only increases the packet count per byte, and the tunnel is not packet-rate bound:\n\n- Speedtest (browser) with `mtu=1200`: **214 Mbps down / 498 Mbps up**\n- Parallel HTTPS downloads through the tunnel from the same machine at `mtu=1200`:\n\n| Streams | Transferred | Time    | Aggregate |\n|---------|-------------|---------|--"
-    },
-    {
-     "number": 3386,
-     "title": "feat(ui): add split tunneling toggle to tray menu",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T22:52:58Z",
-     "updated_at": "2026-11-02T22:54:50Z",
-     "user": "Broklam",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3386",
-     "body": "### Problem\r\n\r\nSite-based split tunneling can only be switched on the Settings → Split tunneling page, and that page refuses changes during an active connection. Turning it on or off for a moment means opening the window, disconnecting, flipping the switch and connecting again.\r\n\r\n### Solution\r\n\r\n- The tray menu gets a checkable **Split tunneling** item under Connect / Disconnect.\r\n- The item mirrors the site-based setting. It follows changes made on the settings page, by a backup restore or by a settings reset through `SecureAppSettingsRepository::sitesSplitTunnelingEnabledChanged`. A click goes through `IpSplitTunnelingUiController::toggleSplitTunneling`, so the Home label and the split tunneling drawer update as well.\r\n- Split tunneling is written into the VPN configuration when the connection is prepared, so a change made while connected applies only to a new connection. When the item is clicked while connected, the client disconnects and connects again (`ConnectionUiController::reconnect()`), reusing the tray's existing connect path (`openConnection()`). `VpnConnection::reconnectToVpn()` is not used because it restarts the protocol with the configuration that was already prepared.\r\n- The item is disabled while a connection is being prepared, established or closed, so it cannot be clicked again in the middle of a reconnect.\r\n\r\n### Related issues\r\n\r\n- #3104 asks to toggle split tunneling while staying connected. This PR covers the tray; the settings page still blocks changes during an active connection.\r\n\r\n### Not included\r\n\r\n- The new tray string has no translations yet, so it shows in English.\r\n- Only the site-based mode is switched. App-based split tunneling on Windows stays on its settings page.\r\n- The item is not disabled for servers whose container has split tunneling on the server side (`isDefaultServerDefaultContainerHasSplitTunneling`). There the setting has no effect, as it has none today when changed on the settings page of such a server.\r\n\r\n### Testing\r\n\r\n- macOS (arm64 + x86_64), Qt 6.10.1: `AMNEZIA_BUILD_TESTS=ON deploy/build.sh --generator Ninja` builds; `ctest` passes 31/31.\r\n- Not built or run on Windows, Linux or `MACOS_NE`.\r\n<img width=\"193\" height=\"222\" alt=\"image\" src=\"https://github.com/user-attachments/assets/e93c9311-dff5-470b-924d-b1b348fba7bd\" />\r\n\r\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\r\n"
-    },
-    {
-     "number": 3385,
-     "title": "fix: align xray settings with core defaults and add contract tests",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T19:32:42Z",
-     "updated_at": "2026-11-02T20:44:49Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3385",
-     "body": ""
-    },
-    {
-     "number": 3384,
-     "title": "feat: add belarusian (be_BY) localization",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T19:03:09Z",
-     "updated_at": "2026-11-02T19:03:09Z",
-     "user": "sutonnie",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3384",
-     "body": ""
-    },
-    {
-     "number": 3382,
-     "title": "feat(split-tunneling): wildcard site entries, resolved by observing DNS",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T17:18:09Z",
-     "updated_at": "2026-11-02T18:11:48Z",
-     "user": "MimoJanra",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3382",
-     "body": "Fixes #1607.\n\n## Why a wildcard cannot simply be added to the list\n\nSite split tunnelling selects by destination address, because that is all a\nrouting table has. The addresses behind `*.discord.gg` are not knowable when the\nentry is typed, and a CDN keeps changing them, so there is nothing to install.\nEntering a domain already works by resolving it once and storing the answer, but\na wildcard cannot be resolved at all: there is no query that returns every name\nbelow a label.\n\nThe only place where the name still exists is the DNS exchange itself. This\nchange puts a forwarder where the system already sends its queries, relays them\nto the real resolvers, and installs an exclusion route for the addresses of the\nanswers whose name matches a pattern, while the answer is still on its way back\nto the application.\n\n## What is in it\n\nThree commits, each one reviewable on its own:\n\n1. **The forwarder, the shared definition of a wildcard, and the route table.**\n   No caller yet.\n2. **The UI and configuration path**: storing a pattern, and carrying it to the\n   daemon.\n3. **The daemon and the platform work**: installing, permitting and withdrawing\n   what is learned.\n\n### Trusting an answer\n\nWhat the forwarder reports becomes a route in a privileged daemon, so a reply is\nbelieved only when all of this holds: it arrived from the resolver the query was\nsent to, on a socket connected to it; the transaction id and the question match\nthe query; the response bit is set, the opcode is zero, there is no error, and\nthe answer is not truncated. Addresses are taken only from records whose owner is\nthe queried name or a name reached from it through the CNAMEs of that same\nmessage, and each address inherits the shortest TTL along that path. Everything\nelse is handed to the application untouched and reported to nobody.\n\nA query no resolver answers is failed over across the configured resolvers and\nthen answered with SERVFAIL, rather than left to time out, because the system can\nno longer fall back on its own once this is its resolver.\n\n### Names are never flattened\n\nA DNS label may legally contain a dot. Names coming off the wire are kept as a\nlist of labels and compared label by label, so a single label whose bytes read\n`x.example.com` does not pass for a name below `example.com`. Patterns are stored\ncanonically: lower case, no trailing dot, the base put through IDNA, and a path,\nwhite space or an empty label refused at the point of entry. `*.пример.рф` is\nstored as `*.xn--e1afmkfd.xn--p1ai`, which is the form that actually arrives.\n\n### Routes do not outlive their justification\n\nA learned address is held by a route table with the TTL of the answer, clamped to\na usable range, expiring on a monotonic tick so a clock change cannot extend it.\nThere is a ceiling on how many routes one pattern can create, and the tunnel's own\naddresses, its gateway and the server endpoint can never be routed around it.\n\n### Firewall and route together\n\nWith the kill switch on, the platform allow lists are built once from the static\nexcluded addresses. An address routed out of the tunnel later would meet the\nblocking rule and go nowhere. The permit and the route are therefore installed in\nthe same operation and withdrawn in the same operation.\n\nThe forwarder's own endpoint is permitted the same way, on UDP and TCP. If that\npermit cannot be installed the observer is stopped, because telling the system to\nresolve through an address it is then forbidden to reach takes DNS down with it.\n\n### Where it listens, and why not loopback\n\nThe forwarder binds the tunnel's own address. An interface's resolver is queried\nfrom that interface, and `127.0.0.1` is not an address of the tunnel adapter: on\nWindows the query is dropped by the strong host check or encapsulated into the\ntunnel, and a socket on loopback never sees it.\n\n## Lifecycle\n\nThe observer is reconciled with the configuration on every activation and on a\nserver switch, not started once. An empty pattern list stops it. A list t"
-    },
-    {
-     "number": 3378,
-     "title": "Tracking: improve site split-tunneling reliability",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-02T14:09:15Z",
-     "updated_at": "2026-11-02T17:41:16Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3378",
-     "body": "## Goal\n\nI started investigating two problems in my Windows setup: CIDR exclusions could remain visible without working as expected, and excluded destinations could still use the VPN. Follow-up checks also found that the inverse, sites-only mode could become a full tunnel for certain WG/AWG profiles.\n\nThe fixes previously collected in #3030 have been split into three independently reviewable PRs, each with its own focused issue. This tracker also records follow-up features; an implementation PR is linked when one is available.\n\n## Work items\n\n- [ ] #3375 — WG/AWG AllowedIPs parsing, profile eligibility and correct site-allowlist serialization. **PR: #3379**.\n- [ ] #3376 — CIDR/hostname normalization, duplicate-import merging and bounded DNS refresh before connection/reconnection. **PR: #3380**.\n- [ ] #3377 — transactional Windows exclusion-route batches, rollback, route ownership and reconciliation. **PR: #3030**.\n\nA checkbox should be completed when the corresponding fix lands; publication or a successful local test alone does not mean the work is merged.\n\n## Follow-up feature\n\n- [ ] #3381 — live domain-address updates and wildcard rules such as `*.example.com`. **PR: #3383**. Opt-in Windows WG/AWG implementation; stacked on #3380 and separate from the three bug-fix PRs.\n\n## Verification and acceptance\n\n- The three bug-fix branches can be reviewed separately against `dev`. The follow-up domain-routing PR #3383 is stacked on #3380.\n- Combining the three branches must preserve the previous complete patch.\n- WG and AWG activation-message tests cover all-sites, sites-only and all-sites-except-listed modes, including IPv4-only/reordered defaults and restricted native routes.\n- Existing application-exclusion settings must continue to pass through unchanged.\n- #3383: full Windows client/service builds and four isolated suites passed, including actual bundled-core domain/DNS/application-policy checks and offscreen QML loading. Native TUN/WG/AWG activation, WFP/kill-switch behavior, network transitions and adapter/DNS cleanup still require on-device acceptance.\n- Historical full-build/live Windows results must be distinguished from new isolated tests. Live site-allowlist and real application-bypass behavior remain separate verification gaps; they must not be presented as verified by serializer or mocked-driver tests.\n\n## Scope boundaries\n\nThis is a site split-tunneling reliability effort, not a claim that every mode on every platform is fixed. The three existing bug-fix PRs do not implement Windows application allowlist support, wildcard-domain routing, continuous DNS monitoring or a new IPv6 site-list model. Live domain updates and wildcard routing are now tracked separately in #3381.\n\nApplication-based exclusion preparation was checked for regressions, but no application-routing fix is being included without a demonstrated defect and its own change.\n\n## Related issues and overlapping PRs\n\n- #2907 and #3314: related WG/AWG site-routing symptoms; not every platform-specific cause is established.\n- #2939 and #3018: CIDR import history and regression coverage.\n- #2248 and #3020: large Windows exclusion-list setup.\n- #3011 and #3097: overlapping IPv4-only AllowedIPs fixes.\n- #2825: overlapping hostname/DNS work.\n- #3021: overlapping Windows route batching.\n\nThese are references, not automatic requests to close other contributors' PRs. The focused PR descriptions will explain the overlap and their own verification limits.\n"
-    },
-    {
-     "number": 3381,
-     "title": "feat: keep domain and wildcard split-tunneling rules current during an active VPN session",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-02T14:41:13Z",
-     "updated_at": "2026-11-02T17:41:12Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3381",
-     "body": "## Feature request\n\nI want to enter a domain once and have it continue following the selected split-tunneling policy when its IP addresses change, without editing the list or reconnecting the VPN. I also want rules such as `*.example.com` for subdomains.\n\nA domain should remain the rule's identity. Addresses resolved when it was added or at connection time must not become a permanent substitute for that rule.\n\nMy immediate use case is Windows with WireGuard/AmneziaWG, in both sites-only and all-sites-except-listed modes.\n\n## Expected behavior\n\n- An exact rule such as `example.com` follows changes to that hostname's DNS addresses during an active session.\n- A wildcard rule such as `*.example.com` matches real queried subdomains, including nested ones, without enumerating them in advance.\n- Proposed wildcard semantics: match `api.example.com` and `a.b.example.com`, not `example.com`, `notexample.com` or `example.com.evil.test`. Add the apex separately when needed.\n- Handle multiple addresses and CNAME chains, and keep mappings/routes current with DNS lifetime and network changes.\n- Establish the selected routing policy before the application uses a newly resolved address, without restarting the tunnel or disrupting unrelated connections.\n- Preserve literal IP/CIDR rules, local hosts mappings and import/export of the domain or mask itself.\n- Show resolution/application failures instead of silently presenting a stale rule as current.\n\nA wildcard is a routing-rule pattern, not a request to resolve the literal hostname `*.example.com`. It also does not automatically include unrelated CDN domains used by a page.\n\n## Acceptance scenarios\n\n1. Add an exact domain whose DNS answer initially points to address A.\n2. Keep the VPN connected, change the answer to B, and let the previous DNS answer expire.\n3. A new connection to that domain must follow the same configured policy through B, without deleting/re-adding the rule or reconnecting.\n4. Add `*.example.com`, then request a previously unseen subdomain. The first connection after its DNS response must follow the wildcard rule.\n5. Repeat for both site-routing modes, multiple DNS answers, CNAME targets, temporary DNS failures, changed networks and rule removal.\n6. Verify that a shared address is not removed while another rule still needs it, and define safe handling of cached answers and existing connections.\n\nThese are acceptance requirements. The implementation PR below documents which scenarios are covered by isolated tests and which still require on-device verification.\n\n## Design constraints\n\nA local DNS handler is a possible foundation, but simply periodically resolving known hostnames is insufficient for previously unseen wildcard subdomains.\n\nDNS-to-IP routes also have a shared-IP limitation: unrelated hostnames on the same address cannot be distinguished by an ordinary IP route. The design must explicitly distinguish dynamic IP-based exclusions from strict per-domain connection routing; stronger isolation may need a domain-aware traffic path.\n\nApplications using their own encrypted DNS can bypass a local DNS handler. Do not silently disable browser Secure DNS/DoH or intercept/decrypt HTTPS. Document supported DNS paths and any required opt-in configuration. IPv6 support or limitations must also be explicit, rather than letting AAAA traffic silently ignore the rule.\n\nDNS updates must respect the chosen direct/tunnel resolver policy and must not introduce unintended DNS leaks.\n\n## Related work\n\n- #1217 asks the same underlying question about changed IPs in Windows exclusions.\n- #1423 is the broader site-split-tunneling feature tracker; its [DNS-refresh discussion](https://github.com/amnezia-vpn/amnezia-client/issues/1423#issuecomment-5131614693) overlaps this request.\n- #3376 / #3380 address normalization and refresh before connection/reconnection. They do not implement continuous live updates or wildcard discovery.\n- Project tracker: #3378.\n\nImplementation: #3383 adds an opt-in doma"
-    },
-    {
-     "number": 3383,
-     "title": "feat(windows): support live domain and wildcard site rules",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T17:40:22Z",
-     "updated_at": "2026-11-02T17:40:22Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3383",
-     "body": "## Why\n\nI want a domain in the site list to keep following its routing policy when its addresses change during a VPN session. I also need `*.example.com` to cover newly encountered subdomains without resolving a wildcard as though it were a hostname.\n\nRefreshing IP routes alone cannot distinguish unrelated domains sharing an address. This adds an opt-in domain-aware path for Windows WireGuard/AmneziaWG connections.\n\n## Changes\n\n- Preserve exact domains, wildcard identities and literal IP/CIDR entries, including import/export. `*.example.com` matches nested subdomains, but not the apex or lookalike suffixes.\n- Use the bundled Xray core locally for TUN, DNS/FakeDNS and connection routing. **The remote VPN remains native WireGuard/AmneziaWG; no Xray server or Xray key is required.** Native credentials, peer AllowedIPs and MTU remain unchanged.\n- Bind direct and tunneled outgoing connections to their respective interfaces and source addresses. Keep the VPN-server exemption outside the domain-routing adapter.\n- Apply both site-list modes and all three application modes. Match HTTP Host/TLS SNI where available and preserve hosts mappings.\n- Use the configured DNS paths, respect answer lifetime, and avoid falling back from a selected domain's resolver group to the opposite path after a DNS failure.\n- Add exclusive ownership and a renewable lease for the local engine, so it cannot replace an active local proxy and stops if its owner disappears.\n- Keep the feature disabled by default and show its limitations before use. Existing literal-only routing stays on the native path.\n\n## Scope and limitations\n\n- Windows with WireGuard/AmneziaWG only. Unsupported combinations fail explicitly rather than silently ignoring a wildcard.\n- The new path handles IPv4 TCP/UDP. It blocks intercepted IPv6 destinations; remote ICMP/ping is not supported by this backend.\n- Application rules match executable paths, without automatic child-process inheritance. DNS resolver selection follows the site policy, not individual applications.\n- Browser Secure DNS/DoH settings are not changed. There is no HTTPS decryption or ECH suppression. An encrypted-DNS connection whose hostname is also hidden cannot reliably be matched by domain.\n- More-specific existing LAN routes retain OS priority. Changes to rules/settings take effect on reconnect; DNS-address changes do not require reconnecting.\n- Explicit IPv4 interface addresses and DNS servers are required. A physical interface using a loopback DNS stub is rejected; the local proxy and this mode cannot run concurrently.\n\n## Verification\n\n- Clean Windows CMake configuration; Release client and privileged service built with Qt 6.10.1 / MSVC 19.53.\n- Four isolated test suites passed, both for the feature and for a local integration build with #3379 and #3030.\n- The actual bundled `amnezia-xray-bindings` 1.5.0 was exercised on loopback, including 12 combinations of site mode, application mode and listed/unlisted process. Coverage includes shared-IP separation, wildcard boundaries, HTTP Host/TLS SNI, TCP/UDP, DNS A-to-B changes after TTL expiry, FakeDNS, CNAME, multiple A answers, hosts, CIDRs and DNS failure.\n- Production engine ownership/lease tests and a regression test for overlay creation, recreation and physical-route loss passed. The route test substitutes Windows route APIs and does not modify the host routing table.\n- The actual settings QML page loads in an offscreen engine; toggle binding and literal wildcard search are checked.\n\n**Still requiring on-device acceptance:** real TUN activation together with a remote WG/AWG session, WFP/kill-switch behavior, network transitions and adapter/DNS cleanup after disconnect or failure. The isolated core tests and successful build are not presented as proof of those native integration scenarios. The installed VPN was not stopped or replaced during these checks.\n\n## Related issues and overlapping PRs\n\nCloses #3381.\n\nThis PR is stacked on #3380, which provides the site storage"
     }
    ],
    "comments": [
+    {
+     "id": 6644058136,
+     "issue": 3256,
+     "issue_title": "Перестала подключаться Amnezia Free и Self-Hosted после обновления на 5.0.3",
+     "created_at": "2026-11-04T22:44:11Z",
+     "user": "Rev0Lucius",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256#issuecomment-6644058136",
+     "body": "Upd: на 5.1.0.6 проблема исчезла, спасибо!"
+    },
+    {
+     "id": 6643899470,
+     "issue": 3163,
+     "issue_title": "fix: install on immutable linux",
+     "created_at": "2026-11-04T22:35:50Z",
+     "user": "nexcode",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3163#issuecomment-6643899470",
+     "body": "@vkamn This is a very simple fix that resolves the issue. Please, include it in the next release."
+    },
+    {
+     "id": 6640035656,
+     "issue": 2744,
+     "issue_title": "Installer fails on clean macOS / without Rosetta on Apple Silicon (Intel build requires Rosetta)",
+     "created_at": "2026-11-04T19:28:02Z",
+     "user": "m4j",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2744#issuecomment-6640035656",
+     "body": "+1\n\nSame story with `AmneziaVPN_5.1.0.6_macos_x64.pkg`. Any chance to get this resolved?\n\nНеохота ставить розетту только для инсталляции/апдейта. Тем более, что и приложение и все бинарники у вас уже давно универсальные, то есть совместимы с силиконом. Более того, я могу распаковать `.pkg`, вручную скопировать `AmneziaVPN.app` и прогнать `preinstall` и `postinstall` скрипты — и всё прекрасно устанавливается и даже не пукает про розетту. Ребята, пофиксите инсталлер, пожалуйста. Я бы и сам пофиксил и прислал вам PR, но не могу разобраться самостоятельно, не хватает понимания..."
+    },
     {
      "id": 6628522634,
      "issue": 3097,
@@ -1966,15 +2129,6 @@
      "user": "artxxx001",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3198#issuecomment-6604865994",
      "body": "I can confirm a very similar **shared-config DNS failure on Linux**, specifically **Pop!_OS 24.04 LTS (COSMIC), AmneziaVPN 5.0.3.0 (`de93650`), Xray**.\n\nThe VPN connection was originally created on a phone and then imported to the Linux laptop using **Share connection**. It displayed **Connected**, and HTTPS through the tunnel worked when bypassing DNS (`curl --resolve` returned `HTTP/2 200`), but ordinary DNS requests timed out and websites would not load.\n\nDiagnostics:\n\n- `resolvectl status tun2` showed `172.29.172.254` as the resolver despite setting `1.1.1.1` and `1.0.0.1` in the client.\n- `resolvectl query -4 example.com` timed out.\n- Local Xray repeatedly logged `accepted udp:172.29.172.254:53` (and also TCP/53), with no DNS response observed.\n- The Amnezia firewall's `amnvpn.320.allowDNS` ACCEPT counters increased on `tun2` during lookups (UDP/53: 14 -> 34 packets; TCP/53: 0 -> 32), while `amnvpn.310.blockDNS` and `amnvpn.100.blockAll` counters remained at 0. That shows DNS requests were allowed by those local rules, not where the replies were lost.\n- With VPN disconnected, `resolvectl query example.com` succeeded in ~31 ms.\n\n**Confirmed fix:** On the phone, I **disabled AmneziaDNS, generated a new sharing link, and imported that new configuration into Linux**. This immediately fixed the DNS issue. The new `resolvectl status tun2` showed:\n\n```text\nCurrent DNS Server: 1.0.0.1\nDNS Servers: 1.1.1.1 1.0.0.1\nDNS Domain: ~.\n```\n\n`resolvectl query -4 example.com` succeeded in ~290 ms, and a normal `curl -4 -I --noproxy '*' https://example.com` returned `HTTP/2 200`.\n\nThis suggests that the issue with DNS information embedded in a shared Xray configuration / client DNS handling also affects **Linux**, not only Windows. The exact point where traffic to the private DNS destination is lost was **not conclusively proven** in my Linux test."
-    },
-    {
-     "id": 6584661508,
-     "issue": 3382,
-     "issue_title": "feat(split-tunneling): wildcard site entries, resolved by observing DNS",
-     "created_at": "2026-11-02T18:11:48Z",
-     "user": "MimoJanra",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3382#issuecomment-6584661508",
-     "body": "Worth flagging for whoever picks this up: #3383 was opened twenty minutes after this one and covers the same ground from a different direction. The two touch 13 of the same files, so they cannot both be merged as they stand.\n\nThe approaches differ in kind, not only in detail:\n\n- This PR observes the tunnel's DNS and installs address-based exclusion routes through the daemon's existing `addExclusionRoute` path. Being address-based, it exempts an unrelated service that happens to share a CDN address with a matched one. That limit is stated in the description and no amount of parsing removes it.\n- #3383 runs the bundled Xray locally as a TUN with FakeDNS and matches HTTP Host / TLS SNI, which does distinguish services behind a shared address. It is Windows-only and opt-in, disabled by default.\n\nThey also disagree on something user-visible: here `*.example.com` covers `example.com` as well as everything below it; in #3383 the apex is deliberately not covered.\n\nI am happy to defer to #3383, or to rework this on top of it, whichever is more useful. If an address-based path is still wanted for the platforms #3383 does not cover, the daemon-side pieces here are independent of how names are matched and could be reused on their own: the route table that expires a learned address with the TTL that justified it and caps how many one pattern can create, and the firewall permits installed and withdrawn in the same operation as the route, without which the kill switch drops the traffic the route was meant to let out.\n\nOne caveat repeated from the description, since it bears on reviewing either PR: only the Windows build is compiled and tested here. The Linux and macOS files mirror the Windows implementation and have not been built. The workflows in this repository trigger on `push` rather than on `pull_request`, so CI does not build fork pull requests either, and Codacy is the only check that runs.\n"
     }
    ]
   },

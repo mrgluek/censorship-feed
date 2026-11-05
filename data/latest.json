@@ -1,10 +1,150 @@
 {
- "generated_at": "2026-11-05T06:45:17Z",
- "since": "2026-11-03T06:45:17Z",
+ "generated_at": "2026-11-05T17:23:33Z",
+ "since": "2026-11-03T17:23:33Z",
  "repos": {
   "net4people/bbs": {
-   "issues": [],
-   "comments": []
+   "issues": [
+    {
+     "number": 671,
+     "title": "[Russia] recent mass ip bans",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-30T17:18:14Z",
+     "updated_at": "2026-11-05T13:09:18Z",
+     "user": "its0ka",
+     "url": "https://github.com/net4people/bbs/issues/671",
+     "body": "on aug 4 and september 21 there were a lot of IP bans.\na lot of reality proxy servers (self-steal included) and even ips with only amneziawg (not susceptible to active probing) were banned. but it looks like it was mostly very popular vps providers.\ni've checked a few ASNs:\namnezia hosting: 131 blocked ip out of 20k [amneziahost.txt](https://github.com/user-attachments/files/32867470/amneziahost.txt)\nfirstbyte hosting: 3k blocked ip out of 29k [firstbyte.txt](https://github.com/user-attachments/files/32867500/firstbyte.txt)\nfornex hosting: 596 blocked ip out of 24k [fornex.txt](https://github.com/user-attachments/files/32867532/fornex.txt)\nplay2go DE: 2k blocked ip out of 37k [play2goDE.txt](https://github.com/user-attachments/files/32867560/play2goDE.txt)\nveesp: 5k blocked ip out of 30k [veesp.txt](https://github.com/user-attachments/files/32867596/veesp.txt)\n\ntell me if you know some vps providers that aren't popular in russia but do have a lot of proxy servers and i'll check them"
+    },
+    {
+     "number": 680,
+     "title": "True Censorship Resistance",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T07:16:24Z",
+     "updated_at": "2026-11-05T11:11:40Z",
+     "user": "zhen55468-jpg",
+     "url": "https://github.com/net4people/bbs/issues/680",
+     "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic."
+    },
+    {
+     "number": 425,
+     "title": "目前绕过中国GFW代理的最佳实践是什么？/ What is the current best practice of creating a proxy to bypass GFW China?",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2024-11-18T03:46:38Z",
+     "updated_at": "2026-11-05T09:10:29Z",
+     "user": "v4ray",
+     "url": "https://github.com/net4people/bbs/issues/425",
+     "body": "Which protocol is the most stable (not detected and blacklisted) and most performant?\r\n\r\nI found there were reports that v2ray+tls , xray+xtls were all blocked by GFW in the past once or many times. Are there better options?"
+    },
+    {
+     "number": 466,
+     "title": "The predictable IP address sequences of one type of GFW DNS injector",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-03-26T19:44:03Z",
+     "updated_at": "2026-11-05T08:30:13Z",
+     "user": "wkrp",
+     "url": "https://github.com/net4people/bbs/issues/466",
+     "body": "> **[§V-B](https://gfw.report/publications/ndss25/en/#5b)** Previous research has shown that the GFW's DNS injection draws fake response IP addresses from a fixed pool—and that different subsets of the pool are used, depending on what name is queried \\[[8](https://www.usenix.org/conference/foci20/presentation/anonymous) §3.2\\], \\[[9](https://www.usenix.net/conference/usenixsecurity21/presentation/hoang) §5.3\\]. What has not been appreciated, before now, is that the pools are also *ordered* and *cyclic*. When probed at a high enough rate (around 100 queries per second or more—much greater than an injector's natural injection rate), using a consistent query name and source/destination IP address and port tuple, injected responses repeatedly cycle through IP addresses in the same order (with occasional gaps where the injector responded to queries from other users). By repeated probing, it is possible to get multiple copies of the sequence, reconcile the gaps, and recover the complete ordered list of false IP addresses for a given query name.\n>\n> ![Figure 8 of Wallbleed, a scatterplot showing the timestamp of DNS responses on the horizontal axis and the reverse-mapped IP address index on the vertical axis. The indices fall into three distinct linear sequences.](https://github.com/user-attachments/assets/cf89dd90-7dd2-4a5f-8825-9a68551a3a08)\n\nI want to talk more about this observation made in the Wallbleed paper (#456). Independent of the Wallbleed parsing bugs, the fact that IP address pools of one type of GFW DNS injector are ordered and cyclic is interesting in its own right. I will share some Python programs and give step-by-step instructions on how to run them to see the effect for yourself.\n\n[multiquery.zip](https://github.com/user-attachments/files/19474575/multiquery.zip) (2.4 MB)\n\n* multiquery.py sends DNS queries at a high rate, with the goal of provoking injected DNS responses.\n* filter.py isolates responses from the type of injector we are interested in.\n* order.py infers an ordering of IP addresses, given a filtered set of DNS responses.\n* plot.py draws a graph of IP addresses mapped back to their index in the ordering, revealing linear sequential structure.\n* The zip file also includes the CSV data files needed to recreate the analysis below.\n\n### Collect DNS responses\n\nDNS response injection is one of the main mechanisms of network censorship in China. When an ordinary, UDP-based DNS query for a blocked domain name is observed by certain middleboxes at the country's network border, the middlebox sends a forged DNS response back to the DNS client. The forged response contains a fake and useless IP address. Response injection happens even when the destination IP address of the DNS query is not a DNS resolver.\n\nFor some domain names, DNS response injection is bidirectional: it responds to DNS queries that are inbound to China as well as outbound. In this demonstration, we'll use the destination IP address 120.52.99.0, which is just an IP address of chinaunicom.com (120.52.99.224) with the last octet set to 0. The blocked domain name we'll use is torproject.org.\n\nStart by collecting a sample of injected DNS responses. About 20,000 queries will be enough. Send the queries at a high rate, 500 queries per second. While the injector is forging responses to our queries, it will also be also forging responses to other naturally occurring queries. By sending at a high rate, we can, for a short time at least, ensure that most of an injector's responses are sent to us, rather than to other DNS clients. We'll also use a fixed source port—keeping the UDP 4-tuple fixed is necessary to ensure that our queries are always handled by the same injector process, as we'll see later on.\n\nRun this command:\n\n```\nmultiquery.py --num 20000 --rate 500 --qtype A --src-port 10000 --output multiquery-torproject.org-A-srcport-10000.csv 120.52.99.0 torproject.org\n```\n\nIt should take about 40 seconds to run. The output format is CSV, with one row per "
+    },
+    {
+     "number": 492,
+     "title": "Better method to find ttl to bypass gfw automatically? ",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-07-02T06:47:31Z",
+     "updated_at": "2026-11-05T08:26:55Z",
+     "user": "maoist2009",
+     "url": "https://github.com/net4people/bbs/issues/492",
+     "body": "As we known, send a fake packeyt with a ttl cannot reach server but reach gfw is a powerful way to desync gfw tcp stack and bypass it. \nBut it is not so easy to find the ttl quickly. \nNoe, I use binary search to find the min ttl to the server and minus it 1. \nIt is so slow and the ttl is changeable.\n\nHere are the other challenges. \n1. with differebt destination ip, route varies and it may pass differnt gfw, for instance, in china, SH, packages to america pass SH gfw, but to Hongkong pass GD gfw. \n2. gfw has different layers ,in china, province one and international gateway one, you need yo make sure the packet bypass the finalngfw (i.e. get out of china) \n\nIf there are a smart and quick way to get ttl, the gfw will face a big challenge😁. "
+    },
+    {
+     "number": 651,
+     "title": "A Wall Behind A Wall : In Fujian",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-20T07:41:28Z",
+     "updated_at": "2026-11-05T07:18:14Z",
+     "user": "molotoves",
+     "url": "https://github.com/net4people/bbs/issues/651",
+     "body": "The following content may contain machine translation.\nThis report was not written by a computer networking professional; I am only reporting some issues I have discovered, many of which cannot be reproduced elsewhere . As a non-professional, I have not yet conducted any technical checks.\n\nAs of now, most Censorship-resistant service provider are unable  in Fuzhou, Fujian . A small number of providers using v2ray remain functional, whereas Tor Browser bridges and Snowflake are no longer usable.\n\nIt is unclear whether ISPs have deployed DPI (Deep Packet Inspection) plugins on home routers. On one hand, ISPs commonly use integrated optical modem-routers; on the other, some of peoples from Zhejiang dicover that the presence of DPI plugins in their ISP-provided integrated units.\nDoH provided by NextDNS and Cloudflare DNS have become completely unusable (on Firefox).\n\nI also tested P2P software; BitTorrent functionality was partially impaired, making it difficult to connect to peers in Russia, though connections to users within mainland China remained normal. However, these findings may be outdated, as I have been unable to get qBittorrent to connect to the network following a Windows reinstallation—a problem I have yet to resolve (even after reinstalling the application itself).\n\nDuring one test, I unexpectedly found that Cloudflare DNS worked on Firefox; however, I have been unable to reproduce this result and am unsure how to proceed with further testing."
+    }
+   ],
+   "comments": [
+    {
+     "id": 6658542899,
+     "issue": 671,
+     "issue_title": "[Russia] recent mass ip bans",
+     "created_at": "2026-11-05T12:56:32Z",
+     "user": "ktnk-dev",
+     "url": "https://github.com/net4people/bbs/issues/671#issuecomment-6658542899",
+     "body": "wireguard still works without any issues if connection was established earlier (maybe few months ago?). also i can confirm that some major ru services also not available from my home server, but available via wireguard on dedicated server also in Russia:\n\n<details>\n<summary>Curl and ping results</summary>\n\n```sh\ncurl -vi https://ya.ru\n* Host ya.ru:443 was resolved.\n* IPv6: 2a02:6b8::2:242\n* IPv4: 77.88.55.242, 5.255.255.242, 77.88.44.242\n*   Trying 77.88.55.242:443...\n*   Trying [2a02:6b8::2:242]:443...\n* Immediate connect fail for 2a02:6b8::2:242: Network is unreachable\n```\n```sh\nping ya.ru -v\nping: sock4.fd: 3 (socktype: SOCK_RAW), sock6.fd: 4 (socktype: SOCK_RAW), hints.ai_family: AF_UNSPEC\n\nai->ai_family: AF_INET, ai->ai_canonname: 'ya.ru'\nPING ya.ru (77.88.44.242) 56(84) bytes of data.\n^C\n--- ya.ru ping statistics ---\n3 packets transmitted, 0 received, 100% packet loss, time 2002ms\n```\n```sh \nping 10.9.8.2 -v # via wireguard\nping: sock4.fd: 3 (socktype: SOCK_RAW), sock6.fd: 4 (socktype: SOCK_RAW), hints.ai_family: AF_UNSPEC\n\nai->ai_family: AF_INET, ai->ai_canonname: '10.9.8.2'\nPING 10.9.8.2 (10.9.8.2) 56(84) bytes of data.\n64 bytes from 10.9.8.2: icmp_seq=1 ident=33909 ttl=63 time=38.5 ms\n64 bytes from 10.9.8.2: icmp_seq=2 ident=33909 ttl=63 time=38.7 ms\n64 bytes from 10.9.8.2: icmp_seq=3 ident=33909 ttl=63 time=39.7 ms\n^C\n--- 10.9.8.2 ping statistics ---\n3 packets transmitted, 3 received, 0% packet loss, time 2003ms\nrtt min/avg/max/mdev = 38.478/38.987/39.746/0.546 ms\n```\n```sh\nALL_PROXY=\"socks5://10.9.8.2:59595\" curl -vi https://ya.ru # via wireguard\n* Uses proxy env variable ALL_PROXY == 'socks5://10.9.8.2:59595'\n*   Trying 10.9.8.2:59595...\n* Connected to 10.9.8.2 (10.9.8.2) port 59595\n* Host ya.ru:443 was resolved.\n* IPv6: 2a02:6b8::2:242\n* IPv4: 5.255.255.242, 77.88.44.242, 77.88.55.242\n* SOCKS5 connect to 5.255.255.242:443 (locally resolved)\n* SOCKS5 request granted.\n* Connected to 10.9.8.2 (10.9.8.2) port 59595\n* ALPN: curl offers h2,http/1.1\n* TLSv1.3 (OUT), TLS handshake, Client hello (1):\n*  CAfile: /etc/ssl/certs/ca-certificates.crt\n*  CApath: /etc/ssl/certs\n* TLSv1.3 (IN), TLS handshake, Server hello (2):\n* TLSv1.3 (IN), TLS change cipher, Change cipher spec (1):\n* TLSv1.3 (IN), TLS handshake, Encrypted Extensions (8):\n* TLSv1.3 (IN), TLS handshake, Certificate (11):\n* TLSv1.3 (IN), TLS handshake, CERT verify (15):\n* TLSv1.3 (IN), TLS handshake, Finished (20):\n* TLSv1.3 (OUT), TLS change cipher, Change cipher spec (1):\n* TLSv1.3 (OUT), TLS handshake, Finished (20):\n* SSL connection using TLSv1.3 / TLS_AES_256_GCM_SHA384 / x25519 / id-ecPublicKey\n```\n</details>\n\nASN:\n- home server: 210616\n- dedicated server: 48347\n\nPS: both servers are NEVER used for vpn/proxy purposes\n\nalso SSH are not available directly to any server, including legit one. SSH works only via already established months ago tunnel between my servers \n\ni think AI in [DPI](https://ru.wikipedia.org/wiki/%D0%A2%D0%B5%D1%85%D0%BD%D0%B8%D1%87%D0%B5%D1%81%D0%BA%D0%B8%D0%B5_%D1%81%D1%80%D0%B5%D0%B4%D1%81%D1%82%D0%B2%D0%B0_%D0%BF%D1%80%D0%BE%D1%82%D0%B8%D0%B2%D0%BE%D0%B4%D0%B5%D0%B9%D1%81%D1%82%D0%B2%D0%B8%D1%8F_%D1%83%D0%B3%D1%80%D0%BE%D0%B7%D0%B0%D0%BC) now works without any restrictions, blocking every suspicious requests, even to legitimate services \n\n"
+    },
+    {
+     "id": 6656514932,
+     "issue": 680,
+     "issue_title": "True Censorship Resistance",
+     "created_at": "2026-11-05T11:11:40Z",
+     "user": "therealtunge",
+     "url": "https://github.com/net4people/bbs/issues/680#issuecomment-6656514932",
+     "body": "WHAT is this issue"
+    },
+    {
+     "id": 6655471503,
+     "issue": 671,
+     "issue_title": "[Russia] recent mass ip bans",
+     "created_at": "2026-11-05T10:18:43Z",
+     "user": "its0ka",
+     "url": "https://github.com/net4people/bbs/issues/671#issuecomment-6655471503",
+     "body": "@code-apeman well there are changes every day and my list is very old at this point"
+    },
+    {
+     "id": 6654510450,
+     "issue": 671,
+     "issue_title": "[Russia] recent mass ip bans",
+     "created_at": "2026-11-05T09:30:35Z",
+     "user": "code-apeman",
+     "url": "https://github.com/net4people/bbs/issues/671#issuecomment-6654510450",
+     "body": "firstbyte's ips were blocked even more\n\nmy vps in finland is unpingable now (the ip wasn't in the list)\nordered a new one - also unpingable (not in the list too)"
+    },
+    {
+     "id": 6654127821,
+     "issue": 425,
+     "issue_title": "目前绕过中国GFW代理的最佳实践是什么？/ What is the current best practice of creating a proxy to bypass GFW China?",
+     "created_at": "2026-11-05T09:10:29Z",
+     "user": "zhen55468-jpg",
+     "url": "https://github.com/net4people/bbs/issues/425#issuecomment-6654127821",
+     "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic."
+    },
+    {
+     "id": 6653395428,
+     "issue": 466,
+     "issue_title": "The predictable IP address sequences of one type of GFW DNS injector",
+     "created_at": "2026-11-05T08:30:12Z",
+     "user": "zhen55468-jpg",
+     "url": "https://github.com/net4people/bbs/issues/466#issuecomment-6653395428",
+     "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic.\nTo properly resolve DNS issues, you simply need to intercept all initial DNS queries globally and either force them to use a custom DNS list or redirect them to the device through which your network traffic actually exits."
+    },
+    {
+     "id": 6653337664,
+     "issue": 492,
+     "issue_title": "Better method to find ttl to bypass gfw automatically? ",
+     "created_at": "2026-11-05T08:26:55Z",
+     "user": "zhen55468-jpg",
+     "url": "https://github.com/net4people/bbs/issues/492#issuecomment-6653337664",
+     "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic."
+    },
+    {
+     "id": 6652170204,
+     "issue": 651,
+     "issue_title": "A Wall Behind A Wall : In Fujian",
+     "created_at": "2026-11-05T07:18:14Z",
+     "user": "zhen55468-jpg",
+     "url": "https://github.com/net4people/bbs/issues/651#issuecomment-6652170204",
+     "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic."
+    }
+   ]
   },
   "yggdrasil-network/yggdrasil-go": {
    "issues": [],
@@ -44,17 +184,6 @@
      "user": "absolutep",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2630",
      "body": "Is arm64 binaries for macOS possible?"
-    },
-    {
-     "number": 345,
-     "title": "OpenWrt packages",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2016-01-26T09:09:19Z",
-     "updated_at": "2026-11-03T09:50:22Z",
-     "user": "teodorre",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/345",
-     "body": "Если возможно, сделайте пару сборок под OpenWrt (под популярные процессорные архитектуры).\nСейчас у большого количества роутеров >64мб памяти, а использование в роутере, на мой взгляд, самое очевидное.\nИли есть какие-то сложности? \n"
     }
    ],
    "comments": [
@@ -102,15 +231,6 @@
      "user": "orignal",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2630#issuecomment-6620533777",
      "body": "Shouldn't be different from other platforms."
-    },
-    {
-     "id": 6522123708,
-     "issue": 345,
-     "issue_title": "OpenWrt packages",
-     "created_at": "2026-10-30T11:57:39Z",
-     "user": "LLE8",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/345#issuecomment-6522123708",
-     "body": "Собрал  свежую версию. \nhttps://github.com/PurpleI2P/i2pd-openwrt/tree/master/trunk\nФайл /usr/bin/i2pd около 2 МБ, в ОЗУ после запуска 12-13 МБ.\nРеализована возможность собрать с UPnP или без, с торрент-клиентом или без, добавлены соответствующие пункты в menuconfig и патчи.\nВ составе пакета имеется i2pd.conf, подходящий (надеюсь) для многих домашних маршрутизаторов. Размещение файлов в ФС целевого устройства аналогично пакету для Debian.\nДля сборки свежей версии в Makefile менять дату сборки `PKG_SOURCE_DATE`,  хэш очередного коммита `PKG_SOURCE_VERSION`. Они попадают в имя apk-файла. \n"
     }
    ]
   },
@@ -121,15 +241,70 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7135,
+     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-13T01:29:50Z",
+     "updated_at": "2026-11-05T16:27:36Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135",
+     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
+    },
+    {
+     "number": 7337,
+     "title": "XTLS Vision: Serialize VisionWriter writes from concurrent mux sessions",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T15:19:41Z",
+     "updated_at": "2026-11-05T15:42:13Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7337",
+     "body": "Fixes #7336\n\nSince 4064f8dd the VLESS inbound hands its `VisionWriter` to `mux.Server.DispatchLink` without a pipe. `mux.ServerWorker` writes from one goroutine per session, so `VisionWriter.WriteMultiBuffer` runs concurrently. The padding state (`writeOnceUserUUID`, `IsPadding`, `NumberOfPacketToFilter`) changes outside any lock, while the `BufferedWriter` lock underneath only covers the socket write. Blocks then reach the wire in a different order from the one their padding was computed in. The client `VisionReader` passes padding through as data, and the client mux fails with `unknown status: <random>`, dropping every session on the connection. Details, configs and logs are in the issue.\n\nThis PR makes `VisionWriter.WriteMultiBuffer` hold its own mutex for the whole call, so the padding state and the wire order change together. Mux writes were already serialized by the `BufferedWriter` lock, so throughput stays the same. On plain TCP Vision only one goroutine writes, so the lock is never contended. The same change covers the VLESS reverse portal with Vision, where `mux.ClientWorker` writes from one goroutine per session.\n\n`TestVisionWriterConcurrentWrites` writes to one `VisionWriter` from two goroutines while the underlying writer holds the first write until the second one lands. Without the lock the second block goes out first without the user UUID, and a `VisionReader` on the other side returns padding bytes as payload. The test is deterministic: it fails on `main` without the change and passes with it, with `-race` as well.\n\nThe repro from the issue (100 UDP associations at once through Vision + XUDP):\n\n| | replies of 100 | server data races (`-race`) |\n| -- | -- | -- |\n| v26.10.31 | 88, 60, 79 | 17 |\n| this PR | 100, 100, 99 | 0 |\n\n`go test -race ./proxy/ ./common/mux/... ./proxy/vless/...` passes.\n"
+    },
+    {
+     "number": 7336,
+     "title": "XTLS Vision + Mux/XUDP: concurrent mux sessions corrupt the downlink (\"common/mux: unknown status\")",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T15:19:26Z",
+     "updated_at": "2026-11-05T15:19:54Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/issues/7336",
+     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nOn a VLESS + `xtls-rprx-vision` + REALITY server, a client with Mux/XUDP (`concurrency: -1`, `xudpConcurrency: 8`) loses UDP sessions when several of them start at once. The client logs `[Error] common/mux: unknown status: <random number>` (194, 196, ...) or only `[Info] common/mux: failed to read metadata > common/mux: insufficient buffer: 0`. After that, no XUDP session on that mux connection gets any more replies.\n\nVersion: v26.10.31, also current `main` (a52db8f6). I think it started in v25.9.5 with 4064f8dd (\"XTLS Vision: Refactor code to use DispatchLink() in VLESS inbound\").\n\nReplies received, with the configs and scripts below (100 UDP associations opened at once, one datagram each):\n\n| | replies of 100 |\n| -- | -- |\n| v26.10.31, Vision + XUDP | 88, 60, 79 |\n| v26.10.31, Vision + XUDP, server built with `-race` | 40 (17 data race reports on the server) |\n| v26.10.31, XUDP without `flow` | 98, 100 |\n| v26.10.31, Vision + XUDP, `xudpConcurrency: 1` | 100, 100 |\n| `main` with #7337, Vision + XUDP | 100, 100, 99 |\n\n**Cause**\n\nSince 4064f8dd, the VLESS inbound passes its `VisionWriter` to `mux.Server.DispatchLink` directly, with no pipe in between. `mux.ServerWorker` runs `handle()` in a goroutine per session, so several goroutines call `VisionWriter.WriteMultiBuffer` at the same time. `VisionWriter` updates the padding state (`writeOnceUserUUID`, `IsPadding`, `NumberOfPacketToFilter`) without a lock. The `BufferedWriter` underneath takes a lock, but only for the socket write. So blocks can reach the wire in a different order from the one their padding was computed in:\n\n- a padding block without the user UUID goes out first: the client `VisionReader` is still in its initial state, does not recognise it and passes it to mux as data;\n- a padded block goes out after the block with `CommandPaddingEnd`: the client has already stopped unpadding.\n\nThe client mux then reads the 5-byte padding header as a frame header. The status byte falls on the low byte of the random padding length, which is where the random `unknown status` comes from. `ClientWorker.fetchOutput` exits and takes all sessions of the connection with it.\n\nThe server built with `-race` shows `VisionWriter.WriteMultiBuffer` called concurrently from `mux.writeMetaWithFrame` of different sessions (first report):\n\n```\nWARNING: DATA RACE\nRead at 0x00c0003141d8 by goroutine 132:\n  github.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer()\n      proxy/proxy.go:357 +0x38c\n  github.com/xtls/xray-core/common/mux.writeMetaWithFrame()\n      common/mux/writer.go:86 +0x200\n  ...\n  github.com/xtls/xray-core/common/mux.handle()\n      common/mux/server.go:113 +0x154\n  github.com/xtls/xray-core/common/mux.(*ServerWorker).handleStatusNew.gowrap1()\n      common/mux/server.go:260 +0x54\n\nPrevious write at 0x00c0003141d8 by goroutine 123:\n  github.com/xtls/xray-core/proxy.XtlsFilterTls()\n      proxy/proxy.go:629 +0x9c\n  github.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer()\n      proxy/proxy.go:358 +0x3d4\n  github.com/xtls/xray-core/common/mux.writeMetaWithFrame()\n      common/mux/writer.go:86 +0x200\n  ...\n  github.com/xtls/xray-core/common/mux.handle()\n      common/mux/server.go:113 +0x154\n  github.com/xtls/xray-core/common/mux.(*ServerWorker).handleStatusNew.gowrap1()\n      common/mux/server.go:260 +0x54\n```\n\nThe client is clean under `-race`: its mux writes through a pipe, so only one goroutin"
+    },
+    {
+     "number": 7223,
+     "title": "Inbound: Close and remove the handler when it fails to start",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-21T22:25:24Z",
+     "updated_at": "2026-11-05T10:35:56Z",
+     "user": "hmdsefi",
+     "url": "https://github.com/XTLS/Xray-core/pull/7223",
+     "body": "`inbound.Manager.AddHandler` first puts the handler into `taggedHandlers` (or `untaggedHandlers`) and, when the manager is already running, then calls `handler.Start()` and returns its error. Nothing is undone when `Start` fails.\n\nThis is the path of `HandlerService.AddInbound` (`xray api adi`). If the new inbound cannot start, for example because one of its ports is already in use, the API returns the error but the handler stays in the manager. Adding it again with the same tag fails with `existing tag found` until it is removed by hand, and the workers that did start (the ports before the busy one in a port range) keep listening.\n\nNow a handler that fails to start is taken out of the manager again and closed, so the ports it opened are released and the tag can be used again. Startup is not affected: handlers from the config are only started later by `Manager.Start`.\n\nVerified with the new `TestAddHandlerFailedStart`, which adds a tagged and an untagged handler whose `Start` fails to a running manager, and then adds the tag again. On main it fails with:\n\n    handler \"in\" was not closed after failing to start\n    handler \"in\" is still registered after failing to start (1 handlers)\n\nWith this change it passes. I also checked it end to end with a dokodemo-door inbound on two ports where the second one was busy: on main the first port stayed bound after the failed add, and adding the inbound again after freeing the port failed with `existing tag found: in`. With the change the first port is free again and the second add works.\n\nAlso ran `go test ./app/proxyman/inbound/...` (also with `-race`), `go test ./testing/scenarios -run TestCommander`, `go vet ./app/proxyman/inbound/...`, gofmt and `go run ./infra/vformat/main.go -mode check -pwd ./`.\n"
+    },
+    {
      "number": 7335,
      "title": "Real IP leaked: After vless enc vision rejects UDP/443, subsequent packets from the same UDP source port are re-routed to the default, resulting in direct outbound",
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-05T05:57:58Z",
-     "updated_at": "2026-11-05T06:11:08Z",
+     "updated_at": "2026-11-05T09:41:58Z",
      "user": "Anthrop44",
      "url": "https://github.com/XTLS/Xray-core/issues/7335",
      "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n这个问题比较严重，很多Claude用户被封可能和这个issue有关\n\n使用vless enc+xhttp+vision过Cloudflare ECH alpn=h3节点（用<https://github.com/Anthrop44/3x-setup>一键部署的），客户端为Linux v2rayN，使用Xray TUN和域名分流。在访问 openai.com 时被阻止访问并提示`Country, region, or territory not supported`而且被显示真实ip了。于是意识到有部分流量没有经过代理出口。切换到同一代理服务器的直连节点vless+xhttp+tls后访问恢复\n\n实验确认这是因为UDP在Vision拒绝后通过客户端direct出站发送\n\n确认该问题与ipv6无关\n\n<details>\n<summary>GPT分析的</summary>\n### 原始部署与最小复现的关系\n\n已通过只读SSH读取生产服务器正在使用的`/usr/local/x-ui/bin/config.json`和`/etc/caddy/Caddyfile`，并核对服务端版本。没有修改或重启生产服务\n\n| 生产节点 | VLESS Encryption | flow | 公网传输 |\n|---|---|---|---|\n| Direct h2/h3 | `encryption/decryption=none` | 无Vision | XHTTP + TLS，h2或h3 |\n| Cloudflare ECH h2/h3 | `mlkem768x25519plus.xorpub`，客户端`0rtt`，服务端`600s` | `xtls-rprx-vision` | XHTTP + TLS/ECH，h2或h3 |\n\n生产架构：\n\n```text\nDirect客户端 -> Caddy:443 -> h2c -> Xray Direct入站:8084\nCDN客户端 -> Cloudflare边缘:443 -> Caddy回源监听 -> h2c -> Xray ENC+Vision入站:8087\n```\n\n所以从Cloudflare ECH h3切换到Direct h2同时改变了CDN路径、VLESS Encryption、Vision和ALPN，不能把恢复简单归因于h3变成h2。生产Xray的两个XHTTP入站均为`security=none`，TLS由Caddy/Cloudflare处理；这不代表公网传输没有TLS\n\n最初曾用普通VLESS（`encryption=none`）+ RAW + TLS + Vision做本机最小复现，成功观察到同样的后续包direct现象。为了覆盖实际使用的VLESS ENC方案，本报告已追加并以**VLESS Encryption + XHTTP + TLS + Vision、ALPN h3**作为主要本机复现，且完成h2及flow对照\n\n### 受控对照结果\n\n下面各组使用相同的本机VLESS ENC密钥对、测试UUID、XHTTP路径、域名分流和默认direct规则。服务端仅监听回环地址，不经过Cloudflare或Caddy。每组发起两次相同curl HTTP/3请求，分别控制节点传输ALPN及客户端/服务端flow\n\n注意两个不同层次：表中h2/h3是**客户端Xray到代理服务器的外层XHTTP传输**；测试应用curl始终使用HTTP/3，即内层UDP/443\n\n| 外层ALPN | 客户端flow | Vision拒绝次数 | 客户端proxy记录 | 客户端direct记录 | UDP接收器收到包数 | 路径判断 |\n|---|---|---:|---:|---:|---:|---|\n| h2 | `xtls-rprx-vision` | 4 | 4 | 2 | 2 | 拒绝后由客户端直连 |\n| h3 | `xtls-rprx-vision` | 4 | 4 | 2 | 2 | 拒绝后由客户端直连 |\n| h2 | `空（服务端同步不启用Vision）` | 0 | 2 | 0 | 10 | 客户端保持proxy，服务端转发 |\n| h3 | `空（服务端同步不启用Vision）` | 0 | 2 | 0 | 10 | 客户端保持proxy，服务端转发 |\n| h2 | `xtls-rprx-vision-udp443` | 0 | 2 | 0 | 10 | 客户端保持proxy，服务端转发 |\n| h3 | `xtls-rprx-vision-udp443` | 0 | 2 | 0 | 10 | 客户端保持proxy，服务端转发 |\n\n接收器和代理服务器都在同一台机器，所以“收到UDP包”本身不等于泄漏。路径判断同时核对客户端路由日志和服务端转发日志：普通Vision组的包由客户端direct发出；空flow及`-udp443`组的包由代理服务器转发，客户端没有direct记录。接收器不提供HTTP/3服务，所以各组curl最终都超时，不能以curl超时与否判断路径\n\n实验说明：\n\n- VLESS ENC+Vision在外层h2、h3下均复现，不是h3特有问题\n- 普通VLESS+TLS+Vision也复现，所以VLESS Encryption不是必要条件\n- 完全移除Cloudflare/ECH后仍复现，所以不能把问题限定为Cloudflare CDN或ECH故障\n- 仅保留ENC、去掉Vision后，h2/h3两组没有出现该拒绝及后续direct路径\n- 使用`xtls-rprx-vision-udp443`时，h2/h3两组均未出现本次泄漏路径；客户端写带后缀的flow，服务端仍写`xtls-rprx-vision`。这只是针对当前复现的对照结论，不声称该选项能消除所有域名嗅探失败/默认直连风险\n\n### 实际与期望行为\n\n主要h3复现的客户端源端口37731先命中proxy，被Vision拒绝后，同一源端口又命中direct；第二次请求的源端口33403重复此过程。本机UDP接收器收到两个1200字节数据包，客户端日志同时记录到相应direct连接\n\n预期不是让普通Vision接受UDP/443，而是让已按域名判定需要代理、随后被Vision拒绝的UDP流，其后续包不会因为连接状态清理、重新嗅探不到域名而转为默认直连\n\n版本与环境：\n\n- 客户端和实际生产服务端均为Xray 26.10.31，commit `a4a3dff5b20c2faae567b742c172c7b95e75c083`，go1.27.3 linux/amd64\n- 本机复现的服务端、客户端也使用同一个该版本二进制\n- curl 8.18.0，OpenSSL 3.5.9，ngtcp2 1.22.1，nghttp3 1.18.0，支持HTTP3\n- 完全本机复现不依赖v2rayN、TUN、真实代理节点、IPv6或外部网站\n\n可能的代码路径，供维护者核对：\n\n- [VLESS outbound](https://github.com/XTLS/Xray-core/blob/a4a3dff5b20c2faae567b742c172c7b95e75c083/proxy/vless/outbound/outbound.go#L248)：普通Vision遇到UDP/443直接返回错误\n- [UDP dispatcher](https://github.com/XTLS/Xray-core/blob/a4a3dff5b20c2faae567b742c172c7b95e75c083/transport/internet/udp/dispatcher.go)：状态关闭后，后续包可重新进入分流\n- [dispatcher](https://github.com/XTLS/Xray-core/blob/a4a3dff5b20c2faae567b742c172c7b95e75c083/app/dispatcher/default.go)：嗅探失败后按普通规则路由，最终direct规则使该边界表现为直发\n- 相关：[QUIC阻断问题#6052](https://github.com/XTLS/Xray-core/issues/6052)、[Blackhole修复#6057](https://github.com/XTLS/Xray-core/pull/6057)。是否需要对Vision的拒绝分支采用类似的丢弃/状态保留处理？\n</details>\n\n### 重现方式\n\n1. 将下方“主要最小复现”的配置保存为`client.json`、`server.json`，放在一个空目录中。两者使用新生成、未用于生产的测试UUID、VLESS ENC密钥及测试TLS证书；客户端用`pinnedPeerCertSha256`固定该自签证书，没有关闭证书校验\n2. 终端A运行`xray run -c server.json`，终端B运行`xray run"
+    },
+    {
+     "number": 6386,
+     "title": "REALITY client (v25.3.6) fails to connect to upstream server (v24.12.31)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-06-26T10:27:39Z",
+     "updated_at": "2026-11-05T07:50:54Z",
+     "user": "hadi77ir",
+     "url": "https://github.com/XTLS/Xray-core/issues/6386",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nWhile the same connection works with both versions being the same (v24.12.31 as both client and server), when a client is upgraded to v25.x.x (in my case, v25.3.6), it cannot connect to the upstream and will experience REALITY transport layer dropping their connections (actually, forwarding to imitated server) with the following error:\n```\nREALITY: received real certificate (potential MITM or redirection)\n```\nI think this might be related to carrying \"Xray-core version\" in REALITY's ClientHello instead of defining separate \"REALITY Protocol versions\" to keep compatibility between Xray releases and between major releases.\n\nIf you use same versions on both sides, you won't experience such problems, but with a client having gone through a major release cycle, it will fail. (Haven't tested it the other way around with 24.12.31 client and 25.x.x server)\n\n### Reproduction Method\n\n- Run a simple REALITY server with SNI and short ID being set to some values.\n- Run a client configured to use that REALITY server as outbound.\n- You will see errors indicating \"received real certificate (potential MITM or redirection)\" in the log.\n\n### Client config\n\nOutbound:\n```\n        {\n            \"protocol\": \"vless\",\n            \"settings\": {\n                \"vnext\": [\n                    {\n                        \"address\": \"REDACTED\",\n                        \"port\": REDACTED,\n                        \"users\": [\n                            {\n                                \"id\": \"REDACTED\",\n                                \"encryption\": \"none\"\n                            }\n                        ]\n                    }\n                ]\n            },\n            \"streamSettings\": {\n                \"network\": \"tcp\",\n                \"security\": \"reality\",\n                \"realitySettings\": {\n                    \"fingerprint\": \"chrome\",\n                    \"serverName\": \"www.REDACTED.com\",\n                    \"publicKey\": \"REDACTED\",\n                    \"spiderX\": \"\",\n                    \"shortId\": \"REDACTED\"\n                }\n            },\n            \"tag\": \"proxy\"\n        },\n```\n\n### Server config\n\nInbound:\n```\n    {\n      \"tag\": \"REALITY_INBOUND\",\n      \"listen\": \"0.0.0.0\",\n      \"port\": REDACTED,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [],\n        \"decryption\": \"none\"\n      },\n      \"streamSettings\": {\n        \"network\": \"tcp\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"show\": false,\n          \"dest\": \"REDACTED:443\",\n          \"xver\": 0,\n          \"serverNames\": [\n            \"www.REDACTED.com\",\n            \"REDACTED.com\"\n          ],\n          \"privateKey\": \"REDACTED\",\n          \"shortIds\": [\n            \"REDACTED\"\n          ]\n        }\n      },\n      \"sniffing\": {\n        \"enabled\": true,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ]\n      }\n    },\n```\n\n### Client log\nCopied from journalctl:\n```\nREDACTED:23:39.790268 [Error] [1736950196] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\nREDACTED:23:39.790429 [Error] [4050634846] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\nREDACTED:23:39.790500 [Error] [4228015039] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\n```\n\n### Server log\n\nNothing related to these problematic connections."
     },
     {
      "number": 7208,
@@ -462,17 +637,6 @@
      "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
     },
     {
-     "number": 7223,
-     "title": "Inbound: Close and remove the handler when it fails to start",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-21T22:25:24Z",
-     "updated_at": "2026-11-04T03:06:40Z",
-     "user": "hmdsefi",
-     "url": "https://github.com/XTLS/Xray-core/pull/7223",
-     "body": "`inbound.Manager.AddHandler` first puts the handler into `taggedHandlers` (or `untaggedHandlers`) and, when the manager is already running, then calls `handler.Start()` and returns its error. Nothing is undone when `Start` fails.\n\nThis is the path of `HandlerService.AddInbound` (`xray api adi`). If the new inbound cannot start, for example because one of its ports is already in use, the API returns the error but the handler stays in the manager. Adding it again with the same tag fails with `existing tag found` until it is removed by hand, and the workers that did start (the ports before the busy one in a port range) keep listening.\n\nNow a handler that fails to start is taken out of the manager again and closed, so the ports it opened are released and the tag can be used again. Startup is not affected: handlers from the config are only started later by `Manager.Start`.\n\nVerified with the new `TestAddHandlerFailedStart`, which adds a tagged and an untagged handler whose `Start` fails to a running manager, and then adds the tag again. On main it fails with:\n\n    handler \"in\" was not closed after failing to start\n    handler \"in\" is still registered after failing to start (1 handlers)\n\nWith this change it passes. I also checked it end to end with a dokodemo-door inbound on two ports where the second one was busy: on main the first port stayed bound after the failed add, and adding the inbound again after freeing the port failed with `existing tag found: in`. With the change the first port is free again and the second add works.\n\nAlso ran `go test ./app/proxyman/inbound/...` (also with `-race`), `go test ./testing/scenarios -run TestCommander`, `go vet ./app/proxyman/inbound/...`, gofmt and `go run ./infra/vformat/main.go -mode check -pwd ./`.\n"
-    },
-    {
      "number": 7189,
      "title": "Replace outdated XTool with 3x-setup in the One Click section",
      "is_pr": true,
@@ -515,17 +679,6 @@
      "user": "navidmafi",
      "url": "https://github.com/XTLS/Xray-core/pull/7171",
      "body": ""
-    },
-    {
-     "number": 7135,
-     "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-13T01:29:50Z",
-     "updated_at": "2026-11-04T03:06:40Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7135",
-     "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
     },
     {
      "number": 7112,
@@ -768,20 +921,54 @@
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7291",
      "body": "关闭被go默认启用的MPTCP 并使核心本来的MPTCP选项重新有效（可以手动开启）\nhttps://thehackernews.com/2026/10/linux-kernel-tcp-flaw-with-98-cvss.html\n不知是否和MPTCP强相关 可以观望一段时间 如果是真的所有go编写的翻墙服务端和caddy可以被一键获取root就搞笑了"
-    },
-    {
-     "number": 7240,
-     "title": "Xray-core v26.10.21  无法转发 127.0.0.1",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-10-23T06:43:18Z",
-     "updated_at": "2026-11-03T12:34:53Z",
-     "user": "funhunter",
-     "url": "https://github.com/XTLS/Xray-core/issues/7240",
-     "body": "### 完整性要求 / Integrity Requirements\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n- [x] I have read all the notes in the issue template and ensured my submission meets the requirements.\n- [x] I guarantee that I have read the documentation and understand the meaning of all the configuration file entries I have written, rather than simply stacking a large number of potentially useful options or defaults.\n- [x] I have provided the complete configuration file and logs, rather than just providing snippets based on my own judgment.\n- [x] I have searched the issues and have not found a similar issue already reported.\n- [x] The issue can be successfully reproduced in the latest Release version.\n\n### 描述 / Description\n\n最新版[Xray-core v26.10.21] 无法连接 127.0.0.1:10068 ssh 端口\n我在服务器端，nc -zv 127.0.0.1 10068\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\n说明127.0.0.1:10068 是正常的\n\n我上一个版本Xray-core v26.3.27,没有这个问题\nconfig.json配置文件没有任何改变\n\nThe latest version [Xray-core v26.10.21] is unable to connect to the 127.0.0.1:10068 SSH port.\nOn the server side, running `nc -zv 127.0.0.1 10068` yields:\nConnection to 127.0.0.1 10068 port [tcp/*] succeeded!\nThis indicates that 127.0.0.1:10068 is functioning correctly.\n\nI did not have this problem in the previous version, Xray-core v26.3.27.\nThe config.json configuration file has not been changed.\n\n### 重现方式 / Steps to Reproduce\n\n我想通过xray vless tcp tls vison 连接服务器的10068 ssh 端口，我将转发地址设置为127.0.0.1\n我在本地客户端配置了\n\nI want to connect to the server's 10068 SSH port via xray vless tcp tls vision, and I have set the forwarding address to 127.0.0.1.\nI configured the local client as follows:\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"127.0.0.1\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n服务器通过freedom 发出，测试时，没有其他任何路由规则\n\n然后通过命令 ssh -p 2503 root@127.0.0.1， 2503是我本地dokodemo-door 监听地址\n实际效果是，ssh 连接失败\n\n修改客户端配置，127.0.0.1改为服务器实际公网ip，例如 \"address\": \"xxx.xx.x.x\",\n\nThe server sends traffic via freedom, and there are no other routing rules during testing.\n\nThen, I run the command `ssh -p 2503 root@127.0.0.1`, where 2503 is the address my local dokodemo-door is listening on.\nThe actual result is that the SSH connection fails.\n\nModifying the client configuration by changing 127.0.0.1 to the server's actual public IP, e.g., \"address\": \"xxx.xx.x.x\":\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"xxx.xx.x.x\",\n    \"port\": 22,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n然后，还是这条命令， ssh -p 2503 root@127.0.0.1 连接成功\n\n我上一个版本Xray-core v26.3.27,没有这个问题\n\nThen, using the same command, `ssh -p 2503 root@127.0.0.1`, the connection succeeds.\n\nI did not have this problem in the previous version, Xray-core v26.3.27.\n\n### 客户端配置 / Client Configuration\n\n原客户端配置\n\nOriginal client configuration\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"127.0.0.1\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n修改后客户端配置\n\nModified client configuration\n\n```json\n{\n  \"listen\": \"127.0.0.1\",\n  \"port\": 2503,\n  \"protocol\": \"dokodemo-door\",\n  \"settings\": {\n    \"address\": \"x.x.x.x\",\n    \"port\": 10068,\n    \"network\": \"tcp\"\n  }\n}\n```\n\n### 服务端配置 / Server Configuration\n\n```json\n    {\n      \"tag\": \"direct\",\n      \"protocol\": \"freedom\"\n    },\n```\n\n### 客户端日志 / Client Logs\n\n```log\n2026/10/23 14:33:39.242258 [Info] [3883811706] transport/internet/tcp: dialing TCP to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.242262 [Debug] [3883811706] transport/internet: dialing to tcp:x.x.x.x:xxxx\n2026/10/23 14:33:39.276779 [Info] [3883811706] proxy/vless/outbound: tunneling request to tcp:127.0.0.1:10068 via x.x.x.x:xxxx\n```\n\n### 服务端日志 / Server Logs\n\n```log\n2026/10/23 14:00:02.512766 [Warning] core: Xray 26.10.21 started\n2026/10/23 14:01:06.327524 [Info] [450590513] "
     }
    ],
    "comments": [
+    {
+     "id": 6663291567,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-11-05T16:27:36Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6663291567",
+     "body": "看起来utls还没有完全放弃治疗我想到了一个可能更好的办法"
+    },
+    {
+     "id": 6661845498,
+     "issue": 7135,
+     "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
+     "created_at": "2026-11-05T15:24:42Z",
+     "user": "Immortalety",
+     "url": "https://github.com/XTLS/Xray-core/pull/7135#issuecomment-6661845498",
+     "body": "https://github.com/XTLS/utls/pull/1"
+    },
+    {
+     "id": 6654726505,
+     "issue": 7335,
+     "issue_title": "Real IP leaked: After vless enc vision rejects UDP/443, subsequent packets from the same UDP source port are re-routed to the default, resulting in direct outbound",
+     "created_at": "2026-11-05T09:41:32Z",
+     "user": "Anthrop44",
+     "url": "https://github.com/XTLS/Xray-core/issues/7335#issuecomment-6654726505",
+     "body": "@Fangliding 让gpt验证了一下，好像没问题了\n\n<details><summary>GPT summary</summary>\n\n已在Linux/amd64实测4c6093c8ae908d15cbf271407a54560d21ae163c，修复了本issue原先复现的泄漏路径\n\n对比直接父提交a52db8f6ed19384dbc91a6f7e2cf4c09fbe7c2ca，两者都使用Go 1.27.2从未修改源码编译。所有测试服务端保持26.10.31，只替换客户端核心；默认路由仍为direct\n\n每组两次curl HTTP/3请求，结果如下：\n\n| 配置 | 父提交：客户端direct记录/实际收到的包 | 修复版：客户端direct记录/实际收到的包 |\n|---|---|---|\n| dokodemo-door，VLESS ENC+Vision+XHTTP，外层h2 | 2/2 | 0/0 |\n| dokodemo-door，VLESS ENC+Vision+XHTTP，外层h3 | 2/2 | 0/0 |\n| Xray TUN，VLESS ENC+Vision+XHTTP，外层h2 | 2/2 | 0/0 |\n| Xray TUN，VLESS ENC+Vision+XHTTP，外层h3 | 2/2 | 0/0 |\n| dokodemo-door，普通VLESS+Vision+RAW+TLS | 2/2 | 0/0 |\n\n修复版各普通Vision组均只留下2条proxy记录，无后续direct，也没有UDP包到达接收器。空flow和`xtls-rprx-vision-udp443`正向对照仍能经代理转发，客户端direct为0，每组接收10个UDP包；TUN+h3+`-udp443`同样通过\n\nTUN测试使用独立network namespace和veth，没有真实公网访问。接收器只收UDP，不实现HTTP/3，curl超时是预期行为；结论依据是客户端分流日志、服务端转发日志和接收器统计。没有测试长期空闲过期后的端口复用或其他嗅探/连接失败路径\n\n总计17组对照通过，相关blackhole及signal现有测试也通过。感谢修复！\n\n</details> \n\n应该可以close as completed了"
+    },
+    {
+     "id": 6653500075,
+     "issue": 7335,
+     "issue_title": "Real IP leaked: After vless enc vision rejects UDP/443, subsequent packets from the same UDP source port are re-routed to the default, resulting in direct outbound",
+     "created_at": "2026-11-05T08:35:59Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7335#issuecomment-6653500075",
+     "body": "尝试 https://github.com/XTLS/Xray-core/commit/4c6093c8ae908d15cbf271407a54560d21ae163c"
+    },
+    {
+     "id": 6652684786,
+     "issue": 6386,
+     "issue_title": "REALITY client (v25.3.6) fails to connect to upstream server (v24.12.31)",
+     "created_at": "2026-11-05T07:49:35Z",
+     "user": "DenaSon",
+     "url": "https://github.com/XTLS/Xray-core/issues/6386#issuecomment-6652684786",
+     "body": "we have same problems also\n"
+    },
     {
      "id": 6651133951,
      "issue": 7335,
@@ -1755,42 +1942,6 @@
      "body": "I pushed a simpler fix: if neither `gateway` nor `autoSystemRoutingTable` has an IPv6 entry, a failed IPv6 DNS setup is now just skipped instead of stopping Xray."
     },
     {
-     "id": 6603915644,
-     "issue": 7240,
-     "issue_title": "Xray-core v26.10.21  无法转发 127.0.0.1",
-     "created_at": "2026-11-03T12:34:52Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6603915644",
-     "body": "有道理"
-    },
-    {
-     "id": 6601762396,
-     "issue": 7240,
-     "issue_title": "Xray-core v26.10.21  无法转发 127.0.0.1",
-     "created_at": "2026-11-03T10:52:26Z",
-     "user": "codexss",
-     "url": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6601762396",
-     "body": "> 26\\. 当时的权衡是担心刷屏所以给了 INFO\n\n如果真有刷屏的话也建议WARN，因为真要有这种刷屏请求多半是恶意请求，如果是自用的话自己就ALLOW放行了，或者至少给个阻断的日志，WARN级别看不到真的挺头疼的，眼看着是放行到了direct…"
-    },
-    {
-     "id": 6600993083,
-     "issue": 7240,
-     "issue_title": "Xray-core v26.10.21  无法转发 127.0.0.1",
-     "created_at": "2026-11-03T10:19:05Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6600993083",
-     "body": "当时的权衡是担心刷屏所以给了 INFO"
-    },
-    {
-     "id": 6598219004,
-     "issue": 7240,
-     "issue_title": "Xray-core v26.10.21  无法转发 127.0.0.1",
-     "created_at": "2026-11-03T07:46:48Z",
-     "user": "codexss",
-     "url": "https://github.com/XTLS/Xray-core/issues/7240#issuecomment-6598219004",
-     "body": "建议将\n2026/11/03 15:40:49.609578 [Info] [763628597] proxy/freedom: blocked target: tcp:10.0.0.1:5666, blackholing connection for 30s\n这种日志加入到WARN级别，这两天更新了一下docker排查了半天开DEBUG才发现是更新了安全策略。。。"
-    },
-    {
      "id": 6540309985,
      "issue": 7291,
      "issue_title": "DefaultListener: Disable MPTCP by default",
@@ -1821,6 +1972,204 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3110,
+     "title": "Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-01T09:26:30Z",
+     "updated_at": "2026-11-05T16:54:47Z",
+     "user": "smollgreymouse",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3110",
+     "body": "# Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect and recreates tun2\n\n## Describe the bug\n\nOn Linux, AmneziaVPN performs a full VPN reconnect whenever NetworkManager emits:\n\n```text\nStateChanged(NM_STATE_CONNECTED_GLOBAL = 70)\n```\n\neven when the physical network, Wi-Fi access point, interface, and gateway have not actually changed.\n\nA normal NetworkManager connectivity transition:\n\n```text\nCONNECTED_GLOBAL -> CONNECTED_SITE -> CONNECTED_GLOBAL\n```\n\nis interpreted by AmneziaVPN as a network change.\n\nWhen NetworkManager returns to `CONNECTED_GLOBAL`, AmneziaVPN calls `VpnConnection::reconnectToVpn()`. With Xray this stops Xray/tun2socks, destroys `tun2`, and creates a new tunnel.\n\nIn my case the event is triggered periodically by NetworkManager connectivity checks. The Wi-Fi access point does not change.\n\nThe unnecessary reconnect is disruptive by itself, but the reconnect cleanup also sometimes fails, leaving DNS/routes in a broken state until a manual VPN reconnect.\n\n## Environment\n\n* OS: Ubuntu 25.10\n* Kernel: Linux 6.17.0-41-generic\n* Network manager: NetworkManager\n* VPN protocol: Xray\n* Xray data path: `tun2` + `tun2socks`\n* TUN address: `10.33.0.2/24`\n* Physical connection remains active during the reproduced event\n\n## Reproduced timeline\n\nIncident captured on 2026-08-31.\n\n### NetworkManager changes connectivity classification\n\n```text\n16:30:05.947  DNS query: connectivity-check.ubuntu.com A\n16:30:06.312  DNS reply: NOERROR\n16:30:06.628  NetworkManager state is now CONNECTED_SITE\n16:30:06.xxx  Amnezia LinuxNetworkWatcherWorker: NMStateChanged 60\n```\n\nNetworkManager then retries connectivity checks.\n\nApproximately 31 seconds later:\n\n```text\n16:30:37.338  DNS reply: NOERROR\n16:30:37.657  NetworkManager state is now CONNECTED_GLOBAL\n16:30:37.658  Amnezia LinuxNetworkWatcherWorker:\n               Properties changed for interface org.freedesktop.NetworkManager.Device\n16:30:37.658  Amnezia LinuxNetworkWatcherWorker:\n               Access point did not changed. Ignoring the changes\n16:30:37.658  Amnezia LinuxNetworkWatcherWorker:\n               NMStateChanged 70\n```\n\nThe important part is that AmneziaVPN itself reports that the access point did not change.\n\n### AmneziaVPN immediately reconnects\n\nImmediately after `NMStateChanged 70`:\n\n```text\nAmneziaVPN.desktop:\nReconnect triggered. Reconnecting to the server\n\nAmneziaVPN.desktop:\nXrayProtocol::stop()\n```\n\nThe existing TUN is then removed:\n\n```text\nNetworkManager:\ndevice (tun2): state change: activated -> unmanaged\n(reason 'unmanaged', managed-type: 'removed')\n\nAmneziaVPN-service:\ndeleteTun ret 0\n```\n\nThe diagnostic bundle independently confirms that the TUN FD was owned by Amnezia's `tun2socks` process.\n\n### Cleanup errors\n\nDuring this automatic reconnect the logs also contain:\n\n```text\nFailed to delete tun\nNo suitable DNS manager found.\nVpnConnection::onConnectionStateChanged: Failed to flush DNS\nFailed to clear saved routes\n```\n\nand several route deletion failures.\n\nA `pkill` invocation also reports:\n\n```text\npkill: pattern that searches for process name longer than 15 characters\nwill result in zero matches\nTry `pkill -f' ...\n```\n\n### Tunnel is recreated\n\nAmneziaVPN then starts Xray/tun2socks again and creates a new TUN:\n\n```text\nXrayProtocol::start()\nXray::startXray()\n\ntun2socks -device tun://tun2 -proxy socks5://127.0.0.1:...\n\nip tuntap add mode tun dev tun2\nip addr add 10.33.0.2/24 dev tun2\nip link set dev tun2 up\n```\n\nTherefore the `tun2` deletion is not caused by NetworkManager. NetworkManager observes the externally managed interface disappearing.\n\nThe tunnel is deliberately torn down by AmneziaVPN as part of `reconnectToVpn()`.\n\n## Source-code cause\n\nCurrent Linux code in:\n\n```text\nclient/platforms/linux/linuxnetworkwatcherworker.cpp\n```\n\ncontains:\n\n```cpp\nvoid LinuxNetworkWatcherWorker::NMStateChanged(quint32 state)\n{\n    logger.debug() << \"NMStateChanged \" << state;\n\n    if (state == NM_STATE_ASLEEP || state == NM_STATE_DISABLED"
+    },
+    {
+     "number": 3132,
+     "title": "[macOS][XRay] Domain endpoint: utun is configured but nothing traverses the tunnel until teardown; literal IP works; iOS works",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-06T18:57:34Z",
+     "updated_at": "2026-11-05T14:19:44Z",
+     "user": "konst643",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3132",
+     "body": "### Describe the bug\n\nOn macOS, an XRay (VLESS + Reality) profile whose server address is a **domain name** never establishes: the app reaches \"Connected\", the `utun` interface is created but **never receives an IP address**, no traffic flows, and networking stays broken until disconnect. On disconnect the log shows `Failed to stop xray`.\n\nReplacing only the server address with the server's **literal IPv4** (same key, same Reality parameters, same SNI) makes the very same profile work: `utun` gets its address and traffic flows.\n\n### To Reproduce\n\n1. Self-host xray-core (26.3.x), VLESS + Reality on TCP 443, with a DNS A record pointing at the server.\n2. On macOS, import a `vpn://` key (or `vless://` link) where the outbound `vnext.address` is the **domain name**.\n3. Connect. The app shows \"Connected\", but `ifconfig` shows the new `utun` interface without an inet address; nothing loads, the machine effectively loses networking until disconnect.\n4. Re-import the same profile with `vnext.address` set to the server's literal IPv4 — it works: the `utun` gets its address (e.g. `10.x.x.x`) and traffic flows through the server.\n\n### Expected behavior\n\nA domain endpoint should work: resolve the name **before** the tunnel takes over the default route (or add a bypass route for the resolved IP once known). Otherwise the resolver query is routed into the tunnel that is still being established — a chicken-and-egg loop that can never complete.\n\n### Evidence that it is the resolution order\n\n- The same domain-based profile works in AmneziaVPN on **iOS**: the Network Extension excludes the provider's own traffic, so the name resolves outside the tunnel.\n- The same domain-based `vless://` link works on the same Mac in a third-party client (V2Box), which resolves the name before route setup and adds a host bypass route for the resolved address.\n- The \"Use AmneziaDNS\" toggle has no effect on this (tested both ways).\n- Not a duplicate of #2722: there the tunnel comes up and passes IP traffic while in-tunnel DNS fails; here the tunnel never comes up at all when the address is a domain.\n\n### Environment information\n\n- **OS:** macOS 26 (Darwin 25.6)\n- **AmneziaVPN Client Version:** 4.8.15.4 and 5.0.2.0 (both reproduce)\n- **Protocol:** XRay, VLESS + Reality over TCP 443, self-hosted xray-core 26.3.x\n- **Import method:** `vpn://` key with XRay JSON config (also reproduces with `vless://` link import)\n"
+    },
+    {
+     "number": 3413,
+     "title": "[XRay][Reality] Default fingerprint hellochrome_120 is rejected by the app-installed server",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T14:16:01Z",
+     "updated_at": "2026-11-05T14:16:01Z",
+     "user": "TheRusskiy",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3413",
+     "body": "*Disclosure: I used AI to help draft this report and include debug info\n\n**Describe the bug**\nNew XRay (VLESS + Reality) setups get `fingerprint: \"hellochrome_120\"` by default. With the server the app itself installs (Xray-core **v26.10.31**), every client using that fingerprint fails Reality authentication. The server treats the client as a normal visitor and proxies it to the decoy site (`dest`). The client receives the decoy's real certificate and drops the connection.\n\nFrom the user's side, the app shows **Connected** but no traffic passes. This reproduced on both macOS and Android. Changing the fingerprint to `chrome` fixes it immediately, with the same server and the same keys otherwise.\n\nRelevant code (`ac175c8`):\n- `client/core/utils/constants/protocolConstants.h:72`: `constexpr char defaultFingerprint[] = \"hellochrome_120\";`\n- `client/ui/models/protocols/xrayConfigModel.cpp:762`: `fingerprintOptions()` lists `hellochrome_120` first, along with `ios` and `edge`, which fail the same way (see Additional context).\n- `client/server_scripts/xray/Dockerfile:4`: `ARG XRAY_RELEASE=\"v26.10.31\"`\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. In AmneziaVPN 5.1.0.6, add a fresh Ubuntu server and install the XRay protocol with default settings (Reality, `xtls-rprx-vision`, port 443, default site `www.googletagmanager.com`).\n2. Go to Servers → your server → XRay → Security. Fingerprint shows `hellochrome_120` (the default).\n3. Share a connection key and import it on any client (tested on macOS and Android), then connect.\n4. The app shows \"Connected\", but no websites load.\n5. Change Fingerprint to `chrome` in the same screen, save, and re-share the key. It works.\n\n**Expected behavior**\nThe default fingerprint should work with the Xray server version the app installs. A connection whose Reality handshakes all fail shouldn't be reported as \"Connected\".\n\n**Log files**\nThe app log contains no error. It reports a successful connection:\n```\nXrayProtocol::start()\n[tun2socks]: \"[STACK] tun://utun22 <-> socks5://127.0.0.1:62272\"\nVpnProtocol::setConnectionState \"Connected\"\n… (only empty [tun2socks] lines until manual disconnect)\n```\n\nA standalone Xray-core v26.10.31 client using the same key logs this for every connection:\n```\n[Error] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\n```\n\n**Screenshots**\n<!-- attach: Servers → XRay → Security screen showing Fingerprint = hellochrome_120 -->\n\n**Desktop (please complete the following information):**\n - OS: macOS Tahoe 26.5.1 (arm64)\n - Version: 5.1.0.6 (ac175c8)\n\n**Smartphone (please complete the following information):**\n - Device: <!-- fill in -->\n - OS: Android <!-- fill in version -->\n - Version: <!-- fill in AmneziaVPN version -->\n\n**Server (please complete the following information):**\n - OS: Ubuntu 26.04.1 LTS (Docker 29.1.3), container `amnezia-xray` installed by the app, Xray-core v26.10.31\n\n**Additional context**\n\n*Fingerprint test matrix.* I tested a standalone Xray-core **v26.10.31** client (`teddysun/xray` image) against the app-installed server. Everything except `fingerprint` was identical, with site `www.googletagmanager.com`:\n\n| Works | Fails with `received real certificate` |\n|---|---|\n| `chrome`, `firefox`, `safari`, `randomized`, `hellochrome_131`, `hellochrome_133` | **`hellochrome_120`**, `hellofirefox_120`, `hellochrome_102`, `hellochrome_106_shuffle`, `ios`, `edge` |\n\nThe failure is deterministic: 3 out of 3 attempts failed (15 Reality handshakes, all rejected), while `chrome` succeeded 3 out of 3 back to back. After switching the site to `learn.microsoft.com`, `chrome` still works, and an app-generated `hellochrome_120` key still fails in the macOS app.\n\n*Not a core version mismatch.* The macOS app bundles Xray-core **v26.7.28** (per the strings in the binary). A standalone v26.7.28 client with `chrome` works against the v26.10.31 server, so only the fingerprint matters.\n\n*ClientHello comparison.* I captured the first f"
+    },
+    {
+     "number": 3411,
+     "title": "fix(macos): adapt connected tray icon to menu bar",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T11:27:11Z",
+     "updated_at": "2026-11-05T14:14:05Z",
+     "user": "merodiiiii",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3411",
+     "body": "Use a template image so macOS adjusts the connected icon to the menu bar appearance."
+    },
+    {
+     "number": 3402,
+     "title": "[macOS] Imported WireGuard profile connects but has no internet with Address /24; changing to /32 fixes it",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-04T23:59:41Z",
+     "updated_at": "2026-11-05T13:25:26Z",
+     "user": "kir-sth",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3402",
+     "body": "### Environment\n\n- MacBook Air M4, macOS 27.0.1 (arm64)\n- AmneziaVPN 5.1.0.6 ([`ac175c8`](https://github.com/amnezia-vpn/amnezia-client/releases/tag/5.1.0.6))\n- Self-hosted server, classic WireGuard imported from `.conf`, no obfuscation\n\n### Steps to reproduce\n\n1. Import a working WireGuard configuration into AmneziaVPN. Relevant settings:\n\n   ```ini\n   [Interface]\n   Address = 10.8.0.21/24\n   DNS = 1.1.1.1, 8.8.8.8\n   MTU = 1280\n\n   [Peer]\n   AllowedIPs = 0.0.0.0/0, ::/0\n   PersistentKeepalive = 25\n   ```\n\n   This is a configuration fragment; keys and endpoint are omitted.\n\n2. Connect. AmneziaVPN reports “Connected”, and the logs confirm a successful handshake, but internet access does not work.\n3. The same configuration works correctly in the official WireGuard macOS client, with traffic exiting through my VPN server.\n\n### Expected behavior\n\nThe imported profile should provide working internet access, as it does in the WireGuard client.\n\n### Verified workaround\n\nChange only the interface address prefix, then re-import and reconnect:\n\n```diff\n- Address = 10.8.0.21/24\n+ Address = 10.8.0.21/32\n```\n\nInternet access immediately works, and traffic exits through the VPN server. No other configuration changes were needed.\n\n### Suspected cause and related reports\n\nThis appears consistent with host bits being cleared by [`QHostAddress::parseSubnet()`](https://github.com/amnezia-vpn/amnezia-client/blob/5.1.0.6/client/platforms/macos/daemon/iputilsmacos.cpp#L96) in `IPUtilsMacos::addIP4AddressToDevice()`.\nI did not capture the actual interface address before the workaround, so this mechanism is not directly verified on my Mac.\n\n- [#1089](https://github.com/amnezia-vpn/amnezia-client/issues/1089): Linux report with the same `/32` workaround.\n- [#1647](https://github.com/amnezia-vpn/amnezia-client/issues/1647) and [#2048](https://github.com/amnezia-vpn/amnezia-client/issues/2048): configured host address becomes the network address.\n- [PR #2840](https://github.com/amnezia-vpn/amnezia-client/pull/2840): proposed fix for this mechanism on Linux; currently open and does not modify the macOS implementation.\n\nCould the macOS address parsing be checked for the same problem?\n\n### Logs\n\nApp and tunnel logs before and after the workaround are attached. Handshake succeeds in both cases.\nVPN endpoint IP, peer public key, profile IDs and network service IDs have been anonymized consistently. All other log content is unchanged.\n\n[before_tunnel.log](https://github.com/user-attachments/files/34399341/before_tunnel.log)\n[before_app.log](https://github.com/user-attachments/files/34399343/before_app.log)\n[after_tunnel.log](https://github.com/user-attachments/files/34399342/after_tunnel.log)\n[after_app.log](https://github.com/user-attachments/files/34399340/after_app.log)"
+    },
+    {
+     "number": 3192,
+     "title": "У кого то работает свой впс на протоколе awg?",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-21T18:33:22Z",
+     "updated_at": "2026-11-05T13:01:29Z",
+     "user": "ssouuu2k",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192",
+     "body": "На стороне сервера вроде проблем никаких нет, но впн не работает."
+    },
+    {
+     "number": 1886,
+     "title": "subscription expiration prevents from deleting old config and adding new",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2025-09-27T13:39:48Z",
+     "updated_at": "2026-11-05T11:59:36Z",
+     "user": "Nova-Logic",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1886",
+     "body": "**Describe the bug**\nA clear and concise description of what the bug is.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Get your subscription expired\n2. Buy new one\n3. goto subscription settings in amneziaavpn app\n4. try any option like \"Remove from application\" or \"unlink device\"\n5. see  the error:  ErrorCode: 1112. Your Amnezia Premium\nsubscription has expired. Please check\nyour email for renewal instructions. If\nyou haven't received an email, please\ncontact our support.\n6. that error prevents from deleting subscription\n\n**Expected behavior**\n1) ability to delete expired subscription. \n2)Ability to renew subscription\n3) ability to prolongate subscription\n\n\n**Screenshots**\n\n<img width=\"381\" height=\"691\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7768980e-f4af-40c8-bef0-3c4bcbf4758b\" />\n\n**Desktop (please complete the following information):**\n - OS: iOS 26,macOS 26, iPadOS 26\n - Version [e.g. 2.1.2]\n\n\n\n**Server (please complete the following information):**\n - Premium subscription from amnesia\n\n"
+    },
+    {
+     "number": 3412,
+     "title": "[BUG] Self-hosted scripts does not invoke when default shell is not sh/bash",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T11:29:41Z",
+     "updated_at": "2026-11-05T11:29:41Z",
+     "user": "stck",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3412",
+     "body": "**Describe the bug**\nServer running ubuntu with fish rejects check_server_is_busy.sh since it cannot use syntax LOCK_FILE='/var/...' since it requires `set` in front of command. \n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Set default shell to fish\n2. Run automatic installation\n3. Script hangs after ~5 seconds saying \"Server is busy installing other software\"\n4. After multiple tries it rejects with \"Package manager error\"\n\n**Expected behavior**\nIf scripts are written in bash/sh they should have at least shebang OR ssh connection must use exec bash.\n\n**Log files**\n```\nfish: Unsupported use of '='. In fish, please use 'set LOCK_FILE \"/var/lib/dpkg/lock-frontend\"'.\nif which apt-get > /dev/null 2>&1 || command -v apt-get > /dev/null 2>&1; then LOCK_CMD=\"fuser\"; LOCK_FILE=\"/var/lib/dpkg/lock-frontend\";\\\n```\n\n**Server (please complete the following information):**\n - OS: Ubuntu 24.04\n\n**Additional context**\nFor fish users it might be helpful to temporary append\n```\nif not status is-interactive\n    exec bash\nend\n```\nto a `~/.config/fish/config.fish` of a user that credentials used to connect\n"
+    },
+    {
+     "number": 3410,
+     "title": "feat: add WhatsApp proxy container",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T11:19:24Z",
+     "updated_at": "2026-11-05T11:19:24Z",
+     "user": "NickVs2015",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3410",
+     "body": "Add whats appProxy container.\nKnown limitation (upstream, not fixable proxy-side): On Android, media through the proxy may not work in networks that block WhatsApp by SNI:\nthe Android client sends media requests over HTTP/1.1 with the CDN hostname in plaintext\nSNI, which DPI drops before it reaches the proxy, while iOS hides the hostname and passes.\nConfirmed with a packet capture on the server: without VPN the Android media ClientHello\nnever arrives; through a VPN the same request completes. Meta tracks this as\n[WhatsApp/proxy#442](https://github.com/WhatsApp/proxy/issues/442) and\n[WhatsApp/proxy#473](https://github.com/WhatsApp/proxy/issues/473) (closed as \"not planned\").\nThe official `facebook/whatsapp_proxy` image behaves the same way."
+    },
+    {
+     "number": 3397,
+     "title": "5.1.0.6 Android 11+ apk update signature error",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-04T12:50:31Z",
+     "updated_at": "2026-11-05T10:43:41Z",
+     "user": "AfricanBear",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3397",
+     "body": "\nПри установке обновления apk выводится ошибка сертификата. \nУстройство Oppo Find 9x Ultra китайская версия\n \n\n<img width=\"1080\" height=\"2376\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/684d287d-b744-4a54-b4b8-925632e2499a\" />"
+    },
+    {
+     "number": 3409,
+     "title": "fix(android): skip split tunneling apps that are not installed",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T10:03:10Z",
+     "updated_at": "2026-11-05T10:03:10Z",
+     "user": "OverFitted",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3409",
+     "body": "## Summary\n\nSkip app split tunneling entries for packages that are not installed instead of crashing the VPN service.\n\n## Problem\n\n`Protocol.buildVpnInterface()` calls `VpnService.Builder.addAllowedApplication()` / `addDisallowedApplication()` for every package in the app split tunneling list. Both throw `PackageManager.NameNotFoundException` when the package is not installed. Nothing catches it: `AmneziaVpnService.connectionExceptionHandler` does not list it and rethrows, so the `:amnezia*Service` process dies.\n\nThe list easily contains such entries: an app that was uninstalled after being added, or a backup restored on another device. The service is restarted with the same config (`START_REDELIVER_INTENT`, Always-on), so the crash repeats until the user finds and removes the entry.\n\n## Changes\n\n- Catch `NameNotFoundException` around each call, log a warning with the package name and continue, the same way `AppListProvider` handles missing packages.\n\nIn *Only apps from the list* mode, if every listed package is missing, no application filter is set and all traffic goes through the VPN, which fails safe.\n\n## Verification\n\n- `git diff --check`\n- Not built locally: I don't have an Android toolchain set up. The change is limited to the two loops in `Protocol.kt` and one import.\n"
+    },
+    {
+     "number": 3408,
+     "title": "fix(windows): fail WireGuard activation when the kill switch cannot be enabled",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T10:03:02Z",
+     "updated_at": "2026-11-05T10:03:02Z",
+     "user": "OverFitted",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3408",
+     "body": "## Summary\n\nStop a WireGuard/AmneziaWG connection on Windows from reporting *Connected* when the kill switch could not be set up.\n\n## Problem\n\n`WireguardUtilsWindows::addInterface()` ignores the result of `WindowsFirewall::enableInterface()`, and `updatePeer()` ignores the result of `WindowsFirewall::enablePeerTraffic()`.\n\nWhen any `FwpmFilterAdd0` call inside `enablePeerTraffic()` fails (for example with a long split tunneling list), its scope guard aborts the transaction and calls `disableKillSwitch()`. In the default mode that removes every filter, yet activation continues and the client shows *Connected* with the kill switch enabled in settings while no filters are installed.\n\n## Changes\n\n- Return `false` from `addInterface()` and `updatePeer()` when the firewall call fails, with an error in the log.\n\n`Daemon::activate()` already handles a `false` from both methods (it is the path a failed route takes), and `WindowsDaemon` disables the kill switch on `activationFailure`, so the user gets a failed connection instead of an unprotected one.\n\n## Backward compatibility\n\nNothing changes when the firewall calls succeed or when the kill switch is off.\n\n## Verification\n\n- Built the Windows x64 client, service and tests in Release mode (MSVC 19.35, Qt 6.10.1) against `dev` at ac175c8; `ctest` passes.\n- Checked that both firewall methods return `false` only on WFP API errors: an empty IPv6 gateway becomes a valid `::` filter, so there is no new failure for configs that connect today.\n"
+    },
+    {
+     "number": 3407,
+     "title": "fix(daemon): clear host bits in allowed IP ranges",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T10:02:54Z",
+     "updated_at": "2026-11-05T10:02:54Z",
+     "user": "OverFitted",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3407",
+     "body": "## Summary\n\nClear the host bits of allowed IP ranges when the daemon parses the activation config, so a split tunneling entry such as `104.16.0.1/12` no longer breaks WireGuard/AmneziaWG connections on Windows.\n\n## Problem\n\nSite split tunneling accepts entries like `192.168.1.10/24`: `NetworkUtilities::checkIpSubnetFormat()` only checks the syntax, and `LocalSocketController::activate()` splits `address/range` and sends both parts unchanged. `Daemon::parseConfig()` then builds each range with `IPAddress(QHostAddress, int)`, which keeps the host bits.\n\nOn Windows such a range reaches `CreateIpForwardEntry2` as is. Windows rejects a destination prefix with host bits set:\n\n```text\n198.51.100.7/24 -> CreateIpForwardEntry2 = 87 (ERROR_INVALID_PARAMETER)\n198.51.100.0/24 -> CreateIpForwardEntry2 = 0\n```\n\n`updateRoutePrefix()` returns `false`, and `Daemon::activate()` aborts the whole connection because of that one entry. With the kill switch on, `WindowsFirewall::blockTrafficTo()` also uses `address()` as the lower bound of the WFP range, so the block for `1.2.3.4/24` starts at `.4` instead of `.0`.\n\n`excludedAddresses` already go through `IPAddress(QString)`, which uses `QHostAddress::parseSubnet()` and clears the host bits.\n\n## Changes\n\n- Build allowed ranges with `IPAddress(QString)` so they are normalized the same way as excluded addresses:\n\n```text\n104.16.0.1/12  -> 104.16.0.0/12\n192.168.1.10/24 -> 192.168.1.0/24\n8.8.8.8/32     -> 8.8.8.8/32\n2001:db8::1/32 -> 2001:db8::/32\n```\n\n## Backward compatibility\n\nRanges without host bits are unchanged. The UAPI `allowed_ip` lines, routes and firewall ranges now describe the same network.\n\n## Verification\n\n- Built the Windows x64 client, service and tests in Release mode (MSVC 19.35, Qt 6.10.1) against `dev` at ac175c8; `ctest` passes.\n- Checked the `parseSubnet` results above and the `CreateIpForwardEntry2` results above with standalone programs (the test route was added on the loopback interface and removed).\n"
+    },
+    {
+     "number": 3406,
+     "title": "fix(windows): run ipconfig /flushdns with separate arguments",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T10:02:43Z",
+     "updated_at": "2026-11-05T10:02:43Z",
+     "user": "OverFitted",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3406",
+     "body": "## Summary\n\nMake `RouterWin::flushDns()` actually run `ipconfig /flushdns`.\n\n## Problem\n\n`flushDns()` passes the whole command line to `QProcess::start(command)`. In Qt 6 the single-string overload treats its argument as the program name, so Qt looks for an executable called `ipconfig /flushdns`, fails to start it and the method still returns `true`. The service calls `flushDns` on every connect and disconnect (`VpnConnection::onConnectionStateChanged`) and after re-resolving split tunneling sites, so cached DNS answers from before the tunnel came up were never dropped.\n\nA standalone check against Qt 6.10.1 on Windows:\n\n```text\nstart(\"ipconfig /flushdns\")       -> waitForStarted() = false, error = FailedToStart\nstart(\"ipconfig\", {\"/flushdns\"})  -> waitForStarted() = true,  exitCode = 0\n```\n\n## Changes\n\n- Start `ipconfig` with `/flushdns` as a separate argument, the same way `RouterLinux` starts `systemctl`.\n\n## Not changed\n\n`RouterWin::resetIpStack()` has the same pattern for `netsh int ip reset` and `netsh winsock reset`, so those commands never run either. It is called on every connect, and both commands reset the Windows network stack and need a reboot to take effect, so making them run would be a behaviour change of its own. I left it as is.\n\n## Verification\n\n- Built the Windows x64 client, service and tests in Release mode (MSVC 19.35, Qt 6.10.1) against `dev` at ac175c8; `ctest` passes.\n- Confirmed the `QProcess` behaviour above with a standalone Qt program.\n"
+    },
+    {
+     "number": 3405,
+     "title": "fix(settings): restore split tunneling route modes saved as strings",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T09:32:40Z",
+     "updated_at": "2026-11-05T09:32:40Z",
+     "user": "OverFitted",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3405",
+     "body": "## Summary\n\nKeep the site and app split tunneling route modes when restoring a backup that was created on Linux or Android.\n\n## Problem\n\nOn Linux and Android `QSettings` uses the INI format, which does not keep value types, so `SecureQSettings::backupAppConfig()` writes `Conf/routeMode` and `Conf/appsRouteMode` as JSON strings (for example `\"2\"`). `SettingsController::restoreAppConfigFromData()` reads them with `QJsonValue::toInt()`, which returns `0` for a string, so the restore always emits `RouteMode::VpnAllSites` and `AppsRouteMode::VpnAllApps`.\n\nWith site split tunneling enabled, `VpnAllSites` is a mode the rest of the app does not expect:\n\n- `OpenVpnConfigurator::processConfigWithLocalSettings()` removes `redirect-gateway` and has no branch for it, and `VpnConnection::onConnectionStateChanged()` deletes the `0.0.0.0` route without adding any other, so a self-hosted OpenVPN connection reports *Connected* while traffic does not go through the tunnel.\n- After the next start `IpSplitTunnelingController` migrates `VpnAllSites` to `VpnOnlyForwardSites`, so a user who had *All sites except* ends up with the opposite mode.\n- On Android the app route mode becomes `VpnAllApps`, which reads the empty `AllApps` list, so the restored app list is not applied.\n\nThe boolean flags next to these values are already read through `toVariant()` for the same reason.\n\n## Changes\n\n- Read `Conf/routeMode` and `Conf/appsRouteMode` through `toVariant().toInt()`, which handles both numbers and numeric strings.\n- Add `testRestoreRouteModeStoredAsString` to `BackupExportImportTest`.\n\n## Backward compatibility\n\nBackups that store the modes as numbers (Windows, macOS) are read exactly as before.\n\n## Verification\n\n- Built the Windows x64 client, service and tests in Release mode (MSVC 19.35, Qt 6.10.1) against `dev` at ac175c8.\n- The new test fails on `dev` without the fix and passes with it.\n- `ctest`: all tests pass.\n"
+    },
+    {
+     "number": 3300,
+     "title": "[Windows][Premium] Tunnel DNS rewrites chatgpt.com / api.openai.com to a proxy that drops ~70% of TLS handshakes (Codex fails with os error 10053)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-18T17:07:55Z",
+     "updated_at": "2026-11-05T08:42:50Z",
+     "user": "papadone",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3300",
+     "body": "**Describe the bug**\nOn Amnezia Premium, the DNS inside the tunnel resolves OpenAI domains not to their real Cloudflare addresses but to a proxy IP. That proxy fails most TLS handshakes, so OpenAI Codex constantly drops with:\n`stream disconnected before completion: IO error: An established connection was aborted by the software in your host machine. (os error 10053)`\n\nBrowsing other sites (google.com etc.) through the same tunnel works fine.\n\n**Environment**\n- AmneziaVPN 5.0.3.0, Windows 11 (10.0.26200)\n- Amnezia Premium, exit Finland (exit IP in AS9009 M247, Helsinki); same result on 3 other countries\n- Protocols tested: AmneziaWG and VLESS — same result\n- \"Use AmneziaDNS\" is OFF, custom DNS set to 1.1.1.1 / 1.0.0.1 — ignored, the tunnel interface still gets `100.64.0.1, 8.8.4.4` (see also #2655)\n\n**What happens**\n1. Inside the tunnel `chatgpt.com`, `api.openai.com`, `auth.openai.com` resolve to `57.129.144.160` (AS16276 OVH, GB), after reconnect — `216.152.150.132`.\n2. The same rewritten answer comes back even when querying `1.1.1.1`, `8.8.8.8` or `9.9.9.9` directly — plain DNS on port 53 is intercepted in the tunnel.\n3. Real addresses via DoH (cloudflare-dns.com): `chatgpt.com` → `104.18.32.47, 172.64.155.209`, `api.openai.com` → `172.66.0.243, 162.159.140.245`.\n\n**Measurements (curl, same tunnel, same moment)**\n| Target | Success |\n|---|---|\n| `https://chatgpt.com/backend-api/codex/responses` via proxy IP (AmneziaWG) | 2 / 10 |\n| same via proxy IP (VLESS) | 5 / 15 |\n| `https://api.openai.com/v1/models` via proxy IP | 1–2 / 4–5 |\n| same endpoints via real IP (`curl --resolve chatgpt.com:443:104.18.32.47`) | 15 / 15, 5 / 5 |\n\nFailures are `curl: (35) schannel: failed to receive handshake, SSL/TLS connection failed` after ~0.4–1.5 s.\nVia the real IP OpenAI answers normally (`401 Unauthorized` without a token — no region block), so the proxy is not needed for this exit.\n\n**Workaround**\nPinning real IPs in the `hosts` file (traffic still goes through the tunnel, just bypassing the proxy) fixes Codex completely.\n\n**Expected behavior**\n- Either don't rewrite OpenAI domains for exits where OpenAI is reachable directly, or fix the proxy.\n- Respect the \"Use AmneziaDNS\" switch / custom DNS on Premium, or clearly show in the UI that it is ignored.\n\nPossibly related: #2655, #2375, #2996"
+    },
+    {
+     "number": 3395,
+     "title": "Dr.Web и AmneziaVPN",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-04T10:55:34Z",
+     "updated_at": "2026-11-05T07:49:22Z",
+     "user": "samurai-busido",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3395",
+     "body": "Сегодня с выходом новым антивирусных баз от **Dr.Web** файл начал ругаться на файл _mullvad-split-tunnel.sys_ находящийся внутри программы **AmneziaVPN Desktop**.\nКроме данного антивируса более активности среди остальных проверенных на VirusTotal нет.\n\n<img width=\"1795\" height=\"532\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/f2c35ed4-3d9a-4959-b14c-01b86ffe39bd\" />"
+    },
+    {
+     "number": 3404,
+     "title": "fix(core): honour Use AmneziaDNS switch for all server types",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T07:45:42Z",
+     "updated_at": "2026-11-05T07:45:42Z",
+     "user": "Stalinko",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3404",
+     "body": "## Problem\n\nWith **Settings → Connection → Use AmneziaDNS** turned off, the client still connects with AmneziaDNS (`172.29.172.254`).\n\n`getDnsPair()` prefers a DNS saved in the server config over the switch:\n\n- `SelfHostedAdminServerConfig::getDnsPair()` checks the switch only when no DNS is saved.\n- `SelfHostedUserServerConfig`, `NativeServerConfig` and `ApiV2ServerConfig` don't check it at all.\n\nA shared `vpn://` key gets AmneziaDNS saved in it whenever the admin's switch was on at export time (`ExportController` writes the resolved DNS into the key). After that, the recipient's switch and custom DNS servers have no effect.\n\n## Fix\n\nIn `ConnectionController::prepareConnection()`, after the DNS pair is resolved for any server type: if the switch is off and the primary DNS is AmneziaDNS, use the user's DNS servers instead.\n\nThis is one check where every connection passes, so it covers self-hosted, shared, native and Premium/Free configs. Nothing changes while the switch is on, or when the saved DNS is anything other than AmneziaDNS.\n\n## Testing\n\nNot built or run locally. Please let CI build it. To check manually: import a shared key that has AmneziaDNS saved in it, turn **Use AmneziaDNS** off, connect, and confirm the tunnel uses the DNS servers from **Settings → Connection → DNS servers**.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
+    },
     {
      "number": 3403,
      "title": "Android 17 AWG 3.1 with split-tunneling connection off after screen locked",
@@ -1853,17 +2202,6 @@
      "user": "Arty-Ant",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3374",
      "body": "**Describe the bug**\nOn macOS, when an AmneziaWG server is added by **hostname** (A record only, no AAAA) and the Mac is on a network with **DNS64/NAT64** (e.g. mobile hotspot of a Russian mobile operator), the hostname resolves to a NAT64-synthesized address `64:ff9b::/96`. The macOS daemon then passes it to wireguard-go as `endpoint=<ipv6>:<port>` **without square brackets**, wireguard-go rejects it with IPC error -22, peer creation fails and the connection is immediately dropped (the GUI may sit in \"Preparing\"/\"Connecting\").\n\nThe same server added by **IPv4 literal** works on the same network. Android client works with the hostname on the same network. Same root cause as the Linux issue #2607, but on macOS and triggered by NAT64 synthesis rather than a real AAAA record.\n\n**Root cause (from source, dev @ 7f9b7db)**\n`client/platforms/macos/daemon/wireguardutilsmacos.cpp`, `WireguardUtilsMacos::updatePeer()`:\n```cpp\nif (!config.m_serverIpv4AddrIn.isNull()) {\n    out << \"endpoint=\" << config.m_serverIpv4AddrIn << \":\";      // <- holds 64:ff9b::… here, no brackets\n} else if (!config.m_serverIpv6AddrIn.isNull()) {\n    out << \"endpoint=[\" << config.m_serverIpv6AddrIn << \"]:\";\n```\nThe resolved hostname result ends up in `m_serverIpv4AddrIn` even when it is an IPv6 (NAT64) address. Suggested fix: bracket the address whenever it contains `:` (or put IPv6 results into `m_serverIpv6AddrIn`), and/or prefer A records when resolving the endpoint host.\n\n**To Reproduce**\n1. Add a self-hosted AmneziaWG server by hostname that has only an A record (e.g. `relay.example.net` → `203.0.113.10`).\n2. Connect the Mac to a DNS64/NAT64 network (mobile hotspot).\n3. Click Connect → immediately disconnected.\n\n**Service log** (`/private/var/log/AmneziaVPN/AmneziaVPN-service.log`, key/addresses anonymized)\n```\nMacosRouteMonitor : Adding exclusion route for 64:ff9b::cb00:710a/128\nWireguardUtilsMacos : Configuring peer <pubkey> via 64:ff9b::cb00:710a\nWireguardGo : ERROR: (utun4) IPC error -22: failed to set endpoint 64:ff9b::cb00:710a:5275: invalid ip:port \"64:ff9b::cb00:710a:5275\", IPv6 addresses must be surrounded by square brackets\nWireguardUtilsMacos : Peer configuration failed: Unknown error: -22\nDaemon : Peer creation failed.\nDaemonLocalServerConnection : Failed to activate the interface\n```\n\n**Expected behavior**\nConnection succeeds (bracketed endpoint `[64:ff9b::cb00:710a]:5275`), or the client uses the A record.\n\n**Environment**\n- AmneziaVPN 5.0.3.0 (de93650), macOS Sequoia 15.7.5 (x86_64)\n- Protocol: AmneziaWG, self-hosted server added via hostname\n"
-    },
-    {
-     "number": 3402,
-     "title": "[macOS] Imported WireGuard profile connects but has no internet with Address /24; changing to /32 fixes it",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-04T23:59:41Z",
-     "updated_at": "2026-11-04T23:59:41Z",
-     "user": "kir-sth",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3402",
-     "body": "### Environment\n\n- MacBook Air M4, macOS 27.0.1 (arm64)\n- AmneziaVPN 5.1.0.6 ([`ac175c8`](https://github.com/amnezia-vpn/amnezia-client/releases/tag/5.1.0.6))\n- Self-hosted server, classic WireGuard imported from `.conf`, no obfuscation\n\n### Steps to reproduce\n\n1. Import a working WireGuard configuration into AmneziaVPN. Relevant settings:\n\n   ```ini\n   [Interface]\n   Address = 10.8.0.21/24\n   DNS = 1.1.1.1, 8.8.8.8\n   MTU = 1280\n\n   [Peer]\n   AllowedIPs = 0.0.0.0/0, ::/0\n   PersistentKeepalive = 25\n   ```\n\n   This is a configuration fragment; keys and endpoint are omitted.\n\n2. Connect. AmneziaVPN reports “Connected”, and the logs confirm a successful handshake, but internet access does not work.\n3. The same configuration works correctly in the official WireGuard macOS client, with traffic exiting through my VPN server.\n\n### Expected behavior\n\nThe imported profile should provide working internet access, as it does in the WireGuard client.\n\n### Verified workaround\n\nChange only the interface address prefix, then re-import and reconnect:\n\n```diff\n- Address = 10.8.0.21/24\n+ Address = 10.8.0.21/32\n```\n\nInternet access immediately works, and traffic exits through the VPN server. No other configuration changes were needed.\n\n### Suspected cause and related reports\n\nThis appears consistent with host bits being cleared by [`QHostAddress::parseSubnet()`](https://github.com/amnezia-vpn/amnezia-client/blob/5.1.0.6/client/platforms/macos/daemon/iputilsmacos.cpp#L96) in `IPUtilsMacos::addIP4AddressToDevice()`. I did not capture the actual interface address before the workaround, so this mechanism is not directly verified on my Mac.\n\n- [#1089](https://github.com/amnezia-vpn/amnezia-client/issues/1089): Linux report with the same `/32` workaround.\n- [#1647](https://github.com/amnezia-vpn/amnezia-client/issues/1647) and [#2048](https://github.com/amnezia-vpn/amnezia-client/issues/2048): configured host address becomes the network address.\n- [PR #2840](https://github.com/amnezia-vpn/amnezia-client/pull/2840): proposed fix for this mechanism on Linux; currently open and does not modify the macOS implementation.\n\nCould the macOS address parsing be checked for the same problem?\n\n### Logs\n\nApp and tunnel logs before and after the workaround are attached. Handshake succeeds in both cases.\n\nVPN endpoint IP, peer public key, profile IDs and network service IDs have been anonymized consistently. All other log content is unchanged.\n\n[before_tunnel.log](https://github.com/user-attachments/files/34399341/before_tunnel.log)\n[before_app.log](https://github.com/user-attachments/files/34399343/before_app.log)\n[after_tunnel.log](https://github.com/user-attachments/files/34399342/after_tunnel.log)\n[after_app.log](https://github.com/user-attachments/files/34399340/after_app.log)"
     },
     {
      "number": 3256,
@@ -1965,17 +2303,6 @@
      "body": ""
     },
     {
-     "number": 3397,
-     "title": "5.1.0.6 Android 11+ apk update Certificate error",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-04T12:50:31Z",
-     "updated_at": "2026-11-04T12:50:31Z",
-     "user": "AfricanBear",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3397",
-     "body": "\nПри установке обновления apk выводится ошибка сертификата. \nУстройство Oppo Find 9x Ultra китайская версия\n \n\n<img width=\"1080\" height=\"2376\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/684d287d-b744-4a54-b4b8-925632e2499a\" />"
-    },
-    {
      "number": 3396,
      "title": "fix: pass the tunnel config over a named pipe",
      "is_pr": true,
@@ -1985,17 +2312,6 @@
      "user": "yp-amnezia",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3396",
      "body": ""
-    },
-    {
-     "number": 3395,
-     "title": "Dr.Web и AmneziaVPN",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-04T10:55:34Z",
-     "updated_at": "2026-11-04T10:55:34Z",
-     "user": "samurai-busido",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3395",
-     "body": "Сегодня с выходом новым антивирусных баз от **Dr.Web** файл начал ругаться на файл _mullvad-split-tunnel.sys_ находящийся внутри программы **AmneziaVPN Desktop**.\nКроме данного антивируса более активности среди остальных проверенных на VirusTotal нет.\n\n<img width=\"1795\" height=\"532\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/f2c35ed4-3d9a-4959-b14c-01b86ffe39bd\" />"
     },
     {
      "number": 3097,
@@ -2018,108 +2334,72 @@
      "user": "vkamn",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3289",
      "body": ""
-    },
-    {
-     "number": 1925,
-     "title": "Error code 103 background service is not running",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2025-10-10T19:03:18Z",
-     "updated_at": "2026-11-03T15:55:25Z",
-     "user": "HotarunIchijou",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1925",
-     "body": "● AmneziaVPN.service - AmneziaVPN Service\n     Loaded: loaded (/etc/systemd/system/AmneziaVPN.service; enabled; preset: disabled)\n    Drop-In: /usr/lib/systemd/system/service.d\n             └─10-timeout-abort.conf\n     Active: activating (auto-restart) (Result: exit-code) since Fri 2025-10-10 22:01:20 MSK; 862ms ago\n Invocation: 93a4f76b5dea4952b5206eff444c6126\n    Process: 5178 ExecStart=/opt/AmneziaVPN/service/AmneziaVPN-service.sh (code=exited, status=203/EXEC)\n   Main PID: 5178 (code=exited, status=203/EXEC)\n   Mem peak: 1.2M\n        CPU: 7ms\n\nOct 10 22:01:21 fedora-laptop systemd[1]: AmneziaVPN.service: Scheduled restart job, restart counter is at 47.\nOct 10 22:01:21 fedora-laptop systemd[1]: Started AmneziaVPN.service - AmneziaVPN Service.\nOct 10 22:01:21 fedora-laptop (rvice.sh)[5206]: AmneziaVPN.service: Unable to locate executable '/opt/AmneziaVPN/service/AmneziaVPN-service.sh': Permission denied\nOct 10 22:01:21 fedora-laptop (rvice.sh)[5206]: AmneziaVPN.service: Failed at step EXEC spawning /opt/AmneziaVPN/service/AmneziaVPN-service.sh: Permission denied\nOct 10 22:01:21 fedora-laptop systemd[1]: AmneziaVPN.service: Main process exited, code=exited, status=203/EXEC\nOct 10 22:01:21 fedora-laptop systemd[1]: AmneziaVPN.service: Failed with result 'exit-code'.\n~\n"
-    },
-    {
-     "number": 3394,
-     "title": "AmneziaVPN does not work on Linux Fedora Workstation 44",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-03T15:51:54Z",
-     "updated_at": "2026-11-03T15:51:54Z",
-     "user": "mikalauskas",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3394",
-     "body": "> ? Still no working solution.. 5.0.3.0 version and yet it doesn't work. Fedora workstation 44. Installed using AmneziaVPN_5.0.3.0_linux_x64.run \n\n _Originally posted by @mikalauskas in [#1925](https://github.com/amnezia-vpn/amnezia-client/issues/1925#issuecomment-6608471854)_"
-    },
-    {
-     "number": 3393,
-     "title": "fix(import): accept plain user info in ss:// links",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-03T15:07:25Z",
-     "updated_at": "2026-11-03T15:07:25Z",
-     "user": "RaphaelFakhri",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3393",
-     "body": "## Summary\n\n`serialization::ss::Deserialize` always base64-decodes the user name of a SIP002 `ss://` link. SIP002 also allows plain, percent-encoded `method:password` user info, and SIP022 requires it for the Shadowsocks 2022 ciphers (`2022-blake3-*`). Such a link, for example `ss://2022-blake3-aes-128-gcm:<key>%3D@host:8388#name`, fails to import with \"Can't find the colon separator between method and password\".\n\nCloses #3392\n\n## Changes\n\n- `client/core/utils/serialization/ss.cpp`: when the user info has a password part, the method and password come from the decoded user name and password. Links with base64 user info take the same path as before.\n- `client/tests/testShadowSocksSerialization.cpp`: new Qt Test that covers a base64 link and a plain SS-2022 link (method, password, address, port).\n- `client/tests/CMakeLists.txt`: registers `test_shadowsocks_serialization` as `ShadowSocksSerializationTest`.\n\n## Testing\n\nThe new test against the parser sources (`ss.cpp`, `outbound.cpp`, `inbound.cpp`, `utilities.cpp`), built with Qt 6.8.2 on Debian 13 x86_64:\n\n- Without the fix: `Totals: 3 passed, 1 failed` (`plain user info` fails with the error above).\n- With the fix: `Totals: 4 passed, 0 failed`.\n\nI didn't run the full app build (Qt 6.10 and Conan) or `ctest` locally, so CI covers the new CMake target. The touched lines follow `.clang-format`.\n"
-    },
-    {
-     "number": 3392,
-     "title": "Shadowsocks 2022 ss:// links fail to import: \"Can't find the colon separator between method and password\"",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-03T15:06:06Z",
-     "updated_at": "2026-11-03T15:06:06Z",
-     "user": "RaphaelFakhri",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3392",
-     "body": "**Describe the bug**\nImporting a SIP002 `ss://` link whose user info is plain `method:password` instead of base64 fails. SIP022 requires this form for the Shadowsocks 2022 ciphers (`2022-blake3-aes-128-gcm`, `2022-blake3-aes-256-gcm`, `2022-blake3-chacha20-poly1305`), so these links cannot be imported at all.\n\n`serialization::ss::Deserialize` (`client/core/utils/serialization/ss.cpp`) always passes the URL user name through `Utils::SafeBase64Decode`. For a plain link the user name is the method alone, so the decoded text has no colon and the parser returns an empty config.\n\n**To Reproduce**\n1. Copy a link of the form `ss://2022-blake3-aes-128-gcm:dGVzdC1rZXktMDEyMzQ1Njc4OWFiY2RlZg%3D%3D@ss.example.com:8388#test`.\n2. Import it from the clipboard or the \"Insert key\" field.\n3. The import fails. `ss::Deserialize` reports \"Can't find the colon separator between method and password\".\n\n**Expected behavior**\nThe link imports with method `2022-blake3-aes-128-gcm` and password `dGVzdC1rZXktMDEyMzQ1Njc4OWFiY2RlZg==`, as it already does when the same user info is base64-encoded.\n\n**Desktop (please complete the following information):**\n - OS: any (shared import code)\n - Version: current `dev` (ac175c8)\n\n**Additional context**\nSIP002: https://shadowsocks.org/doc/sip002.html. SIP022: https://shadowsocks.org/doc/sip022.html. Xray-core supports the 2022 ciphers."
-    },
-    {
-     "number": 3388,
-     "title": "feat: test xray pages ui",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-03T07:32:07Z",
-     "updated_at": "2026-11-03T14:04:47Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3388",
-     "body": ""
-    },
-    {
-     "number": 3389,
-     "title": "fix: expect server xray v26.10.31",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-03T11:43:27Z",
-     "updated_at": "2026-11-03T14:03:54Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3389",
-     "body": ""
-    },
-    {
-     "number": 1614,
-     "title": "[FEATURE] Display latency of each server",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-05-23T18:51:42Z",
-     "updated_at": "2026-11-03T13:27:30Z",
-     "user": "dizelgerda",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1614",
-     "body": "It would be great to be able to see the latency for each server. It would also be nice to have a refresh latency data button to manually get latency data for each server."
-    },
-    {
-     "number": 3198,
-     "title": "[Windows][XRay] Client blackholes traffic to private DNS address (AmneziaDNS unreachable), ignores DNS settings from sharing config, leaves stale KillSwitch DNS filters after toggling",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-22T16:24:43Z",
-     "updated_at": "2026-11-03T13:18:00Z",
-     "user": "ArconWell",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3198",
-     "body": "### Describe the bug\n\nOn Windows, the XRay connection shows \"Connected\" and TCP transport through the tunnel works perfectly, but the client never delivers packets destined to the private AmneziaDNS address (172.29.172.254) into the tunnel — they are accepted by the local xray and blackholed on the laptop (confirmed by packet captures on both ends). Since KillSwitch forbids any other DNS, hostname resolution is impossible: \"connected but no websites open\". iOS client against the same server uses AmneziaDNS flawlessly.\n\nTwo additional independent problems found while diagnosing:\n1. Client DNS settings are ignored in favor of DNS information embedded in the sharing config.\n2. The tunnel adapter's DNS assignment and the KillSwitch/WFP DNS allow-list are driven by different logic, can contradict each other, and stale WFP filters persist until a Windows reboot.\n\nFull layered diagnosis below (following the A/B/C/D framework proposed in #3148). Same user-facing symptom as #1345 (closed unresolved). Unlike the case discussed in #3148, the server-side path here is proven healthy.\n\n### To Reproduce\n\n1. Deploy XRay (XHTTP + REALITY) + AmneziaDNS on a self-hosted server from an iOS client (5.0.2.1 in my case)\n2. Share the connection config to a Windows 11 machine, connect with XRay\n3. Try to open any website → nothing resolves; `nslookup wikipedia.org` times out through all retries\n4. `nslookup -vc` (TCP) to 172.29.172.254 hangs as well; apps with hardcoded IPs (Telegram) keep working\n5. `curl -v --resolve www.wikipedia.org:443:185.15.59.224 https://www.wikipedia.org/` → 200 OK, full page — TCP transport is healthy, only DNS is dead\n\n### Expected behavior\n\n- DNS queries to the AmneziaDNS address should be routed into the tunnel like any other tunnel-bound traffic (iOS does this correctly against the same server).\n- Client DNS settings should take precedence over (or at least not be silently overridden by) DNS information embedded in a sharing config.\n- The tunnel adapter's DNS assignment and the KillSwitch DNS allow-list should always agree, and all WFP filters should be removed on disconnect.\n\n### Log files\n\nAttached: app + service logs from a failing session (secrets redacted: server IP → SERVER_IP, socks5 credentials → REDACTED). Key evidence in them: local xray endlessly repeating `accepted udp ... -> 172.29.172.254:53` with no responses; `Failed to stop xray` and `WindowsSplitTunnel: Stopping Split tunnel not successfull` on every disconnect.\n\n[AmneziaVPN.log](https://github.com/user-attachments/files/32527166/AmneziaVPN.log)\n[AmneziaVPN-service.log](https://github.com/user-attachments/files/32527167/AmneziaVPN-service.log)\n\n(For the additional problems no logs are attached)\n\n### Screenshots\n\n—\n\n### Desktop (please complete the following information):\n - OS: Windows 11 25H2 (x86_64)\n - Version: 5.0.3.0 (de93650a9); also reproduced on 5.0.1.5\n\n### Smartphone (please complete the following information):\n - Device: iPhone (used as admin device and as comparison client — NOT affected)\n - OS: iOS 26.6.2\n - Version: 5.0.3.0 (works correctly against the same server, same days)\n\n### Server (please complete the following information):\n - OS: Debian 11; containers: amnezia-xray (VLESS + XHTTP + REALITY, port 443, deployed by iOS client 5.0.2.1 → client-generated server.json) and amnezia-dns (unbound at 172.29.172.254 on amnezia-dns-net)\n\n### Additional context\n\n**Layered diagnostics (A/B/C/D framework from #3148):**\n\n**A/B — server containers healthy:**\n- amnezia-xray is attached to amnezia-dns-net (`docker network inspect` shows amnezia-xray, amnezia-awg2, amnezia-dns)\n- `docker exec amnezia-xray nslookup wikipedia.org 172.29.172.254` answers instantly with correct records\n- The client-generated `server.json` contains a single `freedom` outbound and **no routing section** — nothing blocks private ranges server-side\n\n**C — passes from iOS, fails from Windows, and the loss is on the Windows client side:**\n- Server-side `tcpdump -ni any port 53 "
-    },
-    {
-     "number": 3391,
-     "title": "[Linux][5.0.3.0] Error 101: sudo stalls during hostname resolution in IPv6 setup",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-03T13:17:03Z",
-     "updated_at": "2026-11-03T13:17:03Z",
-     "user": "artxxx001",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3391",
-     "body": "## Environment\n\n- OS: Pop!_OS 24.04 LTS (x86_64), COSMIC desktop\n- Client: AmneziaVPN 5.0.3.0 (`de93650`)\n- VPN protocol: Xray\n- Connection imported via **Share connection** from phone\n- Service: `AmneziaVPN.service` running as root; `ExecStart=/opt/AmneziaVPN/bin/AmneziaVPN-service`\n\n## Description\n\nOn Linux, attempting to connect ends with `ErrorCode::101 (Internal Error)`. Xray and `tun2socks` start, but the client fails at the step where it tries to disable IPv6 routing:\n\n```text\nFailed to disable IPv6 routing\nCould not disable ipv6\nQProcess: Destroyed while process (\"sudo\") is still running.\n```\n\nIn this case the underlying cause was a blocking hostname-resolution call from `sudo`, not an inability of the Linux kernel to change the IPv6 setting.\n\n## Reproduction and evidence\n\nThe computer hostname was `Vector`, but `/etc/hosts` did **not** initially contain an entry for that hostname:\n\n```text\n127.0.0.1 localhost\n::1 localhost\n```\n\n`/etc/nsswitch.conf` used:\n\n```text\nhosts: files mdns4_minimal [NOTFOUND=return] resolve [!UNAVAIL=return] dns myhostname\n```\n\nA trace of the Amnezia service and its children showed the following sequence (trimmed for clarity):\n\n```text\n14:06:38.406468 execve(\"/usr/bin/sudo\", [\"/usr/bin/sudo\", \"sysctl\", \"-w\", \"net.ipv6.conf.all.disable_ipv6=1\"], ...)\n...\nconnect(6, {sa_family=AF_UNIX, sun_path=\"/run/systemd/resolve/io.systemd.Resolve\"}, 42) = 0\nsendto(6, \"{\\\"method\\\":\\\"io.systemd.Resolve.ResolveHostname\\\",\\\"parameters\\\":{\\\"name\\\":\\\"Vector\\\",\\\"flags\\\":0}}\\\\0\", ...) = 89\nrecvfrom(6, ..., MSG_DONTWAIT, ...) = -1 EAGAIN\nppoll([{fd=6, events=POLLIN}], 1, {tv_sec=119, ...}, NULL, 8 <unfinished ...>\n14:06:40.418560 kill(87730, SIGKILL) = 0\n...\n+++ killed by SIGKILL +++\n```\n\nA second trace reproduced the same pattern, again showing `sudo` waiting for a reply from `systemd-resolved` and being killed about 2 seconds later.\n\nOther findings:\n\n- `/dev/net/tun` was present and usable.\n- The Amnezia systemd service ran as root; `PATH` included `/usr/bin` and `/usr/sbin`.\n- IPv6 was enabled at kernel level (`net.ipv6.conf.all.disable_ipv6=0`).\n- Manually setting `net.ipv6.conf.all.disable_ipv6=1` and `net.ipv6.conf.default.disable_ipv6=1`, then restoring both to `0`, completed within approximately 1–6 ms.\n- The equivalent privileged writes via `sudo` in a temporary systemd service also completed in approximately 5–6 ms.\n- A service restart alone did not resolve the original connection failure.\n\n## Confirmed workaround\n\nAdding a local hostname mapping and restarting the service:\n\n```text\n127.0.1.1 Vector\n```\n\n```bash\nsudo systemctl restart AmneziaVPN.service\n```\n\nAfter this, the client successfully established the VPN connection and stopped reporting Error 101.\n\n## Expected behavior\n\nThe client should handle hostname-resolution/subprocess failures gracefully and display a precise diagnostic rather than a generic IPv6 error. Since the service already runs as root, consider whether calling `sudo` is necessary. At minimum, the failure should identify a subprocess timeout or local hostname-resolution issue.\n\n## Related, separate problem\n\nAfter connection succeeded, a shared-Xray-config DNS issue remained; it was fixed by reissuing the share link with AmneziaDNS disabled and is being documented separately in #3198."
     }
    ],
    "comments": [
+    {
+     "id": 6663915163,
+     "issue": 3110,
+     "issue_title": "Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect",
+     "created_at": "2026-11-05T16:54:47Z",
+     "user": "dimadze1337",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3110#issuecomment-6663915163",
+     "body": "Dirty workaround fix (worked for me):\nsudo vi /etc/NetworkManager/conf.d/20-connectivity.conf\n\nAdd there:\n\n[connectivity]\nenabled=false\n\n\nAnd then restart NetworkManager\n\nsudo systemctl restart NetworkManager"
+    },
+    {
+     "id": 6660312161,
+     "issue": 3132,
+     "issue_title": "[macOS][XRay] Domain endpoint: utun is configured but nothing traverses the tunnel until teardown; literal IP works; iOS works",
+     "created_at": "2026-11-05T14:19:44Z",
+     "user": "TheRusskiy",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3132#issuecomment-6660312161",
+     "body": "Encountered this bug as well on the latest version, \nwhat helped me is connecting to the server using an IP and not a domain name.\n\nAI assisted debug info in case you find it helpful:\n\n---\n\n<!-- Comment for https://github.com/amnezia-vpn/amnezia-client/issues/3132 (not a new issue: this is a duplicate of #3132) -->\n\nThis still reproduces on **5.1.0.6 (`ac175c8`)**, macOS Tahoe 26.5.1 (arm64). Here's an independent confirmation with a clean A/B and data from both ends.\n\n**Setup:** AmneziaVPN 5.1.0.6, server installed by the app (Xray-core v26.10.31 in `amnezia-xray`, VLESS + Reality, `xtls-rprx-vision`, TCP 443). The DNS record is an A record only, not proxied (plain Cloudflare DNS), with no AAAA. Before testing, I wiped the app's prefs (`org.amneziavpn.AmneziaVPN.plist`), restarted `AmneziaVPN-service`, and imported a single `vpn://` key.\n\n| Arm | `hostName` / `vnext.address` | Everything else | Result |\n|---|---|---|---|\n| A | domain (`srv.example.com`) | same key, same Reality params, SNI unchanged | Connected, nothing loads |\n| B | literal IPv4 of the same server | identical (I edited only those two fields in the decoded key and re-encoded it) | works |\n| Android | domain (same as A) | same | works |\n\nThe same key in arm A works with a standalone Xray-core client (both v26.10.31 and v26.7.28) on the same Mac and the same network, so the domain resolves and the server accepts the Reality handshake.\n\n**Routing while connected in arm A** (sampled every ~10 s, identical in every sample; server IP replaced with `<server>`):\n\n```\ndefault            192.168.1.1        UGScg                 en0\n0/1                192.168.1.1        UGScIg                en0\n1                  10.33.0.2          UGSc               utun22\n1.0.0.1            10.33.0.2          UGHS               utun22\n1.1.1.1            10.33.0.2          UGHS               utun22\n2/7                10.33.0.2          UGSc               utun22\n4/6                10.33.0.2          UGSc               utun22\n8/5                10.33.0.2          UGSc               utun22\n16/4               10.33.0.2          UGSc               utun22\n32/3               10.33.0.2          UGSc               utun22\n64/2               10.33.0.2          UGSc               utun22\n128.0/1            10.33.0.2          UGSc               utun22\n128.0/1            192.168.1.1        UGScI                 en0\n\n$ route -n get <server>     ->  gateway: 10.33.0.2   interface: utun22\n$ route -n get 1.1.1.1      ->  gateway: 10.33.0.2   interface: utun22\n$ scutil --dns              ->  nameserver[0] : 1.1.1.1\n```\n\nThis matches what konst643 posted above:\n\n- `utun22` gets `10.33.0.2`, so the interface itself is configured.\n- There is **no `/32` exclusion for the server address**, so a lookup of the server goes into the tunnel.\n- `0/1` and the second `128.0/1` via `en0` carry the `I` (ifscope) flag. They're scoped routes, not the effective default. The unscoped `1`, `2/7` … `64/2` and `128.0/1` via `utun22` cover all of IPv4.\n- While connected, `curl https://1.1.1.1/` (by IP, default route) and `curl --interface utun22` both time out.\n\n**Server side (tcpdump on 443, filtered to the client IP) for an arm A session:** a burst of 31 TCP connections arrived within the same second. Each completed the Reality handshake: the client sent its Finished, and the server's response was indistinguishable from a successful handshake. Each was then **closed by the client right away with a 24-byte TLS record (close_notify) + FIN, without sending any VLESS request**. For comparison:\n\n- a successful session sends the VLESS request (~1 KB) right after Finished;\n- a session rejected by Reality (I tested by deliberately using a wrong `shortId`) does the decoy \"spider\" exchange, with HTTP/2 requests and tens of KB of response.\n\nSo the server does accept these connections, and nothing is sent through them. That fits the \"queued attempts flush at teardown\" behaviour described above.\n\n**App log for the same run** (no errors a"
+    },
+    {
+     "id": 6658607294,
+     "issue": 3192,
+     "issue_title": "У кого то работает свой впс на протоколе awg?",
+     "created_at": "2026-11-05T12:59:38Z",
+     "user": "wad231",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192#issuecomment-6658607294",
+     "body": "03.11 отвалился сервер у Inferno Solution в Эстонии, работал два с половиной года. Не пингуется из рф, ip числится заблоченным. Взял от них же в Финляндии. Не заблочен, пингуется, но по ssh не даёт зайти ни по 22 порту, ни по любому другому, connection established, а дальше всё, походу режут размер пакета. Заходил на него через ssh в гугловском клауд шелл, менял порты - ничего, ощущение что ssh рубится на любом порту. Ни домашний, ни мобильный интернет от разных провайдеров картину не изменили. Вручную установил на сервер AWG и пытался подключиться к нему с помощью AmneziaWG - бесполезно, ни на 2, ни на 3.1 версии. Все друг друга видят, дружить не хотят. С помощью стороннего впн + приложения AmnesiaVPN накатил на сервер автоматическую установку, но результат прежний - всё это работает только с включённым другим впн, без него шевелиться не хочет. Xray, само собой, только показывает \"подключено\", но на этом всё.\n\nВ раздумьях - брать другой зарубежный сервер, но как проверить будет ли коннект по ssh и не будет ли резаться к нему другой трафик, udp, например? Или заморачиваться каскадом, но что-то цены на российские серверы улетели в космос, да и не факт что связка будет работать. "
+    },
+    {
+     "id": 6654756450,
+     "issue": 3192,
+     "issue_title": "У кого то работает свой впс на протоколе awg?",
+     "created_at": "2026-11-05T09:43:05Z",
+     "user": "YohanYohan-op",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3192#issuecomment-6654756450",
+     "body": "> 31\\. Российские VPS уже начали поджимать и думаю дальше будет только хуже. Конечно лучше иностранный брать.\n\nПодскажешь норм зарубежный хостинг?"
+    },
+    {
+     "id": 6653622040,
+     "issue": 3300,
+     "issue_title": "[Windows][Premium] Tunnel DNS rewrites chatgpt.com / api.openai.com to a proxy that drops ~70% of TLS handshakes (Codex fails with os error 10053)",
+     "created_at": "2026-11-05T08:42:50Z",
+     "user": "avekoruts",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3300#issuecomment-6653622040",
+     "body": "<html><head></head><body><h3><span>Additional reproduction on Ubuntu/Linux — November 5, 2026</span></h3><p><span>I can confirm a similar issue with </span><strong><span>Amnezia Premium on Ubuntu/Linux</span></strong><span>, reproduced on November 5, 2026.</span></p><p><span>I compared Amnezia Premium with my self-hosted AmneziaWG connection on the same machine. ChatGPT works through the self-hosted connection but fails to work properly through Premium.</span></p><p><strong><span>Test 1: Self-hosted AmneziaWG (working)</span></strong></p><ul><li><p><span>Public exit IP: </span><code><span>[redacted — personal self-hosted VPS]</span></code></p></li><li><p><code><span>chatgpt.com</span></code><span> resolves to </span><code><span>104.18.32.47</span></code><span>, </span><code><span>172.64.155.209</span></code><span> (Cloudflare).</span></p></li><li><p><code><span>auth.openai.com</span></code><span> resolves to </span><code><span>104.18.41.241</span></code><span>, </span><code><span>172.64.146.15</span></code><span> (Cloudflare).</span></p></li><li><p><span>HTTPS results:</span></p><ul><li><p><code><span>chatgpt.com</span></code><span>: HTTP 200, TLS successful.</span></p></li><li><p><code><span>auth.openai.com</span></code><span>: HTTP 403, TLS successful.</span></p></li><li><p><code><span>api.openai.com</span></code><span>: HTTP 421, TLS successful.</span></p></li></ul></li></ul><p><strong><span>Test 2: Amnezia Premium (not working properly)</span></strong></p><ul><li><p><span>Public exit IP: </span><code><span>[redacted — Amnezia Premium exit server]</span></code></p></li><li><p><code><span>chatgpt.com</span></code><span> resolves to </span><code><span>51.77.103.60</span></code><span>.</span></p></li><li><p><code><span>auth.openai.com</span></code><span> resolves to the same IP: </span><code><span>51.77.103.60</span></code><span>.</span></p></li><li><p><span>HTTPS results:</span></p><ul><li><p><code><span>chatgpt.com</span></code><span>: HTTP 200, TLS successful.</span></p></li><li><p><code><span>auth.openai.com</span></code><span>: TLS handshake fails.</span></p></li><li><p><code><span>api.openai.com</span></code><span>: TLS handshake fails.</span></p></li></ul></li></ul><p><span>Both failed connections produce:</span></p><pre><code><span>curl: (35) TLS connect error:\nerror:0A000126:SSL routines::unexpected eof while reading\nHTTP: 000</span></code></pre><p><strong><span>Test 3: Amnezia Premium with public Cloudflare IPs forced via curl --resolve</span></strong></p><p><span>Without disconnecting Premium, I repeated the HTTPS requests while explicitly resolving the domains to their public Cloudflare IPs:</span></p>\n\n<table>\n  <thead>\n    <tr>\n      <th>Domain</th>\n      <th>Forced IP</th>\n      <th>Result</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>chatgpt.com</td>\n      <td>104.18.32.47</td>\n      <td>HTTP 200, TLS successful</td>\n    </tr>\n    <tr>\n      <td>auth.openai.com</td>\n      <td>104.18.41.241</td>\n      <td>HTTP 403, TLS successful</td>\n    </tr>\n    <tr>\n      <td>api.openai.com</td>\n      <td>172.66.0.243</td>\n      <td>HTTP 421, TLS successful</td>\n    </tr>\n  </tbody>\n</table>\n\n\n<p><span>Example command:</span></p><pre><code><span>curl -4 -sS -o /dev/null --max-time 15 \\\n  --resolve \"auth.openai.com:443:104.18.41.241\" \\\n  -w 'HTTP: %{http_code} | Remote IP: %{remote_ip} | TLS: %{time_appconnect}s\\n' \\\n  https://auth.openai.com</span></code></pre><p><span>All three TLS handshakes succeeded, with TLS connection times of approximately 0.16 seconds each.</span></p><p><strong><span>Conclusion</span></strong></p><p><span>These results strongly suggest that the problem is associated with the DNS-rewritten destination (</span><code><span>51.77.103.60</span></code><span>) or its proxy infrastructure, rather than the AmneziaWG tunnel itself.</span></p><p><span>The HTTP 403 and 421 responses are included as evidence that HTTPS/TLS connectivity works, not as confirmation that the applications themselves are fully"
+    },
+    {
+     "id": 6652681426,
+     "issue": 3395,
+     "issue_title": "Dr.Web и AmneziaVPN",
+     "created_at": "2026-11-05T07:49:22Z",
+     "user": "samurai-busido",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3395#issuecomment-6652681426",
+     "body": "After I contacted Dr.Web support (or perhaps Amnezia support contacted them after I found the file), on the same day, after another database update, this file is not detected in any way."
+    },
+    {
+     "id": 6652314238,
+     "issue": 3395,
+     "issue_title": "Dr.Web и AmneziaVPN",
+     "created_at": "2026-11-05T07:27:05Z",
+     "user": "xewelus",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3395#issuecomment-6652314238",
+     "body": "I have same error. If try to add ignore this error occuring on service starting:\n\n<img width=\"908\" height=\"336\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/e1a58abf-cc4d-43d2-b03e-68e087f8181d\" />"
+    },
     {
      "id": 6646464687,
      "issue": 3374,
@@ -2173,47 +2453,34 @@
      "user": "EnovaMaker",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3256#issuecomment-6628398755",
      "body": "For those who hit this after updating (@fjod, @sialor, @rdacomp): how did you find out what was causing it, and how long were you without a connection? @fjod, when the client said protocol 2.0 was no longer supported, did that message tell you what to do, or did you work it out by recreating the server?\n\n(Drafted with help from Claude, an AI assistant; the question is mine.)"
-    },
-    {
-     "id": 6608611170,
-     "issue": 1925,
-     "issue_title": "Error code 103 background service is not running",
-     "created_at": "2026-11-03T15:55:06Z",
-     "user": "HotarunIchijou",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1925#issuecomment-6608611170",
-     "body": "> ? Still no working solution.. 5.0.3.0 version and yet it doesn't work. Fedora workstation 44. Installed using AmneziaVPN_5.0.3.0_linux_x64.run\n\nSee the solution above, though I had Silverblue at that time, on workstation it should work out of the box "
-    },
-    {
-     "id": 6608471854,
-     "issue": 1925,
-     "issue_title": "Error code 103 background service is not running",
-     "created_at": "2026-11-03T15:50:53Z",
-     "user": "mikalauskas",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1925#issuecomment-6608471854",
-     "body": "? Still no working solution.. 5.0.3.0 version and yet it doesn't work. Fedora workstation 44. Installed using AmneziaVPN_5.0.3.0_linux_x64.run"
-    },
-    {
-     "id": 6605066504,
-     "issue": 1614,
-     "issue_title": "[FEATURE] Display latency of each server",
-     "created_at": "2026-11-03T13:27:30Z",
-     "user": "tgeruzov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1614#issuecomment-6605066504",
-     "body": "I'd like to add latency checks and sorting to the Premium location list.\n\nIs there a supported way to get each location's actual VPN endpoint before connecting? The `available_countries` data I've checked contains country names, codes and protocols, but no addresses. I don't want to generate configs for every country just to check latency.\n\nDoes `account_info` or another read-only request provide these addresses without issuing configs or consuming extra connection slots? Also, do the endpoints support ICMP, or is there another supported way to measure latency without connecting?"
-    },
-    {
-     "id": 6604865994,
-     "issue": 3198,
-     "issue_title": "[Windows][XRay] Client blackholes traffic to private DNS address (AmneziaDNS unreachable), ignores DNS settings from sharing config, leaves stale KillSwitch DNS filters after toggling",
-     "created_at": "2026-11-03T13:18:00Z",
-     "user": "artxxx001",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3198#issuecomment-6604865994",
-     "body": "I can confirm a very similar **shared-config DNS failure on Linux**, specifically **Pop!_OS 24.04 LTS (COSMIC), AmneziaVPN 5.0.3.0 (`de93650`), Xray**.\n\nThe VPN connection was originally created on a phone and then imported to the Linux laptop using **Share connection**. It displayed **Connected**, and HTTPS through the tunnel worked when bypassing DNS (`curl --resolve` returned `HTTP/2 200`), but ordinary DNS requests timed out and websites would not load.\n\nDiagnostics:\n\n- `resolvectl status tun2` showed `172.29.172.254` as the resolver despite setting `1.1.1.1` and `1.0.0.1` in the client.\n- `resolvectl query -4 example.com` timed out.\n- Local Xray repeatedly logged `accepted udp:172.29.172.254:53` (and also TCP/53), with no DNS response observed.\n- The Amnezia firewall's `amnvpn.320.allowDNS` ACCEPT counters increased on `tun2` during lookups (UDP/53: 14 -> 34 packets; TCP/53: 0 -> 32), while `amnvpn.310.blockDNS` and `amnvpn.100.blockAll` counters remained at 0. That shows DNS requests were allowed by those local rules, not where the replies were lost.\n- With VPN disconnected, `resolvectl query example.com` succeeded in ~31 ms.\n\n**Confirmed fix:** On the phone, I **disabled AmneziaDNS, generated a new sharing link, and imported that new configuration into Linux**. This immediately fixed the DNS issue. The new `resolvectl status tun2` showed:\n\n```text\nCurrent DNS Server: 1.0.0.1\nDNS Servers: 1.1.1.1 1.0.0.1\nDNS Domain: ~.\n```\n\n`resolvectl query -4 example.com` succeeded in ~290 ms, and a normal `curl -4 -I --noproxy '*' https://example.com` returned `HTTP/2 200`.\n\nThis suggests that the issue with DNS information embedded in a shared Xray configuration / client DNS handling also affects **Linux**, not only Windows. The exact point where traffic to the private DNS destination is lost was **not conclusively proven** in my Linux test."
     }
    ]
   },
   "apernet/hysteria": {
-   "issues": [],
+   "issues": [
+    {
+     "number": 1717,
+     "title": "fix(client): bound the wait for the TCP response",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T11:39:11Z",
+     "updated_at": "2026-11-05T11:39:11Z",
+     "user": "Dv2Corn",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1717",
+     "body": "Fixes #1682\n\nWhen fast open is off, `clientImpl.TCP` writes the request and then reads the server's TCP response with no deadline ([client.go#L216](https://github.com/apernet/hysteria/blob/fb25dc852ebbc70658e67889f411887a82b7c281/core/client/client.go#L216)). The server only writes that response after its outbound dial returns ([server.go#L310-L323](https://github.com/apernet/hysteria/blob/fb25dc852ebbc70658e67889f411887a82b7c281/core/server/server.go#L310-L323)). If the server accepts the stream but never answers, while the QUIC connection itself stays alive through keep-alives, the call blocks forever. Because it never returns an error, `reconnectableClientImpl` never sees a `ClosedError` ([reconnect.go#L79-L80](https://github.com/apernet/hysteria/blob/fb25dc852ebbc70658e67889f411887a82b7c281/core/client/reconnect.go#L79-L80)) and so never reconnects.\n\nThis change sets a read deadline on the stream only while reading the response, and clears it once the response has arrived. The timeout is `max(MaxIdleTimeout, 30s) + 15s`, which is 45s with the defaults:\n\n- it is longer than the QUIC idle timeout, so a connection that is really dead is still reported by QUIC as it is today;\n- it leaves plenty of room for the server-side dial (the direct outbound uses a 10s dial timeout, [ob_direct.go#L21](https://github.com/apernet/hysteria/blob/fb25dc852ebbc70658e67889f411887a82b7c281/extras/outbounds/ob_direct.go#L21)), so a normal slow dial still ends with the server's own error message.\n\nA timeout goes through the existing error path (`wrapIfConnectionClosed`, the same as any other read error on that stream), so the call returns a `ClosedError` and the reconnectable client reconnects on the next call. Fast open is unchanged: there the response is read on the first `Read()`, where the caller's own deadlines apply.\n\n### Testing\n\nNew integration test `TestClientServerTCPResponseTimeout`. The server's outbound blocks forever, so the server never writes a response. The test then checks that `TCP()` returns a `ClosedError`.\n\n- before: `--- FAIL: TestClientServerTCPResponseTimeout (60.01s)` (`TCP()` still blocked when the test's 60s guard fired)\n- after: `--- PASS: TestClientServerTCPResponseTimeout (45.01s)`\n\n`go test -count=1 -timeout=5m ./...` in `core` passes (integration tests 109s), `go vet ./...` is clean, `gofumpt -l` reports nothing, and `app` builds.\n\n### Notes\n\n- The test has to wait the full 45s, because the floor is not configurable. I left it at that rather than add a config option only for the test.\n- Like any other error on that stream, a timeout makes the reconnectable client replace the whole QUIC connection on the next call. That is the point for a server that has stopped answering. It does also mean a server whose outbound dial takes longer than 45s will now cause a reconnect instead of a hang.\n"
+    },
+    {
+     "number": 1716,
+     "title": "fix(client): do not treat stream limit errors as connection closed",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T11:23:46Z",
+     "updated_at": "2026-11-05T11:23:46Z",
+     "user": "Dv2Corn",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1716",
+     "body": "Fixes #1714\n\n`wrapIfConnectionClosed` is supposed to let `StreamLimitReachedError` through unchanged and wrap every other error as `ClosedError`. It checks with `errors.Is` against the value `quic.StreamLimitReachedError{}` from `nonPermanentErrors`:\n\nhttps://github.com/apernet/hysteria/blob/fb25dc852ebbc70658e67889f411887a82b7c281/core/client/client.go#L247-L262\n\nThe quic-go fork returns a pointer from `OpenStream`:\n\nhttps://github.com/apernet/quic-go/blob/a10df75c260c/streams_map_outgoing.go#L76\n\n`*StreamLimitReachedError` never equals the value, and the type has no `Is` method, so the check never matches. The error gets wrapped as `ClosedError`. `reconnectableClientImpl.clientDo` then sets the client to nil without closing it, so a healthy connection is dropped and the next call opens a new one while the old one stays open:\n\nhttps://github.com/apernet/hysteria/blob/fb25dc852ebbc70658e67889f411887a82b7c281/core/client/reconnect.go#L80-L87\n\nThis change matches the pointer with `errors.As`. It also keeps the value check so behaviour doesn't change if a value is ever returned. The now-unused `nonPermanentErrors` list is removed.\n\nTesting: added `TestWrapIfConnectionClosed` in `core/client`. It covers the pointer, the value and a wrapped pointer, and checks that an unrelated error is still wrapped as `ClosedError`. Before the fix, the pointer and wrapped-pointer cases fail (they come back as `ClosedError`). After the fix, the test passes. `go test ./...` in `core` (including integration tests), `go vet ./...` and `gofmt -l` are clean.\n"
+    }
+   ],
    "comments": []
   }
  }

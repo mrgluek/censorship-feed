@@ -1,27 +1,27 @@
 {
- "generated_at": "2026-11-05T17:23:33Z",
- "since": "2026-11-03T17:23:33Z",
+ "generated_at": "2026-11-05T23:37:59Z",
+ "since": "2026-11-03T23:37:59Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
     {
-     "number": 671,
-     "title": "[Russia] recent mass ip bans",
+     "number": 650,
+     "title": "Обход белых списков мобильного интернета РФ - застряли, ищем реальный опыт / Bypassing the Russian Federation's mobile internet whitelists—we're stuck, looking for real-world experience",
      "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-30T17:18:14Z",
-     "updated_at": "2026-11-05T13:09:18Z",
-     "user": "its0ka",
-     "url": "https://github.com/net4people/bbs/issues/671",
-     "body": "on aug 4 and september 21 there were a lot of IP bans.\na lot of reality proxy servers (self-steal included) and even ips with only amneziawg (not susceptible to active probing) were banned. but it looks like it was mostly very popular vps providers.\ni've checked a few ASNs:\namnezia hosting: 131 blocked ip out of 20k [amneziahost.txt](https://github.com/user-attachments/files/32867470/amneziahost.txt)\nfirstbyte hosting: 3k blocked ip out of 29k [firstbyte.txt](https://github.com/user-attachments/files/32867500/firstbyte.txt)\nfornex hosting: 596 blocked ip out of 24k [fornex.txt](https://github.com/user-attachments/files/32867532/fornex.txt)\nplay2go DE: 2k blocked ip out of 37k [play2goDE.txt](https://github.com/user-attachments/files/32867560/play2goDE.txt)\nveesp: 5k blocked ip out of 30k [veesp.txt](https://github.com/user-attachments/files/32867596/veesp.txt)\n\ntell me if you know some vps providers that aren't popular in russia but do have a lot of proxy servers and i'll check them"
+     "state": "closed",
+     "created_at": "2026-08-19T13:55:09Z",
+     "updated_at": "2026-11-05T18:45:16Z",
+     "user": "amigocarra",
+     "url": "https://github.com/net4people/bbs/issues/650",
+     "body": "Свой VPN-сервис для конечных пользователей в России. Протокол - VLESS+Reality (uTLS, decoy SNI на популярных доменах и на собственном self-hosted decoy). Задача — пережить режим «белых списков» на мобильном интернете (LTE), когда оператор пропускает только заранее одобренный список ресурсов, а всё остальное блокирует на уровне сети\n\nВся диагностика ниже - только МТС. Все три реальных тестировщика (два друга и я сам) оказались на МТС. По МегаФону, Билайну и Т2 — ноль подтверждённых данных, ни в обычном режиме, ни тем более в белых списках. Возможно, часть описанного ниже — не общее свойство белых списков, а специфика конкретно МТС или даже конкретного сегмента их сети\n\nЧто подтверждено рабочим\n\n- Обычная DPI-блокировка (не белый список) на МТС — Reality с SNI под популярные домены (vk.com, cloudflare.com) стабильно работает у одного реального пользователя уже несколько недель, тысячи соединений в логах.\n\nЧто не работает и не поддаётся объяснению\n\nВторой реальный пользователь, тот же оператор (МТС), но другой сегмент(московский номер, тогда как первый — региональный/южный) — не смог подключиться *ни разу* ни через один из наших серверов (иностранный VPS в Германии, два разных адреса Yandex Cloud), включая периоды, когда белый список точно не был активен (обычный интернет у него при этом работал).\n\n- Пробовали архитектуру с размещением сервера на Yandex Cloud специально ради «коллатерального» прохождения белого списка: зарезервировали статический IP, сверили с публичными списками белых CIDR (community-maintained) — нашли конкретную /22 подсеть внутри /16-пула Yandex Cloud, которая присутствует в таких списках, в отличие от изначально выданного эфемерного адреса (он был из другого /20-пула того же провайдера и в списках отсутствовал). Технически адрес живой — Reality-хендшейк проходит, трафик реально проксируется, проверено с нескольких независимых внешних точек. Но подтверждения работы именно в момент активного белого списка на реальном мобильном устройстве пока нет.\nГлавная загадка: когда пострадавший пользователь тестирует в момент, похожий на белый список — у него не открывается вообще ничего, включая заведомо белые ресурсы (gosuslugi.ru), которые по логике белого списка должны быть доступны всегда. Это не похоже на учебниковое поведение белого списка (default-deny с проходом только по CIDR+SNI) — скорее на что-то более жёсткое или вообще другую природу блокировки\n\nВопросы к сообществу\n\n1. Есть ли у кого-то подтверждённо рабочая схема именно во время активного белого списка — на любом операторе (МТС/МегаФон/Билайн/Т2)? Особенно интересен опыт не по МТС - своих данных пока ноль.\n2. Отличаются ли правила/поведение белых списков между операторами принципиально, или список сайтов+IP один и тот же (спускается от Минцифры), а разница только в реализации фильтрации на стороне конкретного оператора?\n3. Чем может объясняться полный блэкаут, при котором не открываются даже точно белые ресурсы — это известный более жёсткий вариант фильтрации, или это вообще не про белый список (SIM-специфичное ограничение, тарифная фильтрация, что-то ещё)?\n4. Есть ли более надёжный способ поймать «правильный» IP-пул на Yandex Cloud / другом рос. хостинге, чем резервировать адреса и проверять их вручную против публичных списков?\n\nБуду благодарен за любой конкретный опыт, не общие рассуждения\n\n---\n\n*A custom VPN service for end users in Russia. Protocol: VLESS+Reality (uTLS, decoy SNI on popular domains and on our own self-hosted decoy). The goal is to bypass the \"whitelist\" restrictions on mobile internet (LTE), where the carrier only allows access to a pre-approved list of resources and blocks everything else at the network level*\n\n*All test results below are for MTS only. All three real testers (two friends and myself) were on MTS. For MegaFon, Beeline, and T2—there was no confirmed data, neither in normal mode nor, even less so, under whitelisting. It's possible that some of what's described below isn't a general characteristic of whitelisting, but spe"
     },
     {
      "number": 680,
      "title": "True Censorship Resistance",
      "is_pr": false,
-     "state": "open",
+     "state": "closed",
      "created_at": "2026-11-05T07:16:24Z",
-     "updated_at": "2026-11-05T11:11:40Z",
+     "updated_at": "2026-11-05T18:42:05Z",
      "user": "zhen55468-jpg",
      "url": "https://github.com/net4people/bbs/issues/680",
      "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic."
@@ -32,7 +32,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2024-11-18T03:46:38Z",
-     "updated_at": "2026-11-05T09:10:29Z",
+     "updated_at": "2026-11-05T18:41:58Z",
      "user": "v4ray",
      "url": "https://github.com/net4people/bbs/issues/425",
      "body": "Which protocol is the most stable (not detected and blacklisted) and most performant?\r\n\r\nI found there were reports that v2ray+tls , xray+xtls were all blocked by GFW in the past once or many times. Are there better options?"
@@ -43,7 +43,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2025-03-26T19:44:03Z",
-     "updated_at": "2026-11-05T08:30:13Z",
+     "updated_at": "2026-11-05T18:41:57Z",
      "user": "wkrp",
      "url": "https://github.com/net4people/bbs/issues/466",
      "body": "> **[§V-B](https://gfw.report/publications/ndss25/en/#5b)** Previous research has shown that the GFW's DNS injection draws fake response IP addresses from a fixed pool—and that different subsets of the pool are used, depending on what name is queried \\[[8](https://www.usenix.org/conference/foci20/presentation/anonymous) §3.2\\], \\[[9](https://www.usenix.net/conference/usenixsecurity21/presentation/hoang) §5.3\\]. What has not been appreciated, before now, is that the pools are also *ordered* and *cyclic*. When probed at a high enough rate (around 100 queries per second or more—much greater than an injector's natural injection rate), using a consistent query name and source/destination IP address and port tuple, injected responses repeatedly cycle through IP addresses in the same order (with occasional gaps where the injector responded to queries from other users). By repeated probing, it is possible to get multiple copies of the sequence, reconcile the gaps, and recover the complete ordered list of false IP addresses for a given query name.\n>\n> ![Figure 8 of Wallbleed, a scatterplot showing the timestamp of DNS responses on the horizontal axis and the reverse-mapped IP address index on the vertical axis. The indices fall into three distinct linear sequences.](https://github.com/user-attachments/assets/cf89dd90-7dd2-4a5f-8825-9a68551a3a08)\n\nI want to talk more about this observation made in the Wallbleed paper (#456). Independent of the Wallbleed parsing bugs, the fact that IP address pools of one type of GFW DNS injector are ordered and cyclic is interesting in its own right. I will share some Python programs and give step-by-step instructions on how to run them to see the effect for yourself.\n\n[multiquery.zip](https://github.com/user-attachments/files/19474575/multiquery.zip) (2.4 MB)\n\n* multiquery.py sends DNS queries at a high rate, with the goal of provoking injected DNS responses.\n* filter.py isolates responses from the type of injector we are interested in.\n* order.py infers an ordering of IP addresses, given a filtered set of DNS responses.\n* plot.py draws a graph of IP addresses mapped back to their index in the ordering, revealing linear sequential structure.\n* The zip file also includes the CSV data files needed to recreate the analysis below.\n\n### Collect DNS responses\n\nDNS response injection is one of the main mechanisms of network censorship in China. When an ordinary, UDP-based DNS query for a blocked domain name is observed by certain middleboxes at the country's network border, the middlebox sends a forged DNS response back to the DNS client. The forged response contains a fake and useless IP address. Response injection happens even when the destination IP address of the DNS query is not a DNS resolver.\n\nFor some domain names, DNS response injection is bidirectional: it responds to DNS queries that are inbound to China as well as outbound. In this demonstration, we'll use the destination IP address 120.52.99.0, which is just an IP address of chinaunicom.com (120.52.99.224) with the last octet set to 0. The blocked domain name we'll use is torproject.org.\n\nStart by collecting a sample of injected DNS responses. About 20,000 queries will be enough. Send the queries at a high rate, 500 queries per second. While the injector is forging responses to our queries, it will also be also forging responses to other naturally occurring queries. By sending at a high rate, we can, for a short time at least, ensure that most of an injector's responses are sent to us, rather than to other DNS clients. We'll also use a fixed source port—keeping the UDP 4-tuple fixed is necessary to ensure that our queries are always handled by the same injector process, as we'll see later on.\n\nRun this command:\n\n```\nmultiquery.py --num 20000 --rate 500 --qtype A --src-port 10000 --output multiquery-torproject.org-A-srcport-10000.csv 120.52.99.0 torproject.org\n```\n\nIt should take about 40 seconds to run. The output format is CSV, with one row per "
@@ -54,7 +54,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2025-07-02T06:47:31Z",
-     "updated_at": "2026-11-05T08:26:55Z",
+     "updated_at": "2026-11-05T18:41:56Z",
      "user": "maoist2009",
      "url": "https://github.com/net4people/bbs/issues/492",
      "body": "As we known, send a fake packeyt with a ttl cannot reach server but reach gfw is a powerful way to desync gfw tcp stack and bypass it. \nBut it is not so easy to find the ttl quickly. \nNoe, I use binary search to find the min ttl to the server and minus it 1. \nIt is so slow and the ttl is changeable.\n\nHere are the other challenges. \n1. with differebt destination ip, route varies and it may pass differnt gfw, for instance, in china, SH, packages to america pass SH gfw, but to Hongkong pass GD gfw. \n2. gfw has different layers ,in china, province one and international gateway one, you need yo make sure the packet bypass the finalngfw (i.e. get out of china) \n\nIf there are a smart and quick way to get ttl, the gfw will face a big challenge😁. "
@@ -65,10 +65,21 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-08-20T07:41:28Z",
-     "updated_at": "2026-11-05T07:18:14Z",
+     "updated_at": "2026-11-05T18:41:55Z",
      "user": "molotoves",
      "url": "https://github.com/net4people/bbs/issues/651",
      "body": "The following content may contain machine translation.\nThis report was not written by a computer networking professional; I am only reporting some issues I have discovered, many of which cannot be reproduced elsewhere . As a non-professional, I have not yet conducted any technical checks.\n\nAs of now, most Censorship-resistant service provider are unable  in Fuzhou, Fujian . A small number of providers using v2ray remain functional, whereas Tor Browser bridges and Snowflake are no longer usable.\n\nIt is unclear whether ISPs have deployed DPI (Deep Packet Inspection) plugins on home routers. On one hand, ISPs commonly use integrated optical modem-routers; on the other, some of peoples from Zhejiang dicover that the presence of DPI plugins in their ISP-provided integrated units.\nDoH provided by NextDNS and Cloudflare DNS have become completely unusable (on Firefox).\n\nI also tested P2P software; BitTorrent functionality was partially impaired, making it difficult to connect to peers in Russia, though connections to users within mainland China remained normal. However, these findings may be outdated, as I have been unable to get qBittorrent to connect to the network following a Windows reinstallation—a problem I have yet to resolve (even after reinstalling the application itself).\n\nDuring one test, I unexpectedly found that Cloudflare DNS worked on Firefox; however, I have been unable to reproduce this result and am unsure how to proceed with further testing."
+    },
+    {
+     "number": 671,
+     "title": "[Russia] recent mass ip bans",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-30T17:18:14Z",
+     "updated_at": "2026-11-05T13:09:18Z",
+     "user": "its0ka",
+     "url": "https://github.com/net4people/bbs/issues/671",
+     "body": "on aug 4 and september 21 there were a lot of IP bans.\na lot of reality proxy servers (self-steal included) and even ips with only amneziawg (not susceptible to active probing) were banned. but it looks like it was mostly very popular vps providers.\ni've checked a few ASNs:\namnezia hosting: 131 blocked ip out of 20k [amneziahost.txt](https://github.com/user-attachments/files/32867470/amneziahost.txt)\nfirstbyte hosting: 3k blocked ip out of 29k [firstbyte.txt](https://github.com/user-attachments/files/32867500/firstbyte.txt)\nfornex hosting: 596 blocked ip out of 24k [fornex.txt](https://github.com/user-attachments/files/32867532/fornex.txt)\nplay2go DE: 2k blocked ip out of 37k [play2goDE.txt](https://github.com/user-attachments/files/32867560/play2goDE.txt)\nveesp: 5k blocked ip out of 30k [veesp.txt](https://github.com/user-attachments/files/32867596/veesp.txt)\n\ntell me if you know some vps providers that aren't popular in russia but do have a lot of proxy servers and i'll check them"
     }
    ],
    "comments": [
@@ -143,6 +154,15 @@
      "user": "zhen55468-jpg",
      "url": "https://github.com/net4people/bbs/issues/651#issuecomment-6652170204",
      "body": "Given the current landscape, network inspection—spanning layers L3 through L7—must be approached from multiple dimensions simultaneously. Standard deep packet inspection (DPI) and feature detection have now evolved into AI-driven time-series analysis. At the same time, it is necessary to counter techniques such as TTL/MTU manipulation, TCP window size adjustments, fragmentation (including MSI-based fragmentation), TLS suite decoupling, TCP demultiplexing, and forced RST injection. Furthermore, this requires protocol feature normalization and the interception of RTC (Real-Time Communication) traffic."
+    },
+    {
+     "id": 6573057451,
+     "issue": 650,
+     "issue_title": "Обход белых списков мобильного интернета РФ - застряли, ищем реальный опыт / Bypassing the Russian Federation's mobile internet whitelists—we're stuck, looking for real-world experience",
+     "created_at": "2026-11-02T08:56:50Z",
+     "user": "amigocarra",
+     "url": "https://github.com/net4people/bbs/issues/650#issuecomment-6573057451",
+     "body": "> 12\\. Привет, я сотрудник МТС хотел бы связаться с тобою и обсудить данный текст. Может смогу что подсказать🤔\n>      _Hi, I'm an MTS employee and I'd like to get in touch with you to discuss this text. Maybe I can offer some advice._\n\nпривет. tg @amigo_carra\n\n*thanks*"
     }
    ]
   },
@@ -240,6 +260,17 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7338,
+     "title": "[Feature Request / Proposal] Preventing IP leaks during core restarts / profile switching with autoSystemWfpBlockLeak",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T21:15:41Z",
+     "updated_at": "2026-11-05T21:15:41Z",
+     "user": "name321467",
+     "url": "https://github.com/XTLS/Xray-core/issues/7338",
+     "body": "Hello Xray-core maintainers and contributors!\n\nFirst of all, thank you for the recent work on native Windows TUN. Moving leak protection directly into Xray via WFP is a huge step forward and allows GUI clients (like v2rayN) to rely entirely on native Xray TUN rather than legacy multi-core workarounds.\n\nI would like to ask for your thoughts on an architectural edge case related to how GUI clients manage the `xray.exe` lifecycle, and whether addressing it within Xray-core aligns with your vision.\n\n### The Scenario\nWhen a user switches servers, updates routing/DNS profiles, or clicks \"Restart Service\" in a GUI client like v2rayN, the client terminates the current `xray.exe` process and spawns a new one.\n\nBecause the current WFP rules created by `autoSystemWfpBlockLeak` are tied to the dynamic WFP session (`FWPM_SESSION_FLAG_DYNAMIC`) of the running `xray.exe` process, the moment the old process exits, Windows immediately tears down the `xray_tun` adapter and removes the WFP filters. For the ~1–2 seconds it takes for the new `xray.exe` instance to initialize Wintun and re-apply `autoSystemRoutingTable` / `autoSystemWfpBlockLeak`, the OS falls back to the physical interface (direct), causing a brief IP/traffic leak.\n\n### Possible Approaches\nI am wondering what the maintainers think about bridging this restart gap natively in Xray. A couple of concepts come to mind:\n\n1. **CLI-Managed / Companion WFP Lock:**\n   Adding an optional flag or lightweight CLI subcommand (e.g., `xray tun-wfp lock` / `unlock`, or a helper mode bound to the parent GUI PID so it still utilizes `FWPM_SESSION_FLAG_DYNAMIC` for crash safety) that holds the baseline `\"all\"` / `\"allexceptlan\"` WFP block rules across worker restarts. This way, a GUI client could arm the WFP filter once when starting its session, restart `xray.exe` processes freely without dropping the WFP wall during the 1–2s gap, and disarm it on deliberate exit.\n\n2. **Graceful Config Reloading for TUN:**\n   While Xray already has gRPC APIs for dynamic outbound/routing updates, full profile switches in GUI clients often rewrite the entire config. Allowing `xray.exe` to reload its configuration on the fly (via API or signal) without destroying the active `wintun` adapter and its dynamic WFP session would eliminate both the Wintun recreation delay and the leak window.\n\n### Question to Maintainers\nHow do you view this problem from Xray's design perspective?\n1. Do you think bridging this restart gap belongs with in Xray-core, or do you consider it strictly the responsibility of external GUI clients?\n2. If addressing it in Xray-core makes sense to you, what architectural direction would you prefer (one of the concepts above, or a completely different approach)?\n\nIf this aligns with the project's goals, I might be open to exploring the codebase further and perhaps drafting a PR for your review.\n\nThank you for your time!"
+    },
     {
      "number": 7135,
      "title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
@@ -1973,6 +2004,94 @@
   "amnezia-vpn/amnezia-client": {
    "issues": [
     {
+     "number": 3418,
+     "title": "[Linux] Split tunneling doesn't work",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T22:47:55Z",
+     "updated_at": "2026-11-05T22:47:55Z",
+     "user": "szekelyisz",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3418",
+     "body": "**Describe the bug**\nNo matter what I set split tunneling to, my traffic always goes through the VPN.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Go to Split tunneling settings\n2. Select Via VPN and leave the list empty\n3. Check your external IP address\n4. Disconnect, select Directly, leave list empty\n5. Check your external IP address\n\n**Expected behavior**\nThose two checks above should have showed different IP addresses, but they both show the VPN server's address. You can try with adding *.nonexistent to the list, same results.\n\n**Desktop (please complete the following information):**\n - OS: Debian 13\n - AmneziaVPN app version: 5.1.0.6 (Nov  2 2026, ac175c8)\n\n**Server (please complete the following information):**\n - Self hosted\n - OS: Debian 13\n"
+    },
+    {
+     "number": 3417,
+     "title": "MacOS Arm native builds seem missing",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T22:40:49Z",
+     "updated_at": "2026-11-05T22:40:49Z",
+     "user": "alexeedm",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3417",
+     "body": "Hey folks, seems like MacOS aarch64 builds are supported with #2601, however, all the uploaded releases and build artifacts are x86 only. Could you make sure Arm pipeline is running and producing valid artifacts?"
+    },
+    {
+     "number": 3090,
+     "title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-29T11:32:06Z",
+     "updated_at": "2026-11-05T21:50:27Z",
+     "user": "pers1307",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090",
+     "body": "**Describe the bug**\n\n  On Linux, client 5.0.1.5 fails to read the routing table and never installs\n  exclusion routes for the VPN endpoint. With `0.0.0.0/1` and `128.0.0.0/1`\n  pointing at the tunnel, WireGuard packets addressed to the server are routed\n  back into the tunnel itself, creating a routing loop. Packets grow with each\n  iteration until the socket rejects them with `sendmmsg: message too long`.\n\n  Client 4.8.21 on the very same machine installs the routes correctly and works.\n  The issue is protocol-independent — reproduced with both AmneziaWG 2.0 and 3.1\n  servers.\n\n  **To Reproduce**\n\n  Steps to reproduce the behavior:\n  1. Install 5.0.1.5 on Ubuntu 24.04 with a normal DHCP default route\n  2. Connect to any AmneziaWG server\n  3. Run `ip route get <server-ip>` — it points at the tunnel (`dev amn0`) instead\n     of the physical gateway\n  4. See `sendmmsg: message too long` in the daemon log; no traffic passes\n\n  **Expected behavior**\n\n  The daemon should add an exclusion route for the server endpoint through the\n  physical default gateway, as 4.8.21 does:\n  ```\n  <server-ip> via 192.168.31.1 dev wlp0s20f3\n  ```\n\n  **Log files**\n\n  Same 15-second window, two client versions on one machine:\n\n  | Log line | 5.0.1.5 | 4.8.21 |\n  |---|---|---|\n  | `Error in received packet: Numerical argument out of domain` | 10 | 0 |\n  | `No default gateway available, skipping exclusion route` | 10 | 0 |\n  | exclusion routes actually installed | none | all |\n\n5.0.1.5:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  Error in received packet: No such file or directory\n  LinuxRouteMonitor : No default gateway available, skipping exclusion route\n  ...\n  WireguardGo : ERROR: (amn0) peer(XXXX…) - Failed to send data packets:\n                write udp 0.0.0.0:54793: sendmmsg: message too long\n  ```\n  \n  4.8.21, same step:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  ```\n  (no warning, route present in `ip route`)\n  \n  Other errors present in both versions, possibly related:\n  ``` \n  Error: argument \"amnvpnrt\" is wrong: table id value is invalid\n  mkdir: cannot create directory '/sys/fs/cgroup/net_cls/amnvpnexclusions/'\n  LinuxRouteMonitor : Adding exclusion route for /999999 → Invalid destination prefix\n  net_cls cgroup v1 not available, traffic splitting disabled\n  ```\n  \n  **Screenshots**\n  \n  N/A — the client reports \"Connected\".\n\n  **Desktop (please complete the following information):**\n   - OS: Ubuntu 24.04.4 LTS (kernel 6.17), KDE Plasma / X11\n   - Version: 5.0.1.5 (regression — 4.8.21 works)\n\n  **Smartphone (please complete the following information):**\n   - Not affected — mobile clients handle routing through the OS VPN API\n\n  **Server (please complete the following information):**\n   - OS: Ubuntu 24.04, Docker\n\n**Additional context**\n  \n  Workaround — add the exclusion route manually before connecting:\n  ```\n  sudo ip route add <server-ip> via <lan-gateway> dev <iface>\n  ```\n  The loop disappears and `sendmmsg: message too long` stops.\n  \n  Possibly related: #1498, #1357, #2048 — all report \"connected but no internet\"\n  on Linux with the same `amnvpnrt` / `Invalid destination prefix` log noise."
+    },
+    {
+     "number": 3416,
+     "title": "fix(macos): make connected tray icon a template image to follow menu bar theme",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T20:09:27Z",
+     "updated_at": "2026-11-05T20:09:27Z",
+     "user": "anton988",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3416",
+     "body": "Fixes #1979\n\nOn macOS the connected tray icon (`active.png`) is white and is set as a regular\nimage, so it is almost invisible on a light menu bar. Marking it as a template\nimage lets macOS tint it according to the menu bar appearance.\n\nOnly `active.png` is made a template. `default.png` (gray) and `error.png` (red)\nare colored, so making them templates would turn them monochrome and the\nconnection states would no longer be distinguishable.\n\nTesting: I did not build the full app. I checked the approach separately by\nshowing the same icon files in the menu bar with `isTemplate` on and off. With\nthe template flag the icon turns black on a light menu bar and stays white on a\ndark one; the gray and red icons stay unchanged. Screenshots attached.\n\n<img width=\"969\" height=\"36\" alt=\"Снимок экрана — 2026-11-05 в 22 53 46\" src=\"https://github.com/user-attachments/assets/52db7c38-ad04-45d2-8e99-9b0e0f0593f5\" />\n<img width=\"969\" height=\"36\" alt=\"Снимок экрана — 2026-11-05 в 22 50 42\" src=\"https://github.com/user-attachments/assets/6e9f2a5e-40bb-4316-84be-7411d45b5301\" />\n\n"
+    },
+    {
+     "number": 3369,
+     "title": "Android",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-01T13:59:40Z",
+     "updated_at": "2026-11-05T19:52:02Z",
+     "user": "Kotk0",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3369",
+     "body": "Невозможно подключиться. Ьесконечное подключение. Ни на одном из девайсов не подключается (хонор х9 , реалми джейти мастер элишион , инфиникс 40 и 40 про) на сайт HostVD заходит через браузер , можно глянуть свой сервер , оплатить или любая другая манипуляция. Приложение - ни в какую не подключается. \n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/63a8a222-8b1d-476f-bd53-9c9140c02e53\" />\n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/83ea2f65-f624-4b9b-96d0-6fa8bcee6c91\" />"
+    },
+    {
+     "number": 1901,
+     "title": "Kill Switch on Ubuntu Causes Network Configuration Failure (`Current Scopes: none`)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-10-01T13:04:14Z",
+     "updated_at": "2026-11-05T19:05:56Z",
+     "user": "beliaev-maksim",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1901",
+     "body": "#### **Summary**\n\nWhen the **Kill Switch** is enabled on the Linux client (Ubuntu), it prevents the VPN network interface (`amn0`) from being correctly configured by the system's `systemd-resolved` service. This results in a complete loss of internet connectivity because the system has no DNS servers assigned to the active interface. The issue is not just a firewall block but a fundamental network configuration failure.\n\n#### **Environment**\n\n  * **Operating System:** Ubuntu `24.04 LTS`\n  * **Amnezia Client Version:** `4.8.10`\n\n-----\n\n#### **Steps to Reproduce**\n\n1.  Start with the **Kill Switch disabled** in the Amnezia client.\n2.  Connect to a VPN server. Internet works correctly.\n3.  Run `resolvectl status` in the terminal. Observe that the `amn0` interface has `Current Scopes: DNS` and lists the correct DNS servers.\n4.  Disconnect from the VPN.\n5.  **Enable the Kill Switch**.\n6.  Connect to the same VPN server.\n7.  Attempt to access any website or run `ping github.com`. The request fails.\n8.  Run `resolvectl status` again. Observe that the `amn0` interface now shows `Current Scopes: none` and has no DNS servers listed.\n\n\n\n#### **Expected Behavior**\n\nWhen the Kill Switch is enabled, the VPN should connect, and the `amn0` network interface should be correctly configured with a DNS scope and DNS servers, allowing for secure internet access.\n\n#### **Actual Behavior**\n\nWhen the Kill Switch is enabled, the `amn0` network interface fails to be configured correctly by the system. `resolvectl status` shows `Current Scopes: none` for the interface, leading to a total loss of DNS resolution and internet connectivity.\n\n\n#### **Diagnostic Logs**\n\n**1. `resolvectl status` with Kill Switch OFF (Working State)**\n\n```\nLink 17 (amn0)\n    Current Scopes: DNS\n          Protocols: +DefaultRoute -LLMNR -mDNS -DNSOverTLS\n                   DNSSEC=no/unsupported\n Current DNS Server: 1.0.0.1\n         DNS Servers: 1.1.1.1 1.0.0.1\n          DNS Domain: ~.\n```\n\n**2. `resolvectl status` with Kill Switch ON (Broken State)**\n\n```\nLink 18 (amn0)\n    Current Scopes: none\n          Protocols: -DefaultRoute -LLMNR -mDNS -DNSOverTLS\n                   DNSSEC=no/unsupported\n```\n\n-----\n\n#### **Workaround**\n\nThe only current workaround is to disable the Kill Switch feature. With the Kill Switch off, the VPN connection works as expected."
+    },
+    {
+     "number": 3415,
+     "title": "Possible fix for bugs for self-hosted server when returning from Amnezia 3.1 to Amnezia 2.0",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-05T19:00:43Z",
+     "updated_at": "2026-11-05T19:04:22Z",
+     "user": "alexanderpolytech",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3415",
+     "body": "I wanted to try updating to Amnezia 3.1 but had no luck with it.\nSo i decided to return to Amnezia 2.0\n\nUpon doing it i reinstalled the Operating system on my server and updated it:\n`apt update && apt upgrade -y`\n\nand continued with standard installation of Amnezia 2.0 from old file that could be found, for example, here:\nhttps://github.com/amnezia-vpn/amnezia-client/releases\n\nUnfortunatelly, as a result, even the previous version stopped working properly.\nI tried adjusting the MTU packages or changing the ports of connection, but none of that helped.\n\nWhat helped was deleting the Amnezia again and this time as well deleting the files from the registry for the previous installation. For this:\nPress `Win + R,` type `regedit`, and hit Enter.\nNavigate to:\n`HKEY_CURRENT_USER\\Software\\AmneziaVPN.ORG`\nand delete the AmneziaVPN folder.\n\nAfter it install the desired Amnezia version for your needs.\n\nSame issue was found here, but it was a bit hard to find, so i decided to describe it again:\nhttps://github.com/amnezia-vpn/amnezia-client/issues/917\n"
+    },
+    {
+     "number": 3414,
+     "title": "fix(ui): prepare VPN configuration before tray connections",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-05T17:44:14Z",
+     "updated_at": "2026-11-05T18:18:37Z",
+     "user": "arthurzhukovski",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3414",
+     "body": "## Issue\r\n\r\nOn a fresh installation, clicking **Connect** in the tray icon's menu can crash AmneziaVPN if the user has not connected through the main window yet. Connecting through the main window once makes subsequent tray connections work.\r\n\r\n## Env & version\r\n\r\n- OS: Omarchy 4.0.6 (Arch Linux based)\r\n- Desktop: Hyprland\r\n- Kernel: 7.2.15-1-omarchy\r\n- AmneziaVPN: 5.1.0.6\r\n\r\n## Steps to reproduce\r\n\r\n1. Install AmneziaVPN on a machine where it has not been used before.\r\n2. Launch the application and add your VPN configuration.\r\n3. Do **not** click **Connect** in the main application window.\r\n4. Right-click the AmneziaVPN tray icon in the top bar.\r\n5. Click **Connect** in the context menu.\r\n\r\n**Actual:** AmneziaVPN crashes. This was reproduced twice on the affected installation.\r\n\r\n**Expected:** AmneziaVPN prepares the selected connection and connects, or displays an error if it cannot proceed.\r\n\r\n**Workaround:** Relaunch AmneziaVPN, open its main window, and connect there once. After this, connecting from the tray menu works.\r\n\r\n## Root Cause\r\n\r\nThe tray's **Connect** action skips the checks and setup performed by the main window's **Connect** button. It tries to start the VPN immediately, even when the connection configuration is not ready. The crash dump shows the app trying to use a missing configuration handler.\r\n\r\n## Fix\r\n\r\n- Change the tray connection in `coreSignalHandlers.cpp` to call `ConnectionUiController::toggleConnection()` instead of `openConnection()`.\r\n- This reuses the main window's existing validation and configuration preparation before starting the VPN.\r\n- Add regression tests for tray Connect with an unprepared server and while connection preparation is already in progress.\r\n\r\n## Validation\r\n\r\n- Confirmed the original crash with a local core dump and traced the tray action in the source.\r\n- `git diff --check` passed.\r\n- Qt `moc` processed the updated test file and registered both new test cases.\r\n- Full build, regression test execution, and verification of the patched app have not been performed.\r\n"
+    },
+    {
      "number": 3110,
      "title": "Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect",
      "is_pr": false,
@@ -2338,6 +2457,33 @@
    ],
    "comments": [
     {
+     "id": 6670469933,
+     "issue": 3090,
+     "issue_title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
+     "created_at": "2026-11-05T21:50:27Z",
+     "user": "ssspunto",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090#issuecomment-6670469933",
+     "body": "I can reproduce the missing VPN endpoint exclusion route with **AmneziaVPN 5.1.0.6**, build **`ac175c8`**, on **Ubuntu 24.04.4 LTS, x86_64**. Manually adding a host route through the physical gateway restored connectivity.\n\n### Environment and versions\n\n- Linux clients tested: **5.0.3.0** and **5.1.0.6**. Both exhibited the “connected, but no working traffic” symptom with an AWG 3 server.\n- The diagnostics below were collected with **5.1.0.6**.\n- Older Linux client **4.8.15.4** worked with my AWG 2 server.\n- Mobile client **5.1.0.6** worked with both my AWG 2 and AWG 3 server configurations.\n- Docker is installed on the desktop.\n- Route counts from `ip -4 route show table all | wc -l` and `ip -6 route show table all | wc -l`: **32 IPv4 routes and 97 IPv6 routes**.\n\nAll addresses and physical interface names below are anonymized placeholders.\n\n### Routing observations\n\nWith the VPN disconnected, `ip -4 route get MY_SERVER_IP` returned:\n\n```text\nMY_SERVER_IP via MY_GATEWAY_IP dev MY_UPLINK_IFACE src MY_HOME_IP\n```\n\nWith the VPN connected, the same command returned:\n\n```text\nMY_SERVER_IP dev amn0 src MY_VPN_IP\n```\n\nOnly the standard IPv4 routing rules for the `local`, `main`, and `default` tables were present.\n\nIn a separate connection attempt to another server (`MY_SECOND_SERVER_IP`), the same Linux client logged:\n\n```text\nAdding exclusion route for MY_SECOND_SERVER_IP/32\nNo default gateway available, skipping exclusion route\n```\n\nIt subsequently added the full-tunnel routes:\n\n```text\nAdding route to 0.0.0.0/1\nAdding route to 128.0.0.0/1\n```\n\nThese are two different VPN servers: the route output and workaround below concern `MY_SERVER_IP`; the log excerpt concerns `MY_SECOND_SERVER_IP`.\n\n### Confirmed workaround\n\nWhile the VPN was connected, I ran:\n\n```bash\nsudo ip -4 route add MY_SERVER_IP/32 via MY_GATEWAY_IP dev MY_UPLINK_IFACE\n```\n\nInternet access through the VPN immediately started working. This workaround was verified for `MY_SERVER_IP`.\n\nThis appears consistent with the gateway-detection failure discussed in this issue. I have not measured the netlink dump size or tested the proposed patch, so my results confirm the missing endpoint route and the workaround, rather than buffer exhaustion itself.\n"
+    },
+    {
+     "id": 6666916357,
+     "issue": 3369,
+     "issue_title": "Android",
+     "created_at": "2026-11-05T19:14:01Z",
+     "user": "alexanderpolytech",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3369#issuecomment-6666916357",
+     "body": "Hi! \nIf you reinstalled the Amnezia, there are some reg-files that need to be manually deleted\nTake a look on this, maybe it can help\nhttps://github.com/amnezia-vpn/amnezia-client/issues/917\n\nAlso, try checking if the Firewall is blocking the connection with\n`sudo ufw status`\nif needed, open the connection with \n`sudo ufw allow 123/udp`\nwhere 123 is your port number from Amnezia app "
+    },
+    {
+     "id": 6666730543,
+     "issue": 1901,
+     "issue_title": "Kill Switch on Ubuntu Causes Network Configuration Failure (`Current Scopes: none`)",
+     "created_at": "2026-11-05T19:05:56Z",
+     "user": "yaitskov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1901#issuecomment-6666730543",
+     "body": "I started to experience this issue on Debian 13. \nAmnezia update to 5.1.0.6 did help.\n\nThe VPN client had worked fine for many month until I installed docker-engine and run VM from freeCodeCamp.\n\nPurging docker and PC restart didn't help.\nThough it might be a coincidence.   \nOr security update incurred by docker installation."
+    },
+    {
      "id": 6663915163,
      "issue": 3110,
      "issue_title": "Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect",
@@ -2458,6 +2604,17 @@
   },
   "apernet/hysteria": {
    "issues": [
+    {
+     "number": 1718,
+     "title": "Closed",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-05T19:11:05Z",
+     "updated_at": "2026-11-05T19:37:30Z",
+     "user": "llll415",
+     "url": "https://github.com/HyNetworks/hysteria/pull/1718",
+     "body": "Closed by author."
+    },
     {
      "number": 1717,
      "title": "fix(client): bound the wait for the TCP response",

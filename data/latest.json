@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-06T23:07:34Z",
- "since": "2026-11-04T23:07:34Z",
+ "generated_at": "2026-11-07T05:57:27Z",
+ "since": "2026-11-05T05:57:27Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -225,6 +225,28 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7341,
+     "title": "TUN inbound: Only log IPv6 setup errors on Windows when `DisabledComponents` turns IPv6 off, with \"misconfigtun\" blocking IPv6 then",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-06T20:38:07Z",
+     "updated_at": "2026-11-07T03:42:04Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7341",
+     "body": "Follow-up to #7332 (https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6676374920), reworked as in https://github.com/XTLS/Xray-core/pull/7341#issuecomment-6700092032.\r\n\r\nWith IPv6 turned off by `DisabledComponents` (0x10, the non-tunnel interfaces, the TUN among them; 0xFF includes it), IPv6 for `gateway`, `dns` and `autoSystemRoutingTable` is set up as usual, and errors doing so, clearing its DNS servers included, are only logged. Otherwise they exit, also for a config without IPv6 entries, which replaces the skips of #6874, #7325 and #7332.\r\n\r\n`\"misconfigtun\"` then blocks IPv6 outside the TUN whatever the routes, because Windows applies `DisabledComponents` only after a reboot, and until then IPv6 still works. For this, `\"misconfigtun\"` acts as if `autoSystemRoutingTable` had no IPv6 routes, which gives the same filters as `\"[::/0]:all\"`. A literal `\"[::/0]:all\"` isn't used, as Xray counts `\"all\"` as blocking DNS, which needs `dns` to be set, so a config without `dns` would no longer start.\r\n\r\nThe README now recommends at least `\"dns\"` and `\"misconfigtun\"` for `autoSystemWfpBlockLeak` (https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6683422958).\r\n\r\nTested on Windows 11 with Wintun 0.14.1, with the registry value and the IPv6 failures simulated in a test build. Before the reboot, routed IPv6 went through the TUN, and with `\"misconfigtun\"` other programs' IPv6 (TCP, UDP, ping) couldn't leave through Wi-Fi or through an IPv6 adapter added after the TUN started, while IPv4, IPv6 loopback and Xray's own IPv6 still worked. After the reboot (no IPv6 interface, or its DNS servers refused), the TUN starts at once with the errors logged. Without the registry value, the same failures exit. On a real system, with `DisabledComponents` set to 0x01 alone and a reboot, the TUN still gets its IPv6 address, route and DNS servers, so 0x10 is the bit that turns the TUN's IPv6 off. `go test ./proxy/tun/` passes, run as administrator.\r\n\r\nDocs: XTLS/Xray-docs-next#903\r\n\r\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+    },
+    {
+     "number": 7208,
+     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-20T14:40:01Z",
+     "updated_at": "2026-11-07T03:40:54Z",
+     "user": "4erdenko",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208",
+     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
+    },
+    {
      "number": 7219,
      "title": "Sockopt: Fix swapped TCP keepalive idle and interval on Darwin",
      "is_pr": true,
@@ -234,17 +256,6 @@
      "user": "Medium1992",
      "url": "https://github.com/XTLS/Xray-core/pull/7219",
      "body": ""
-    },
-    {
-     "number": 7341,
-     "title": "TUN inbound: Ignore IPv6 entries on Windows when `DisabledComponents` turns IPv6 off on all interfaces",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-06T20:38:07Z",
-     "updated_at": "2026-11-06T20:38:07Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7341",
-     "body": "https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6676374920\n\nWhen `DisabledComponents` turns IPv6 off on all interfaces (0x01 and 0x10 both set, as in 0xFF), the IPv6 entries of `gateway`, `dns` and `autoSystemRoutingTable` are ignored and the TUN starts with IPv4 only, so the same config works with and without IPv6.\n\nThe value only takes effect after a reboot, and until then IPv6 still works, also on interfaces connected later. So ignored IPv6 routes add `\"[::/0]:misconfigtun\"` to `autoSystemWfpBlockLeak`, and IPv6 can't go around the TUN. It's not plain `\"misconfigtun\"`, which would also block IPv4 when all routes are IPv6.\n\nOtherwise nothing changes: when IPv6 can't be set up for another reason, IPv6 entries still exit the core.\n\nThe README now recommends at least `\"dns\"` and `\"misconfigtun\"` for `autoSystemWfpBlockLeak` (https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6683422958).\n\nTested on Windows 11 with Wintun 0.14.1, with the registry value and the IPv6 failures simulated in a test build. Before the reboot, other programs' IPv6 (TCP, UDP, ping) couldn't leave through Wi-Fi or through an IPv6 adapter added after the TUN started, while IPv4, IPv6 loopback and Xray's own IPv6 still worked. After the reboot (no IPv6 interface, or its DNS servers refused), the TUN starts with IPv4 only. `go test ./proxy/tun/` passes, run as administrator.\n\nDocs: XTLS/Xray-docs-next#903\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
     },
     {
      "number": 7332,
@@ -311,17 +322,6 @@
      "user": "izislesar",
      "url": "https://github.com/XTLS/Xray-core/pull/7135",
      "body": "Fixes #7131\n\n## What\n\n- Bump `refraction-networking/utls` from `aa6edf4` to `6ebdceb` (2026-10-06, no tagged release yet — same pinned-commit pattern as the current `aa6edf4` pin) and add `\"hellochrome_155\"` to `ModernFingerprints`.\n- `HelloChrome_Auto` resolves to `HelloChrome_155` in uTLS 6ebdceb, so the default `chrome` preset (also used by ECH) automatically follows the current stable Chrome.\n\n## Rationale\n\nPer @RPRX's comment on #7131: if uTLS has not released a new tagged version by the next Xray release, bump it. As of now (2026-10-13) there is still no uTLS release containing 6ebdceb, so I'd like to land this before the next release window.\n\nNote (per the issue): Chrome 155's ClientHello replaces the one introduced in 133; frames still on 133–154-class Chromium (e.g. Electron not yet rebased) will still emit the old Fingerprint, so `hellochrome_133`/`hellochrome_120` remain available.\n\n## JA4 comparison (from #7131, verified by reporter)\n\n| Source | JA4 |\n|---|---|\n| Xray 26.10.10 `chrome` (utls aa6edf4) | t13d1516h2_8daaf6152771_d8a2da3f94cd |\n| Xray + utls 6ebdceb (this PR) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n| Google Chrome 155 (Linux, stable) | t13d1517h2_8daaf6152771_cb7bf5808d99 |\n\n## Verification\n\n- `go build ./...` — OK\n- `go test ./transport/internet/... ./infra/conf/...` — OK (geodata cache present locally)\n- `go run ./infra/vformat/main.go -mode check -pwd ./` — passes\n- checked that 6ebdceb is strictly ahead of the current pin aa6edf4 (0 commits behind), so ECH ALPN work is retained.\n"
-    },
-    {
-     "number": 7208,
-     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-20T14:40:01Z",
-     "updated_at": "2026-11-06T13:33:11Z",
-     "user": "4erdenko",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
     },
     {
      "number": 7334,
@@ -762,20 +762,36 @@
      "user": "hadi77ir",
      "url": "https://github.com/XTLS/Xray-core/issues/6386",
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nWhile the same connection works with both versions being the same (v24.12.31 as both client and server), when a client is upgraded to v25.x.x (in my case, v25.3.6), it cannot connect to the upstream and will experience REALITY transport layer dropping their connections (actually, forwarding to imitated server) with the following error:\n```\nREALITY: received real certificate (potential MITM or redirection)\n```\nI think this might be related to carrying \"Xray-core version\" in REALITY's ClientHello instead of defining separate \"REALITY Protocol versions\" to keep compatibility between Xray releases and between major releases.\n\nIf you use same versions on both sides, you won't experience such problems, but with a client having gone through a major release cycle, it will fail. (Haven't tested it the other way around with 24.12.31 client and 25.x.x server)\n\n### Reproduction Method\n\n- Run a simple REALITY server with SNI and short ID being set to some values.\n- Run a client configured to use that REALITY server as outbound.\n- You will see errors indicating \"received real certificate (potential MITM or redirection)\" in the log.\n\n### Client config\n\nOutbound:\n```\n        {\n            \"protocol\": \"vless\",\n            \"settings\": {\n                \"vnext\": [\n                    {\n                        \"address\": \"REDACTED\",\n                        \"port\": REDACTED,\n                        \"users\": [\n                            {\n                                \"id\": \"REDACTED\",\n                                \"encryption\": \"none\"\n                            }\n                        ]\n                    }\n                ]\n            },\n            \"streamSettings\": {\n                \"network\": \"tcp\",\n                \"security\": \"reality\",\n                \"realitySettings\": {\n                    \"fingerprint\": \"chrome\",\n                    \"serverName\": \"www.REDACTED.com\",\n                    \"publicKey\": \"REDACTED\",\n                    \"spiderX\": \"\",\n                    \"shortId\": \"REDACTED\"\n                }\n            },\n            \"tag\": \"proxy\"\n        },\n```\n\n### Server config\n\nInbound:\n```\n    {\n      \"tag\": \"REALITY_INBOUND\",\n      \"listen\": \"0.0.0.0\",\n      \"port\": REDACTED,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [],\n        \"decryption\": \"none\"\n      },\n      \"streamSettings\": {\n        \"network\": \"tcp\",\n        \"security\": \"reality\",\n        \"realitySettings\": {\n          \"show\": false,\n          \"dest\": \"REDACTED:443\",\n          \"xver\": 0,\n          \"serverNames\": [\n            \"www.REDACTED.com\",\n            \"REDACTED.com\"\n          ],\n          \"privateKey\": \"REDACTED\",\n          \"shortIds\": [\n            \"REDACTED\"\n          ]\n        }\n      },\n      \"sniffing\": {\n        \"enabled\": true,\n        \"destOverride\": [\n          \"http\",\n          \"tls\",\n          \"quic\"\n        ]\n      }\n    },\n```\n\n### Client log\nCopied from journalctl:\n```\nREDACTED:23:39.790268 [Error] [1736950196] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\nREDACTED:23:39.790429 [Error] [4050634846] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\nREDACTED:23:39.790500 [Error] [4228015039] transport/internet/reality: REALITY: received real certificate (potential MITM or redirection)\n```\n\n### Server log\n\nNothing related to these problematic connections."
-    },
-    {
-     "number": 7319,
-     "title": "UdpHop finalmask: Avoid spurious error logs on closed hop sockets",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-02T19:06:45Z",
-     "updated_at": "2026-11-05T03:36:27Z",
-     "user": "OneMiny",
-     "url": "https://github.com/XTLS/Xray-core/pull/7319",
-     "body": "### Problem\nWhen local port hopping (`intervalLocal`) retires the previous UDP socket, its `ReadFrom` returns a wrapped `net.ErrClosed` while the overall hop session remains active. \n\nIn `recv()`, the code only checks `c.closed()` (which describes the entire session state, not individual retired sockets) and consequently logs this expected socket closure as an unexpected error:\n```text\n[Error] transport/internet/finalmask/udphop: recv err > read udp4 ...: use of closed network connection\n"
     }
    ],
    "comments": [
+    {
+     "id": 6701775827,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-07T03:40:54Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-6701775827",
+     "body": "[XDRIVE-Google-Drive-Setup-Guide.pdf](https://github.com/user-attachments/files/34509303/XDRIVE-Google-Drive-Setup-Guide.pdf)"
+    },
+    {
+     "id": 6701191963,
+     "issue": 7341,
+     "issue_title": "TUN inbound: Only log IPv6 setup errors on Windows when `DisabledComponents` turns IPv6 off, with \"misconfigtun\" blocking IPv6 then",
+     "created_at": "2026-11-07T02:44:06Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7341#issuecomment-6701191963",
+     "body": "> 逻辑不太对，#7325 #7332 的逻辑全部推翻，改为\r\n> \r\n> `gateway`、`dns`、`autoSystemRoutingTable`：若注册表...，则操作 IPv6 时遇到错误仅报错、不退出（包括清空/设置 `dns`）\r\n> \r\n> `autoSystemWfpBlockLeak` \"misconfigtun\"：若注册表...，则一定 block \"[::/0]:all\"（作为此 PR 之前它的逻辑的补充逻辑）\r\n\r\nOK, the code, README, docs, PR title and PR description are updated with the new logic."
+    },
+    {
+     "id": 6700092032,
+     "issue": 7341,
+     "issue_title": "TUN inbound: Only log IPv6 setup errors on Windows when `DisabledComponents` turns IPv6 off, with \"misconfigtun\" blocking IPv6 then",
+     "created_at": "2026-11-07T01:07:20Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7341#issuecomment-6700092032",
+     "body": "逻辑不太对，https://github.com/XTLS/Xray-core/pull/7325 https://github.com/XTLS/Xray-core/pull/7332 的逻辑全部推翻，改为\r\n\r\n`gateway`、`dns`、`autoSystemRoutingTable`：若注册表...，则操作 IPv6 时遇到错误仅报错、不退出（包括清空/设置 `dns`）\r\n\r\n`autoSystemWfpBlockLeak` \"misconfigtun\"：若注册表...，则一定 block \"[::/0]:all\"（作为此 PR 之前它的逻辑的补充逻辑）"
+    },
     {
      "id": 6694434235,
      "issue": 7332,
@@ -1189,29 +1205,44 @@
      "user": "Anthrop44",
      "url": "https://github.com/XTLS/Xray-core/issues/7335#issuecomment-6651133951",
      "body": "之前没人注意到这个问题可能是因为用黑名单分流模式的人比较少"
-    },
-    {
-     "id": 6648987840,
-     "issue": 7319,
-     "issue_title": "UdpHop finalmask: Avoid spurious error logs on closed hop sockets",
-     "created_at": "2026-11-05T03:36:27Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7319#issuecomment-6648987840",
-     "body": "我记得之前我是故意删掉这个判断来着，这个日志也不会刷屏，不过加回来就加回来吧"
-    },
-    {
-     "id": 6647053903,
-     "issue": 7159,
-     "issue_title": "XHTTP: packet-down in stream-down with downlink keep-alive",
-     "created_at": "2026-11-05T01:26:59Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7159#issuecomment-6647053903",
-     "body": "Rebased on main; packetDown moved to field 31, #7295 took 30."
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3170,
+     "title": "fix: handle large netlink route dumps in getGatewayAndIface on Linux",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-14T13:21:43Z",
+     "updated_at": "2026-11-07T04:58:40Z",
+     "user": "Ramurio",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3170",
+     "body": "## Problem\n\nOn Linux, `NetworkUtilities::getGatewayAndIface()` fails to read the kernel routing table whenever the netlink route dump exceeds the preallocated 8 KiB buffer — e.g. on a machine running Docker (bridge networks, veth links with IPv6 addresses). With ~20 containers the dump measures ~9.6 KiB.\n\nThe consequences cascade:\n\n1. `recv()` silently truncates datagrams that don't fit the remaining capacity;\n2. once the buffer is full, `recv(sock, ptr, 0, ...)` is called, which returns **0** — the code treats this as a protocol error and bails out;\n3. `getGatewayAndIface()` returns an empty gateway;\n4. `LinuxRouteMonitor` logs `No default gateway available, skipping exclusion route` and never installs the endpoint exclusion route;\n5. WireGuard/AmneziaWG traffic to the VPN server gets routed **into the tunnel itself** and dies with `sendmmsg: message too long` (tunnel MTU < packet size);\n6. the client shows *connected* but no traffic flows — on every server, every network, any client version.\n\nAdditional issues fixed along the way:\n\n- the receive loop condition compared the reply against `nlmsg_pid = getpid()` from the request header; the kernel assigns the real port id to the (unbound) socket, and that pid may already be taken by another netlink socket in the same process (e.g. the one owned by `LinuxRouteMonitor`), so the loop could never terminate correctly;\n- `perror(\"Error in received packet\")` printed a stale, unrelated errno (e.g. `Numerical argument out of domain`), misleading debugging; now the actual netlink error is logged for `NLMSG_ERROR`;\n- the netlink socket leaked on early returns.\n\n## Evidence\n\nReproduced standalone while restarting 21 Docker containers:\n\n- old code: first `recv()` fails once the dump exceeds the buffer (empty datagram returned by `recv(sock, ptr, 0, ...)`);\n- dump arrives as 3 datagrams: `1036 + 8584 + 20 (NLMSG_DONE)` bytes — the second one alone is larger than the old buffer;\n- patched code: 75/75 successful gateway lookups during a full container-restart storm, and the VPN connects with Docker running (previously: `No default gateway available` → route loop → dead tunnel).\n\n## Changes\n\n- dump buffer: 8 KiB stack → 128 KiB heap, with an explicit 'dump too large' bailout;\n- never call `recv()` with zero capacity; treat an empty datagram as end of transfer;\n- `nlmsg_pid = 0` in the request (let the kernel fill the real port id); rely on `NLMSG_DONE` / `NLM_F_MULTI` to end the loop;\n- log the real netlink error instead of stale errno;\n- close the socket on all early returns."
+    },
+    {
+     "number": 2308,
+     "title": "Amnezia-Client Proxy",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-03-03T12:55:47Z",
+     "updated_at": "2026-11-07T03:12:55Z",
+     "user": "altiummm",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2308",
+     "body": "Спасибо за ваш ВПН, пользуюсь уже 2 года, все замечательно. \nПредлагаю сделать реализацию в клиенте, режим прокси, так как многие протоколы блокируются, а раздельное туннелирование не всегда удобно, чаще всего пользователям и в моей корпоративной сети требуется ВПН для браузера. Но постоянно вносить сайты для проброса не удобно, да и маска игнорирования *.ru не работает. \nЕсть чудесный плагин Censor Tracker, он имеет сокс4/5, предлагаю в клиенте реализовать режим прокси, машина с ВПН коннектится к серверу, но трафик в ВПН не отправляет, а ждет других клиентов по Сокс5 и уже его направляет в ВПН. "
+    },
+    {
+     "number": 3038,
+     "title": "amnezia 3.1 как обновить сервер?",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-25T06:10:47Z",
+     "updated_at": "2026-11-07T00:04:38Z",
+     "user": "gitmeatarru",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3038",
+     "body": "с выходом новой версии протокола вы советуете сделать что-то там с контейнерами.\n\nизвините, я не устанавливал ни каких контейнеров я просто вводил логин и пароль от сервера и нажимал установить.\n\nпочему в новой версии нет кнопки обновить или обновить протокол, все здесь думаете программисты?!"
+    },
     {
      "number": 3430,
      "title": "Возможность распределения трафика по нескольким туннелям",
@@ -1343,17 +1374,6 @@
      "user": "OstarkovSN",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3425",
      "body": "## Problem\n\nOn Windows, \"all sites except\" split tunnelling with a large site list makes\nactivation take minutes. The daemon installs one exclusion route per listed\nprefix, and each one re-reads the whole, growing, routing table. With about\n8,700 prefixes, 5.1.0.6 took almost 5 minutes from `activate` to\n`Connection status: 1`.\n\nThis PR fixes that slow route install, and only that. A separate issue\nremains after activation: the GUI can stay on \"Connecting...\" for minutes\nmore, because the daemon's 250 ms `checkHandshake()` timer is starved while\n`routeChanged()` rescans run on the same thread. This PR does not change\nthat path; see Known limitations.\n\n## Observed symptom\n\n- AmneziaVPN 5.1.0.6 on Windows 10 22H2, AmneziaWG, \"all sites except\" mode\n  with a Russian-IP bypass list: about 8,700 IPv4 prefixes (8,675 exclusion\n  route add attempts in the run below).\n- In the service log, 4 min 57 s pass between `Command received: activate`\n  and `Connection status: 1`, with 30,428 `WindowsRouteMonitor` lines in\n  between, almost all of them from adding exclusion routes one by one.\n- The reporter also found that installing the same routes from a script\n  (`netsh -f`, 500 commands per batch) is fast. That timing is not included\n  here. It suggests, but does not prove, that creating the routes is not the\n  bottleneck. The counts below locate the cost.\n\n## Root cause\n\nIn this mode every listed site becomes an entry in `excludedAddresses`, and\n`Daemon::activate()` (and `Daemon::switchServer()`) call\n`addExclusionRoute()` once per address. On Windows,\n`WindowsRouteMonitor::addExclusionRoute()` does the following for **every**\nprefix:\n\n1. `GetIpForwardTable2()`: copies the whole routing table out of the kernel.\n   The table grows by one row for each exclusion route already added.\n2. `updateInterfaceMetrics()`: calls `GetIpInterfaceTable()` and writes one\n   debug line per connected interface.\n3. `updateCapturedRoutes(family, table)`: when default route capture is on,\n   this calls `isRouteExcluded()`, which is linear in the number of\n   exclusions, for every eligible system route.\n4. `updateExclusionRoute()`: a linear scan of the table.\n5. One more debug line.\n\nEvery log line is flushed to the log file. For N prefixes the cost is O(N²)\ntable rows copied out of the kernel and scanned. During `switchServer()`,\nwhere capture is already enabled, it adds O(T·N²) in `isRouteExcluded()`,\nwhere T is the number of system routes. For N = 8,664 that is about\n37 million rows copied (see the measurements below).\n\n## Fix\n\n- Add `WindowsRouteMonitor::addExclusionRoutes(const QList<IPAddress>&)`. For\n  each address family it fetches the routing table and interface metrics\n  once, then builds each exclusion row, computes its next hop against that\n  snapshot with the existing `updateExclusionRoute()`, installs it, and\n  records it in `m_exclusionRoutes`. `updateCapturedRoutes()` runs once at\n  the end. A single summary line (`Added X of N exclusion routes (I\n  installed, F failed) in T ms`) replaces the per-prefix debug lines.\n  Interface, capture, warning and error lines are logged as before, but\n  `updateInterfaceMetrics()` now runs once per family.\n- `addExclusionRoute()` keeps its signature, its log line and its return\n  value, and now calls the batch with one prefix. The row initialisation\n  moved verbatim into `initExclusionRow()`.\n- `updateExclusionRoute()` now returns `false` when `CreateIpForwardEntry2()`\n  fails. It still logs the error as before. The batch uses the value only\n  for the summary count, and `routeChanged()` ignores it.\n- `WireguardUtils` gets a virtual `addExclusionRoutes()` whose default adds\n  the routes one by one, so Linux and macOS routing code is unchanged.\n  Windows overrides it, and `excludeLocalNetworks()` uses it too. The\n  daemon-level duplicate handling below applies to every platform.\n- `Daemon::addExclusionRoute()` is replaced by `Daemon::addExclusionRoutes()`.\n  It applies the same `m_excludedAddrSet` reference counti"
-    },
-    {
-     "number": 3170,
-     "title": "fix: handle large netlink route dumps in getGatewayAndIface on Linux",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-09-14T13:21:43Z",
-     "updated_at": "2026-11-06T16:10:41Z",
-     "user": "Ramurio",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3170",
-     "body": "## Problem\n\nOn Linux, `NetworkUtilities::getGatewayAndIface()` fails to read the kernel routing table whenever the netlink route dump exceeds the preallocated 8 KiB buffer — e.g. on a machine running Docker (bridge networks, veth links with IPv6 addresses). With ~20 containers the dump measures ~9.6 KiB.\n\nThe consequences cascade:\n\n1. `recv()` silently truncates datagrams that don't fit the remaining capacity;\n2. once the buffer is full, `recv(sock, ptr, 0, ...)` is called, which returns **0** — the code treats this as a protocol error and bails out;\n3. `getGatewayAndIface()` returns an empty gateway;\n4. `LinuxRouteMonitor` logs `No default gateway available, skipping exclusion route` and never installs the endpoint exclusion route;\n5. WireGuard/AmneziaWG traffic to the VPN server gets routed **into the tunnel itself** and dies with `sendmmsg: message too long` (tunnel MTU < packet size);\n6. the client shows *connected* but no traffic flows — on every server, every network, any client version.\n\nAdditional issues fixed along the way:\n\n- the receive loop condition compared the reply against `nlmsg_pid = getpid()` from the request header; the kernel assigns the real port id to the (unbound) socket, and that pid may already be taken by another netlink socket in the same process (e.g. the one owned by `LinuxRouteMonitor`), so the loop could never terminate correctly;\n- `perror(\"Error in received packet\")` printed a stale, unrelated errno (e.g. `Numerical argument out of domain`), misleading debugging; now the actual netlink error is logged for `NLMSG_ERROR`;\n- the netlink socket leaked on early returns.\n\n## Evidence\n\nReproduced standalone while restarting 21 Docker containers:\n\n- old code: first `recv()` fails once the dump exceeds the buffer (empty datagram returned by `recv(sock, ptr, 0, ...)`);\n- dump arrives as 3 datagrams: `1036 + 8584 + 20 (NLMSG_DONE)` bytes — the second one alone is larger than the old buffer;\n- patched code: 75/75 successful gateway lookups during a full container-restart storm, and the VPN connects with Docker running (previously: `No default gateway available` → route loop → dead tunnel).\n\n## Changes\n\n- dump buffer: 8 KiB stack → 128 KiB heap, with an explicit 'dump too large' bailout;\n- never call `recv()` with zero capacity; treat an empty datagram as end of transfer;\n- `nlmsg_pid = 0` in the request (let the kernel fill the real port id); rely on `NLMSG_DONE` / `NLM_F_MULTI` to end the loop;\n- log the real netlink error instead of stale errno;\n- close the socket on all early returns."
     },
     {
      "number": 3390,
@@ -1750,42 +1770,45 @@
      "user": "Stalinko",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3404",
      "body": "## Problem\n\nWith **Settings → Connection → Use AmneziaDNS** turned off, the client still connects with AmneziaDNS (`172.29.172.254`).\n\n`getDnsPair()` prefers a DNS saved in the server config over the switch:\n\n- `SelfHostedAdminServerConfig::getDnsPair()` checks the switch only when no DNS is saved.\n- `SelfHostedUserServerConfig`, `NativeServerConfig` and `ApiV2ServerConfig` don't check it at all.\n\nA shared `vpn://` key gets AmneziaDNS saved in it whenever the admin's switch was on at export time (`ExportController` writes the resolved DNS into the key). After that, the recipient's switch and custom DNS servers have no effect.\n\n## Fix\n\nIn `ConnectionController::prepareConnection()`, after the DNS pair is resolved for any server type: if the switch is off and the primary DNS is AmneziaDNS, use the user's DNS servers instead.\n\nThis is one check where every connection passes, so it covers self-hosted, shared, native and Premium/Free configs. Nothing changes while the switch is on, or when the saved DNS is anything other than AmneziaDNS.\n\n## Testing\n\nNot built or run locally. Please let CI build it. To check manually: import a shared key that has AmneziaDNS saved in it, turn **Use AmneziaDNS** off, connect, and confirm the tunnel uses the DNS servers from **Settings → Connection → DNS servers**.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
-    },
-    {
-     "number": 3403,
-     "title": "Android 17 AWG 3.1 with split-tunneling connection off after screen locked",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-05T05:20:05Z",
-     "updated_at": "2026-11-05T05:20:05Z",
-     "user": "ZooMch1k",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3403",
-     "body": "On android 17(tested on Galaxy fold 7 and Pixel 10a) while split-tunneling apps, after screen locked and unlock connection drops and can revive either in 15-20 sec(handshake time) or not revive before reboot VPN in notification shade.\nAll rights and energy settings seted."
-    },
-    {
-     "number": 3000,
-     "title": "Support for non-systemd Linux distributions (Void Linux, etc.) and openresolv DNS",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-08-18T03:38:48Z",
-     "updated_at": "2026-11-05T02:08:28Z",
-     "user": "yar101",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3000",
-     "body": "  ### Problem\n\n  The AmneziaVPN desktop client currently depends on systemd (in the installer)\n  and systemd-resolved (via the org.freedesktop.resolve1 D-Bus interface for DNS\n  management).\n\n  As a result, it does not work out of the box on Void Linux (or other systems\n  without systemd and systemd-resolved).\n\n  ### Solution / Ready Workaround\n\n  I created a working setup and a D-Bus DNS bridge specifically for Void Linux\n  (runit + openresolv):\n  → https://github.com/yar101/amnezia-vpn-setup-for-void-linux\n\n  Key features:\n\n  • Single-script installer: Installs everything out-of-the-box, automatically\n  resolving dependencies via xbps.\n  • DNS bridge: Translates systemd-resolved D-Bus calls to openresolv,\n  preventing DNS leaks across VPN protocols.\n  • Native runit services: Handles daemon lifecycle, logging, and automatic DNS\n  cleanup.\n\n  Sharing this here as a ready-to-use solution for Void Linux users and as a\n  reference for future non-systemd support."
-    },
-    {
-     "number": 3374,
-     "title": "macOS: NAT64-synthesized IPv6 endpoint passed to wireguard-go without brackets → IPC error -22, AmneziaWG can't connect (DNS64 networks)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-02T13:21:49Z",
-     "updated_at": "2026-11-05T00:49:32Z",
-     "user": "Arty-Ant",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3374",
-     "body": "**Describe the bug**\nOn macOS, when an AmneziaWG server is added by **hostname** (A record only, no AAAA) and the Mac is on a network with **DNS64/NAT64** (e.g. mobile hotspot of a Russian mobile operator), the hostname resolves to a NAT64-synthesized address `64:ff9b::/96`. The macOS daemon then passes it to wireguard-go as `endpoint=<ipv6>:<port>` **without square brackets**, wireguard-go rejects it with IPC error -22, peer creation fails and the connection is immediately dropped (the GUI may sit in \"Preparing\"/\"Connecting\").\n\nThe same server added by **IPv4 literal** works on the same network. Android client works with the hostname on the same network. Same root cause as the Linux issue #2607, but on macOS and triggered by NAT64 synthesis rather than a real AAAA record.\n\n**Root cause (from source, dev @ 7f9b7db)**\n`client/platforms/macos/daemon/wireguardutilsmacos.cpp`, `WireguardUtilsMacos::updatePeer()`:\n```cpp\nif (!config.m_serverIpv4AddrIn.isNull()) {\n    out << \"endpoint=\" << config.m_serverIpv4AddrIn << \":\";      // <- holds 64:ff9b::… here, no brackets\n} else if (!config.m_serverIpv6AddrIn.isNull()) {\n    out << \"endpoint=[\" << config.m_serverIpv6AddrIn << \"]:\";\n```\nThe resolved hostname result ends up in `m_serverIpv4AddrIn` even when it is an IPv6 (NAT64) address. Suggested fix: bracket the address whenever it contains `:` (or put IPv6 results into `m_serverIpv6AddrIn`), and/or prefer A records when resolving the endpoint host.\n\n**To Reproduce**\n1. Add a self-hosted AmneziaWG server by hostname that has only an A record (e.g. `relay.example.net` → `203.0.113.10`).\n2. Connect the Mac to a DNS64/NAT64 network (mobile hotspot).\n3. Click Connect → immediately disconnected.\n\n**Service log** (`/private/var/log/AmneziaVPN/AmneziaVPN-service.log`, key/addresses anonymized)\n```\nMacosRouteMonitor : Adding exclusion route for 64:ff9b::cb00:710a/128\nWireguardUtilsMacos : Configuring peer <pubkey> via 64:ff9b::cb00:710a\nWireguardGo : ERROR: (utun4) IPC error -22: failed to set endpoint 64:ff9b::cb00:710a:5275: invalid ip:port \"64:ff9b::cb00:710a:5275\", IPv6 addresses must be surrounded by square brackets\nWireguardUtilsMacos : Peer configuration failed: Unknown error: -22\nDaemon : Peer creation failed.\nDaemonLocalServerConnection : Failed to activate the interface\n```\n\n**Expected behavior**\nConnection succeeds (bracketed endpoint `[64:ff9b::cb00:710a]:5275`), or the client uses the A record.\n\n**Environment**\n- AmneziaVPN 5.0.3.0 (de93650), macOS Sequoia 15.7.5 (x86_64)\n- Protocol: AmneziaWG, self-hosted server added via hostname\n"
     }
    ],
    "comments": [
+    {
+     "id": 6702534958,
+     "issue": 3170,
+     "issue_title": "fix: handle large netlink route dumps in getGatewayAndIface on Linux",
+     "created_at": "2026-11-07T04:58:40Z",
+     "user": "pers1307",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3170#issuecomment-6702534958",
+     "body": "@ronoaer @NickVs2015 @MrMirDan @ygurov @yp-amnezia @alexudev @isamnezia @lunardunno review/merge it, pls"
+    },
+    {
+     "id": 6702519361,
+     "issue": 3170,
+     "issue_title": "fix: handle large netlink route dumps in getGatewayAndIface on Linux",
+     "created_at": "2026-11-07T04:56:54Z",
+     "user": "pers1307",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3170#issuecomment-6702519361",
+     "body": "\r\n@pokamest @Nethius @vkamn @albexk @outspace @kolobchanin review/merge it, pls"
+    },
+    {
+     "id": 6701493211,
+     "issue": 2308,
+     "issue_title": "Amnezia-Client Proxy",
+     "created_at": "2026-11-07T03:12:55Z",
+     "user": "MerzZly",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2308#issuecomment-6701493211",
+     "body": "Попробуйте https://www.wgtunnel.com/, там в настройках можно выбрать режим прокси."
+    },
+    {
+     "id": 6699210172,
+     "issue": 3038,
+     "issue_title": "amnezia 3.1 как обновить сервер?",
+     "created_at": "2026-11-07T00:04:38Z",
+     "user": "EnovaMaker",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3038#issuecomment-6699210172",
+     "body": "For those running your own server: before you update it, how do you check that the clients your users already have will still connect? Or do you find out afterwards, from them?\n\n(Drafted with help from Claude, an AI assistant; the question is mine.)"
+    },
     {
      "id": 6695077885,
      "issue": 3427,
@@ -1911,15 +1934,6 @@
      "user": "xewelus",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3395#issuecomment-6652314238",
      "body": "I have same error. If try to add ignore this error occuring on service starting:\n\n<img width=\"908\" height=\"336\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/e1a58abf-cc4d-43d2-b03e-68e087f8181d\" />"
-    },
-    {
-     "id": 6646464687,
-     "issue": 3374,
-     "issue_title": "macOS: NAT64-synthesized IPv6 endpoint passed to wireguard-go without brackets → IPC error -22, AmneziaWG can't connect (DNS64 networks)",
-     "created_at": "2026-11-05T00:49:32Z",
-     "user": "icntswm",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3374#issuecomment-6646464687",
-     "body": "I can reproduce the same missing-brackets error on macOS, including with a literal IPv6 endpoint rather than a hostname or a DNS64-synthesized address.\n\nEnvironment:\n- AmneziaVPN 5.0.3.0 (`de93650`, as reported in the log)\n- macOS Tahoe 26.6.2, arm64\n- Self-hosted AmneziaWG, configuration imported from a `.conf` file\n\nThe imported file has a correctly bracketed endpoint, for example:\n\n```ini\nEndpoint = [2001:db8:1234:5678::]:34541\n```\n\nThe address above is a documentation placeholder. The service nevertheless passes the real address to the backend without brackets, producing:\n\n```text\nIPC error -22: failed to set endpoint 2001:db8:1234:5678:::34541: invalid ip:port \"2001:db8:1234:5678:::34541\", IPv6 addresses must be surrounded by square brackets\nPeer configuration failed: Unknown error: -22\nPeer creation failed.\nFailed to activate the interface\n```\n\nThe UI briefly starts connecting and immediately returns to disconnected. Importing the correctly formatted file as a new profile does not help.\n\nIPv6 was initially disabled for Wi-Fi on this Mac. After enabling automatic IPv6 configuration, a direct TCP connection to the server over IPv6 succeeded, but the app still failed with the error above. The same server and profile then worked on this Mac using the bundled `amneziawg-go` backend with command-line tools (`amneziawg-tools` and the Darwin quick script), bypassing the app's peer configuration path. The server also works over IPv6 from Android.\n\nThis suggests the issue also affects literal IPv6 endpoints, not only DNS64/NAT64 resolution.\n"
     },
     {
      "id": 2242443380,

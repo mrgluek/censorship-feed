@@ -1,9 +1,20 @@
 {
- "generated_at": "2026-11-07T19:25:26Z",
- "since": "2026-11-05T19:25:26Z",
+ "generated_at": "2026-11-08T00:35:05Z",
+ "since": "2026-11-06T00:35:05Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 681,
+     "title": "AWG Router: AmneziaWG server panel with cascade routing and load balancing",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-08T00:12:59Z",
+     "updated_at": "2026-11-08T00:12:59Z",
+     "user": "r-slashslash",
+     "url": "https://github.com/net4people/bbs/issues/681",
+     "body": "I maintain AWG Router, an open-source (MIT) web panel for AmneziaWG servers: https://github.com/r-slashslash/AWG-Router\n\n**Routing.** Clients can exit through other AWG servers or SOCKS5 proxies, chosen networks go direct, rules can be set per client and per domain. Domain rules work by redirecting TCP 80/443 to a local proxy that reads SNI/Host; QUIC is blocked for those clients, and ECH sites can't be matched. Each exit has its own routing table with an `unreachable` fallback, so when an exit is down traffic is dropped, not leaked. The tunnel is IPv4-only: clients get `::/0` and IPv6 is dropped inside.\n\n**Panel exposure.** The panel lives under a secret path; everything outside it is minimal and answers with a generic `Server` header. The browser never contacts third-party hosts.\n\n**SOCKS5 exit health.** A local Xray answers \"connected\" before it has reached the far side, so the check sends a TLS ClientHello after CONNECT and requires at least one byte back.\n\nI'd welcome feedback, especially on fingerprinting and on how this behaves on real networks in Russia, Iran and China."
+    },
     {
      "number": 671,
      "title": "[Russia] recent mass ip bans",
@@ -57,6 +68,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 345,
+     "title": "OpenWrt packages",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2016-01-26T09:09:19Z",
+     "updated_at": "2026-11-07T21:41:00Z",
+     "user": "teodorre",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/345",
+     "body": "Если возможно, сделайте пару сборок под OpenWrt (под популярные процессорные архитектуры).\nСейчас у большого количества роутеров >64мб памяти, а использование в роутере, на мой взгляд, самое очевидное.\nИли есть какие-то сложности? \n"
+    },
+    {
      "number": 2621,
      "title": "The WebTorrent feature of i2pd does not accept valid magnets.",
      "is_pr": false,
@@ -77,6 +99,15 @@
      "user": "orignal",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2621#issuecomment-6688586495",
      "body": "https://github.com/PurpleI2P/i2pd/commit/dc8bdea1da7535b5aaaf03bffcca8e9a345e5ee7"
+    },
+    {
+     "id": 6522123708,
+     "issue": 345,
+     "issue_title": "OpenWrt packages",
+     "created_at": "2026-10-30T11:57:39Z",
+     "user": "LLE8",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/345#issuecomment-6522123708",
+     "body": "Собрал  свежую версию. \nhttps://github.com/PurpleI2P/i2pd-openwrt/tree/master/trunk\nФайл /usr/bin/i2pd около 2 МБ, в ОЗУ после запуска 12-13 МБ.\nРеализована возможность собрать проект с UPnP или без, с торрент-клиентом или без, добавлены соответствующие пункты в menuconfig и патчи.\nВ составе пакета имеется i2pd.conf, подходящий (надеюсь) для многих домашних маршрутизаторов. Размещение файлов в ФС целевого устройства аналогично пакету для Debian.\nДля сборки свежей версии в Makefile следует изменить дату сборки `PKG_SOURCE_DATE`,  хэш очередного коммита `PKG_SOURCE_VERSION`. Они попадают в имя apk-файла. \nКонтрольную сумму архива с исходниками (создается в процессе загрузки) `PKG_MIRROR_HASH` можно установить в значение `skip`  https://openwrt.org/docs/guide-developer/packages#use_source_repository , однако имеется баг https://github.com/openwrt/openwrt/issues/19757\nМожно выполнить `make package/i2pd/clean; make package/i2pd/download V=s` с заведомо неправильной контрольной суммой и в сообщении об ошибке загрузки получить правильную контрольную сумму, которую и указать в `PKG_MIRROR_HASH`.\n"
     }
    ]
   },
@@ -86,6 +117,39 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7345,
+     "title": "Mux: Write frames to the connection from one goroutine",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-07T20:23:18Z",
+     "updated_at": "2026-11-08T00:04:14Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7345",
+     "body": "Follow up to https://github.com/XTLS/Xray-core/pull/7337#issuecomment-6692618802\n\n### Why\nThe mux writes to its link from one goroutine per session. Before #5076 a pipe sat under it and only the pipe reader wrote the connection. Now the VLESS inbound hands the mux its connection writer directly, so VisionWriter gets entered from several goroutines at once. Same for the VLESS reverse portal through the inbound\n\n### What changed\nServerWorker and ClientWorker put one pipe and one copy goroutine in front of any writer that is not a pipe already, once per connection and not per session. Writers below the mux see one call at a time again, so the VisionWriter mutex from #7337 is removed\n\n### Testing and limits\n`TestServerWorkerWritesOneAtATime` and `TestClientWorkerWritesOneAtATime` count calls that enter the writer while another one is inside, 31 on main and 0 with this change. `TestVisionUnderMux` runs a real VisionWriter under ServerWorker, without the change the client mux can't parse the stream and drops it\n`go test -race ./common/mux/... ./proxy/...` and `testing/scenarios` pass\n"
+    },
+    {
+     "number": 4231,
+     "title": "mux cool: Add maxReuseTimes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2024-12-31T11:23:13Z",
+     "updated_at": "2026-11-08T00:02:02Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/4231",
+     "body": "字面意思\r\n现 mux cool 逻辑:\r\nMaxConcurrency 为一个连接里的最大活动子连接数\r\n还有一个神秘的 MaxConnections 参数 硬编码为128 实际上就是最大复用次数 我不知道为什么叫这个 这个PR将其重命名了\r\n我修改了一下 允许手动指定 maxReuseTimes 并把默认值变成了65535(mux.cool两位流ID允许的最大上限)\r\n\r\n这些限制仅存在于客户端 服务端没有限制 旧的可以正常工作"
+    },
+    {
+     "number": 7337,
+     "title": "XTLS Vision: Serialize VisionWriter writes from concurrent mux sessions",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-05T15:19:41Z",
+     "updated_at": "2026-11-07T20:23:24Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7337",
+     "body": "Fixes #7336\n\nSince 4064f8dd the VLESS inbound hands its `VisionWriter` to `mux.Server.DispatchLink` without a pipe. `mux.ServerWorker` writes from one goroutine per session, so `VisionWriter.WriteMultiBuffer` runs concurrently. The padding state (`writeOnceUserUUID`, `IsPadding`, `NumberOfPacketToFilter`) changes outside any lock, while the `BufferedWriter` lock underneath only covers the socket write. Blocks then reach the wire in a different order from the one their padding was computed in. The client `VisionReader` passes padding through as data, and the client mux fails with `unknown status: <random>`, dropping every session on the connection. Details, configs and logs are in the issue.\n\nThis PR makes `VisionWriter.WriteMultiBuffer` hold its own mutex for the whole call, so the padding state and the wire order change together. Mux writes were already serialized by the `BufferedWriter` lock, so throughput stays the same. On plain TCP Vision only one goroutine writes, so the lock is never contended. The same change covers the VLESS reverse portal with Vision, where `mux.ClientWorker` writes from one goroutine per session.\n\n`TestVisionWriterConcurrentWrites` writes to one `VisionWriter` from two goroutines while the underlying writer holds the first write until the second one lands. Without the lock the second block goes out first without the user UUID, and a `VisionReader` on the other side returns padding bytes as payload. The test is deterministic: it fails on `main` without the change and passes with it, with `-race` as well.\n\nThe repro from the issue (100 UDP associations at once through Vision + XUDP):\n\n| | replies of 100 | server data races (`-race`) |\n| -- | -- | -- |\n| v26.10.31 | 88, 60, 79 | 17 |\n| this PR | 100, 100, 99 | 0 |\n\n`go test -race ./proxy/ ./common/mux/... ./proxy/vless/...` passes.\n"
+    },
     {
      "number": 7344,
      "title": "Build install script",
@@ -142,17 +206,6 @@
      "body": "Android builds are PIE, and a Go PIE binary carries ~155k `R_*_RELATIVE` dynamic relocations (pointers in type descriptors, itabs, static string/slice headers, etc.). Stored as plain RELA (24 bytes each) they take **3.56 MiB** of every Android binary.\n\nThis PR passes `-Wl,--pack-dyn-relocs=android` to lld (NDK r28b, already used by the Android jobs), so the table is stored in Android's packed format (APS2) instead.\n\n### Result (NDK r28b, same command line as `release.yml`)\n\n| | before | after | diff |\n|---|---|---|---|\n| android-arm64-v8a | 36,447,032 B | 33,380,312 B | **−2.92 MiB (−8.4%)** |\n| android-amd64 | 39,053,016 B | 35,980,920 B | **−2.93 MiB (−7.9%)** |\n| relocation table (arm64) | 3,738,216 B (`RELA`) | 671,475 B (`ANDROID_RELA`) | |\n\nThe download (zip) shrinks less (~0.3 MiB) because RELA compresses well; the gain is mostly on-disk / installed size. Code and data are unchanged: only the encoding of the relocation table differs (e.g. `.data.rel.ro` has the same size in both builds).\n\n### Compatibility\n\n- `DT_ANDROID_RELA` is supported by the bionic loader since **Android 6.0 (API 23)**. The Android jobs already target API 24 (`*-linux-android24-clang`, \"Android 7+\" since #4664), so the supported range does not change.\n- Binaries would fail to load on Android 5.x (API 21–22), which is already below the build target.\n- RELR (`--pack-dyn-relocs=relr`) would save ~0.6 MiB more, but needs Android 9 (API 28, `DT_ANDROID_RELR`) or Android 11 (API 30, `DT_RELR`), so it is intentionally **not** used here.\n\n### Testing\n\nOn a physical device (Android 16 / API 36, arm64), comparing the unchanged build with the packed one:\n\n- `xray version`, `xray x25519`, `xray run -test`: OK\n- end-to-end traffic inside the device: dokodemo-door → VLESS outbound → VLESS inbound → freedom → metrics HTTP endpoint: `200 OK`\n- unit tests cross-compiled with the same flags and run on the device (`common/buf`, `common/crypto`, `common/protocol`, `common/serial`, `common/net`, `infra/conf`, `proxy/vless/encoding`, `app/router`): identical results for both builds, all PASS (geosite-dependent router tests skipped: no `geosite.dat` on the device)\n\nNot tested on Android 6–8 hardware; compatibility there is based on the dynamic tags (`llvm-readelf -d` shows `ANDROID_RELA`/`ANDROID_RELASZ`) and bionic's documented support.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
     },
     {
-     "number": 4231,
-     "title": "mux cool: Add maxReuseTimes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2024-12-31T11:23:13Z",
-     "updated_at": "2026-11-07T12:46:36Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231",
-     "body": "字面意思\r\n现 mux cool 逻辑:\r\nMaxConcurrency 为一个连接里的最大活动子连接数\r\n还有一个神秘的 MaxConnections 参数 硬编码为128 实际上就是最大复用次数 我不知道为什么叫这个 这个PR将其重命名了\r\n我修改了一下 允许手动指定 maxReuseTimes 并把默认值变成了65535(mux.cool两位流ID允许的最大上限)\r\n\r\n这些限制仅存在于客户端 服务端没有限制 旧的可以正常工作"
-    },
-    {
      "number": 7342,
      "title": "Hysteria inbound: Reject duplicate `email`, fail on unknown one in `RemoveUser`",
      "is_pr": true,
@@ -206,17 +259,6 @@
      "user": "StarProxima",
      "url": "https://github.com/XTLS/Xray-core/issues/7336",
      "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nOn a VLESS + `xtls-rprx-vision` + REALITY server, a client with Mux/XUDP (`concurrency: -1`, `xudpConcurrency: 8`) loses UDP sessions when several of them start at once. The client logs `[Error] common/mux: unknown status: <random number>` (194, 196, ...) or only `[Info] common/mux: failed to read metadata > common/mux: insufficient buffer: 0`. After that, no XUDP session on that mux connection gets any more replies.\n\nVersion: v26.10.31, also current `main` (a52db8f6). I think it started in v25.9.5 with 4064f8dd (\"XTLS Vision: Refactor code to use DispatchLink() in VLESS inbound\").\n\nReplies received, with the configs and scripts below (100 UDP associations opened at once, one datagram each):\n\n| | replies of 100 |\n| -- | -- |\n| v26.10.31, Vision + XUDP | 88, 60, 79 |\n| v26.10.31, Vision + XUDP, server built with `-race` | 40 (17 data race reports on the server) |\n| v26.10.31, XUDP without `flow` | 98, 100 |\n| v26.10.31, Vision + XUDP, `xudpConcurrency: 1` | 100, 100 |\n| `main` with #7337, Vision + XUDP | 100, 100, 99 |\n\n**Cause**\n\nSince 4064f8dd, the VLESS inbound passes its `VisionWriter` to `mux.Server.DispatchLink` directly, with no pipe in between. `mux.ServerWorker` runs `handle()` in a goroutine per session, so several goroutines call `VisionWriter.WriteMultiBuffer` at the same time. `VisionWriter` updates the padding state (`writeOnceUserUUID`, `IsPadding`, `NumberOfPacketToFilter`) without a lock. The `BufferedWriter` underneath takes a lock, but only for the socket write. So blocks can reach the wire in a different order from the one their padding was computed in:\n\n- a padding block without the user UUID goes out first: the client `VisionReader` is still in its initial state, does not recognise it and passes it to mux as data;\n- a padded block goes out after the block with `CommandPaddingEnd`: the client has already stopped unpadding.\n\nThe client mux then reads the 5-byte padding header as a frame header. The status byte falls on the low byte of the random padding length, which is where the random `unknown status` comes from. `ClientWorker.fetchOutput` exits and takes all sessions of the connection with it.\n\nThe server built with `-race` shows `VisionWriter.WriteMultiBuffer` called concurrently from `mux.writeMetaWithFrame` of different sessions (first report):\n\n```\nWARNING: DATA RACE\nRead at 0x00c0003141d8 by goroutine 132:\n  github.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer()\n      proxy/proxy.go:357 +0x38c\n  github.com/xtls/xray-core/common/mux.writeMetaWithFrame()\n      common/mux/writer.go:86 +0x200\n  ...\n  github.com/xtls/xray-core/common/mux.handle()\n      common/mux/server.go:113 +0x154\n  github.com/xtls/xray-core/common/mux.(*ServerWorker).handleStatusNew.gowrap1()\n      common/mux/server.go:260 +0x54\n\nPrevious write at 0x00c0003141d8 by goroutine 123:\n  github.com/xtls/xray-core/proxy.XtlsFilterTls()\n      proxy/proxy.go:629 +0x9c\n  github.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer()\n      proxy/proxy.go:358 +0x3d4\n  github.com/xtls/xray-core/common/mux.writeMetaWithFrame()\n      common/mux/writer.go:86 +0x200\n  ...\n  github.com/xtls/xray-core/common/mux.handle()\n      common/mux/server.go:113 +0x154\n  github.com/xtls/xray-core/common/mux.(*ServerWorker).handleStatusNew.gowrap1()\n      common/mux/server.go:260 +0x54\n```\n\nThe client is clean under `-race`: its mux writes through a pipe, so only one goroutin"
-    },
-    {
-     "number": 7337,
-     "title": "XTLS Vision: Serialize VisionWriter writes from concurrent mux sessions",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-05T15:19:41Z",
-     "updated_at": "2026-11-06T18:45:23Z",
-     "user": "StarProxima",
-     "url": "https://github.com/XTLS/Xray-core/pull/7337",
-     "body": "Fixes #7336\n\nSince 4064f8dd the VLESS inbound hands its `VisionWriter` to `mux.Server.DispatchLink` without a pipe. `mux.ServerWorker` writes from one goroutine per session, so `VisionWriter.WriteMultiBuffer` runs concurrently. The padding state (`writeOnceUserUUID`, `IsPadding`, `NumberOfPacketToFilter`) changes outside any lock, while the `BufferedWriter` lock underneath only covers the socket write. Blocks then reach the wire in a different order from the one their padding was computed in. The client `VisionReader` passes padding through as data, and the client mux fails with `unknown status: <random>`, dropping every session on the connection. Details, configs and logs are in the issue.\n\nThis PR makes `VisionWriter.WriteMultiBuffer` hold its own mutex for the whole call, so the padding state and the wire order change together. Mux writes were already serialized by the `BufferedWriter` lock, so throughput stays the same. On plain TCP Vision only one goroutine writes, so the lock is never contended. The same change covers the VLESS reverse portal with Vision, where `mux.ClientWorker` writes from one goroutine per session.\n\n`TestVisionWriterConcurrentWrites` writes to one `VisionWriter` from two goroutines while the underlying writer holds the first write until the second one lands. Without the lock the second block goes out first without the user UUID, and a `VisionReader` on the other side returns padding bytes as payload. The test is deterministic: it fails on `main` without the change and passes with it, with `-race` as well.\n\nThe repro from the issue (100 UDP associations at once through Vision + XUDP):\n\n| | replies of 100 | server data races (`-race`) |\n| -- | -- | -- |\n| v26.10.31 | 88, 60, 79 | 17 |\n| this PR | 100, 100, 99 | 0 |\n\n`go test -race ./proxy/ ./common/mux/... ./proxy/vless/...` passes.\n"
     },
     {
      "number": 7295,
@@ -639,6 +681,51 @@
    ],
    "comments": [
     {
+     "id": 6714806792,
+     "issue": 7345,
+     "issue_title": "Mux: Write frames to the connection from one goroutine",
+     "created_at": "2026-11-08T00:04:14Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7345#issuecomment-6714806792",
+     "body": "@StarProxima 现在有空改吗"
+    },
+    {
+     "id": 6714784095,
+     "issue": 4231,
+     "issue_title": "mux cool: Add maxReuseTimes",
+     "created_at": "2026-11-08T00:02:02Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6714784095",
+     "body": "“发包数爆炸”不准确，我改成了“资源数爆炸”，毕竟应用就是要发那么多包的话 Mux 后也没差，不过目前已强制开 VLESS Enc，认证方式为 X25519 的话每条连接只多几十 bytes，MLKEM768X25519 的话每条连接会多一千多 bytes，会影响首包延迟\r\n\r\n所以不强制 Mux 的话 VLESS Enc 对 XDNS、XICMP 首包延迟的影响还需测测，至于 XDRIVE 它就是资源数敏感、必须强制 Mux"
+    },
+    {
+     "id": 6714639902,
+     "issue": 4231,
+     "issue_title": "mux cool: Add maxReuseTimes",
+     "created_at": "2026-11-07T23:46:53Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6714639902",
+     "body": "> 其实也只是仅限 kcp\r\n\r\n“这三个上层为 VLESS 时，强制 Multiplex+Encryption”，~~WG 等协议的话就不管了，不对还有个 QUIC，不对啊它也资源数爆炸~~\r\n\r\n> 加密并不只是上层可选，fm 也可选叠加内层加密，真判断起来判断不完了，所以还是交给 UI\r\n\r\n这个早就说过，Finalmask 内涉及流量特征/加密的东西都不被认为是可靠的，权宜之计罢了，不然它们该放代理/传输/安全层"
+    },
+    {
+     "id": 6714114884,
+     "issue": 7345,
+     "issue_title": "Mux: Write frames to the connection from one goroutine",
+     "created_at": "2026-11-07T22:53:20Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7345#issuecomment-6714114884",
+     "body": "https://github.com/XTLS/Xray-core/pull/7337#issuecomment-6692618802 就是这个意思，core 中接口的设计都不接受 concurrent write，给 XTLS Vision 这个被调用方加锁治标不治本\r\n\r\n不过加个 pipe 感觉有点重了，虽然它基于 chan、可能能保证顺序而不像锁 https://github.com/XTLS/Xray-core/pull/6372#issuecomment-4792930359 ，不过这里本来就是不同 session 要鸡毛严格顺序，且也不该哪个 session 写得多就长时间占着，所以改成带锁的结构体、实现 WriteMultiBuffer 并在内部加锁吧\r\n\r\n~~代码中 NewServerWorker() 不是直接改 link.Writer？虽然这样更严谨但我追踪了下代码直接改应该也没事，算了还是更严谨吧~~\r\n\r\n---\r\n\r\n截至这个 PR，TUN 和 Mux 的代码都有了挺大的变动，https://github.com/XTLS/Xray-core/issues/5845 可能已经被修复，~~也没人回复了~~，所以我会先把它标记为已解决"
+    },
+    {
+     "id": 6712566584,
+     "issue": 7337,
+     "issue_title": "XTLS Vision: Serialize VisionWriter writes from concurrent mux sessions",
+     "created_at": "2026-11-07T20:23:24Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7337#issuecomment-6712566584",
+     "body": "found it. since #5076 the vless inbound gives the mux its conn writer directly and the mux writes from a goroutine per session, before that a pipe sat in between. put the pipe back inside the mux, one per connection, so the VisionWriter mutex isn't needed anymore #7345"
+    },
+    {
      "id": 6708603973,
      "issue": 7135,
      "issue_title": "uTLS: bump to 6ebdceb (Chrome 155), register hellochrome_155",
@@ -726,7 +813,7 @@
      "created_at": "2026-11-07T11:50:36Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6706567500",
-     "body": "~~主要是 XDNS、XICMP 这类如果不开 Mux 的话发包数爆炸啊，除非用户不在意这个、就是不想要队头阻塞~~\r\n\r\n~~XMC 不开 Mux 的话那么就是 N 条 MC 那也太假了，[另外 MC 自带的加密据说很拉](https://github.com/XTLS/Xray-core/pull/6210#issuecomment-4582838867)，总之现在的版本是必须开 VLESS enc 的~~"
+     "body": "~~主要是 XDNS、XICMP 这类如果不开 Mux 的话资源数爆炸啊，除非用户不在意这个、就是不想要队头阻塞~~\r\n\r\n~~XMC 不开 Mux 的话那么就是 N 条 MC 那也太假了，[另外 MC 自带的加密据说很拉](https://github.com/XTLS/Xray-core/pull/6210#issuecomment-4582838867)，总之现在的版本是必须开 VLESS enc 的~~"
     },
     {
      "id": 6706361137,
@@ -1147,6 +1234,39 @@
   "amnezia-vpn/amnezia-client": {
    "issues": [
     {
+     "number": 3222,
+     "title": "Winget hash mismatch for 5.0.3.0",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-27T05:52:01Z",
+     "updated_at": "2026-11-07T22:45:52Z",
+     "user": "quassnoi",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3222",
+     "body": "**Describe the bug**\n\nWinget update to 5.0.3.0 fails.\n\nWinget manifest hash doesn't match the release asset hash:\n\nhttps://github.com/amnezia-vpn/amnezia-client/releases/tag/5.0.3.0\nhttps://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.3.0/AmneziaVPN_5.0.3.0_windows_x64.exe\n`sha256:145b2db04bb354d77779b781434868afc29e3d9b49634bdcd905307600c243e4`\n\nhttps://github.com/microsoft/winget-pkgs/blob/70e51eb30bbf7d419e87ac0965366f3a21c45a78/manifests/a/AmneziaVPN/AmneziaVPN/5.0.3.0/AmneziaVPN.AmneziaVPN.installer.yaml\n```\nInstallers:\n- Architecture: x64\n  InstallerUrl: https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.3.0/AmneziaVPN_5.0.3.0_windows_x64.exe\n  InstallerSha256: D0E5C20696BE89B65639CDC068D4337882AB9C2DBB1BDE2A422AE26FB721298F\n```\n\n\n**To Reproduce**\nSteps to reproduce the behavior:\n```\nPS C:\\Users\\*> winget upgrade AmneziaVPN.AmneziaVPN\nНайдено AmneziaVPN [AmneziaVPN.AmneziaVPN] Версия 5.0.3.0\nЛицензия на это приложение предоставлена вам владельцем.\nКорпорация Майкрософт не несет ответственность за сторонние пакеты и не предоставляет для них никакие лицензии.\nСкачивание https://github.com/amnezia-vpn/amnezia-client/releases/download/5.0.3.0/AmneziaVPN_5.0.3.0_windows_x64.exe\n  ██████████████████████████████   109 MB /  109 MB\nХэш-код установщика не совпадает.\n```\n\n**Expected behavior**\nWinget installation succeeds\n"
+    },
+    {
+     "number": 2933,
+     "title": "Deadlock between AmneziaVPN-service and kernel network locks on lid close (macOS 26.6, app 5.0.0.5, VLESS) — configd killed by WATCHDOG",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-04T04:54:02Z",
+     "updated_at": "2026-11-07T21:08:27Z",
+     "user": "romanovevgeniy",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2933",
+     "body": "## Summary\n\nOn macOS 26.6 (25G72), closing the MacBook lid while the VPN is connected reliably\ndeadlocks the system networking stack. A kernel lock cycle forms between\n`AmneziaVPN-service` and the kernel, `configd`'s `IPConfigurationAgentQueue` stalls,\nand after 60 seconds the watchdog terminates `configd`.\n\nThis happens every single day, on every lid close with the VPN running.\n\n## Environment\n\n- AmneziaVPN for macOS **5.0.0.5**\n- macOS 26.6 (build 25G72)\n- MacBookPro18,3 (Apple Silicon)\n- Protocol: **VLESS (XRay)**\n- `tun2socks` is present in the process list (41 threads), consistent with the\n  XRay/VLESS userspace tunnel path\n- Report incident ID: 19D61D4C-C90C-4BF8-AE79-91B9C65CAC96\n- Report type: bug_type 409 (WATCHDOG stackshot), `displayState: OFF`\n\n## Steps to reproduce\n\n1. Connect the VPN.\n2. Close the MacBook lid.\n3. Within ~60 seconds a `configd` watchdog report is generated.\n\n## Actual result\n\n`configd` is killed by the [watchdog]\n\n## Root cause from the stackshot — four-way lock cycle\n\n1. `configd` thread 103010 (`IPConfigurationAgentQueue`) waits on kernel mutex\n   `0xfffffe000c571830`, owned by kernel thread 103456 (`thread call high #27`).\n2. Kernel thread 103456 waits on krwlock `0xfffffe000c5a4270` **for reading**,\n   owned by thread 104354.\n3. Thread 104354 belongs to **AmneziaVPN-service (pid 553)** and waits on kernel\n   mutex `0x5162d882b476c1c1`, owned by kernel thread 5256.\n4. Kernel thread 5256 waits on mutex `0xfffffe000c571830` — back to 103456.\n\nThe cycle never breaks, so the whole networking subsystem stalls.\n\n## Additional observations\n\n- `AmneziaVPN-service` had **259 threads** and **~955 MB** resident memory, with\n  ~592k page faults. Roughly 200 of those threads were parked on the same\n  `0xfffffe000c571830` mutex, and about a dozen more on the krwlock held by 104354.\n  The thread and memory growth looks like a leak independent of the deadlock.\n- `tun2socks` (41 threads) is blocked on the same mutex.\n- The `AmneziaVPN` GUI process is also stuck: thread 16371 waits on krwlock\n  `0xfffffe000c5a4270` for writing, owned by 104354.\n\n## Likely trigger\n\nOn lid close macOS tears down Wi-Fi and reconfigures interfaces, so `configd`\ndismantles network services while the client simultaneously tears down its `utun`.\nThe two sides appear to acquire the network locks in opposite order.\n\n## Workaround\n\nDisconnecting the VPN before closing the lid avoids the issue entirely.\n\n## Attachment\n\nFull watchdog stackshot attached.\n\n[Error.rtf](https://github.com/user-attachments/files/30687946/Error.rtf)"
+    },
+    {
+     "number": 3431,
+     "title": "[Linux] AmneziaWG connection fails instantly: \"hex string does not fit the slice\" + daemon core dump (Mint 22.3, 5.1.0.6 & 5.0.3.0)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-07T20:08:48Z",
+     "updated_at": "2026-11-07T20:08:48Z",
+     "user": "kawoll1",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3431",
+     "body": "## Description\nConnecting via AmneziaWG (container `amnezia-awg2`) fails instantly: the UI shows \n\"Connecting\" for ~1 second, then drops back to \"Disconnected\". \nThe daemon log shows a peer public key parsing error, after which the daemon \ncrashes with a core dump and is restarted by systemd.\n\nThe same server/config works fine on other family members' devices (non-Linux), \nso the server side is OK.\n\n## Environment\n- OS: Linux Mint 22.3 (x86_64)\n- Client versions tested: 5.1.0.6 (ac175c8) and 5.0.3.0 (de93650) — same bug on both\n- Protocol: AmneziaWG (container `amnezia-awg2`)\n- Connection route mode: VpnOnlyForwardSites (site split tunneling also tested disabled — same result)\n- Daemon binary: /opt/AmneziaVPN/bin/AmneziaVPN-service (systemd unit AmneziaVPN.service)\n\n## Steps to reproduce\n1. Open AmneziaVPN\n2. Select server with AmneziaWG protocol\n3. Click Connect\n4. Connection drops after ~1 second\n\n## What was already tried (no effect)\n- Reinstalled the client (5.1.0.6 → 5.0.3.0)\n- Removed server profile and re-added it with a freshly issued config\n- Disabled site split tunneling completely\n- Wiped user config (~/.config/AmneziaVPN.ORG)\n- Restarted AmneziaVPN.service, rebooted the PC multiple times\n\n## Actual result\nInterface `amn0` is created, `amneziawg-go` starts, but peer configuration fails:\nAmneziaVPN WireguardUtilsLinux : Created wireguard interface amn0\nAmneziaVPN LinuxRouteMonitor : Adding exclusion route for /999999\nAmneziaVPN LinuxRouteMonitor : Invalid destination prefix\nAmneziaVPN WireguardGo : ERROR: (amn0) IPC error -22: failed to get peer by public key:\nhex string does not fit the slice\nAmneziaVPN WireguardUtilsLinux : Peer configuration failed: Unknown error -22\nAmneziaVPN Daemon : Peer creation failed.\nAmneziaVPN DaemonLocalServerConnection : Failed to activate the interface\nmalloc(): unsorted double linked list corrupted\nAmneziaVPN.service: Main process exited, code=dumped, status=6/ABRT\nAmneziaVPN.service: Failed with result 'core-dump'.\nNote also the garbled peer key in the daemon log \n(`Configuring peer Ϯ⇈C5 via <server IP>`) — looks like memory corruption \nwhile parsing the peer public key, which then leads to the malloc() crash.\n\n## Expected result\nAmneziaWG tunnel connects normally, as it does on other devices with the same server.\n\n## Additional info\nThe issue is specific to AmneziaWG — the daemon crashes during peer setup, \nbefore any handshake, so this is not a network/provider block."
+    },
+    {
      "number": 3192,
      "title": "У кого то работает свой впс на протоколе awg?",
      "is_pr": false,
@@ -1378,17 +1498,6 @@
      "body": "site list for split tunneling is kept per server instead of per client.\n\n- `splitTunnelListUrl` and `splitTunnelListMode` (`except`/`forward`) in the self-hosted server config, shipped to users with the existing `vpn://` key\n- client fetches the list only while the tunnel is up and the address is routed into the tunnel, on connect and once a day\n- payload is the current export format, an exported file can be hosted as is\n- server entries are locked in the site split tunneling page, local ones stay editable, the mode is not switched silently\n\nm1 - admin hosts the json\nm2 - service container on `amnezia-dns-net` serving `/rules.json`\n\nsplit tunneling sites - https://github.com/amnezia-vpn/amnezia-client/blob/dev/client/core/controllers/ipSplitTunnelingController.cpp\nsite routes per platform - https://github.com/amnezia-vpn/amnezia-client/blob/dev/client/vpnConnection.cpp\nserver export - https://github.com/amnezia-vpn/amnezia-client/blob/dev/client/core/controllers/selfhosted/exportController.cpp\ninternal network - https://github.com/amnezia-vpn/amnezia-client/blob/dev/client/server_scripts/prepare_host.sh\n\nrelated: #1960, #2506, #1039, #1423"
     },
     {
-     "number": 2933,
-     "title": "Deadlock between AmneziaVPN-service and kernel network locks on lid close (macOS 26.6, app 5.0.0.5, VLESS) — configd killed by WATCHDOG",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-08-04T04:54:02Z",
-     "updated_at": "2026-11-06T08:12:51Z",
-     "user": "romanovevgeniy",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2933",
-     "body": "## Summary\n\nOn macOS 26.6 (25G72), closing the MacBook lid while the VPN is connected reliably\ndeadlocks the system networking stack. A kernel lock cycle forms between\n`AmneziaVPN-service` and the kernel, `configd`'s `IPConfigurationAgentQueue` stalls,\nand after 60 seconds the watchdog terminates `configd`.\n\nThis happens every single day, on every lid close with the VPN running.\n\n## Environment\n\n- AmneziaVPN for macOS **5.0.0.5**\n- macOS 26.6 (build 25G72)\n- MacBookPro18,3 (Apple Silicon)\n- Protocol: **VLESS (XRay)**\n- `tun2socks` is present in the process list (41 threads), consistent with the\n  XRay/VLESS userspace tunnel path\n- Report incident ID: 19D61D4C-C90C-4BF8-AE79-91B9C65CAC96\n- Report type: bug_type 409 (WATCHDOG stackshot), `displayState: OFF`\n\n## Steps to reproduce\n\n1. Connect the VPN.\n2. Close the MacBook lid.\n3. Within ~60 seconds a `configd` watchdog report is generated.\n\n## Actual result\n\n`configd` is killed by the [watchdog]\n\n## Root cause from the stackshot — four-way lock cycle\n\n1. `configd` thread 103010 (`IPConfigurationAgentQueue`) waits on kernel mutex\n   `0xfffffe000c571830`, owned by kernel thread 103456 (`thread call high #27`).\n2. Kernel thread 103456 waits on krwlock `0xfffffe000c5a4270` **for reading**,\n   owned by thread 104354.\n3. Thread 104354 belongs to **AmneziaVPN-service (pid 553)** and waits on kernel\n   mutex `0x5162d882b476c1c1`, owned by kernel thread 5256.\n4. Kernel thread 5256 waits on mutex `0xfffffe000c571830` — back to 103456.\n\nThe cycle never breaks, so the whole networking subsystem stalls.\n\n## Additional observations\n\n- `AmneziaVPN-service` had **259 threads** and **~955 MB** resident memory, with\n  ~592k page faults. Roughly 200 of those threads were parked on the same\n  `0xfffffe000c571830` mutex, and about a dozen more on the krwlock held by 104354.\n  The thread and memory growth looks like a leak independent of the deadlock.\n- `tun2socks` (41 threads) is blocked on the same mutex.\n- The `AmneziaVPN` GUI process is also stuck: thread 16371 waits on krwlock\n  `0xfffffe000c5a4270` for writing, owned by 104354.\n\n## Likely trigger\n\nOn lid close macOS tears down Wi-Fi and reconfigures interfaces, so `configd`\ndismantles network services while the client simultaneously tears down its `utun`.\nThe two sides appear to acquire the network locks in opposite order.\n\n## Workaround\n\nDisconnecting the VPN before closing the lid avoids the issue entirely.\n\n## Attachment\n\nFull watchdog stackshot attached.\n\n[Error.rtf](https://github.com/user-attachments/files/30687946/Error.rtf)"
-    },
-    {
      "number": 3400,
      "title": "Overheat",
      "is_pr": false,
@@ -1420,75 +1529,36 @@
      "user": "KiGamji",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/902",
      "body": "**Describe the bug**\nIn the share VPN menu, the \"Users\" list is empty. It does not show any clients, including the admin sessions, while it works fine for other protocols, such as OpenVPN over Cloak and AmneziaWG\n\n**Desktop:**\n - OS: Windows 10\n - Version: 4.6.0.3\n\n**Server:**\n - OS: Debian 12\n"
-    },
-    {
-     "number": 3419,
-     "title": "[Windows][5.1.0.6][XRay] Kill switch allows the wrong adapter (WireGuard adapter instead of tun2) - \"Connected\" but zero traffic",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-06T00:15:25Z",
-     "updated_at": "2026-11-06T00:15:40Z",
-     "user": "Anchifa",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3419",
-     "body": "**Describe the bug**\r\nAfter updating the Windows client from 5.0.3.0 to 5.1.0.6, every XRay (VLESS + REALITY + XHTTP) profile shows \"Connected\", but no traffic passes. AmneziaWG on the same server works.\r\n\r\n**Turning off the kill switch fixes it.** It is the only change needed: site and app split tunneling can stay on. With the kill switch on, nothing works. With it off, the same key works immediately (~130–200 MB in 2 minutes, confirmed by the per-user traffic counter on the server).\r\n\r\nThe likely cause is in the client log. When XRay starts, the kill switch whitelists **adapter 6**:\r\n```\r\nWindowsFirewall : Enabling Killswitch Using Adapter: 6\r\nFilter added:  Allow usage of VPN Adapter : Allow out traffic on Adapter 6\r\nFilter added:  Allow usage of VPN Adapter : Allow in traffic on Adapter 6\r\n...\r\nFilter added:  Block Internet : Block traffic to 0.0.0.0/0\r\nFilter added:  Allow DNS-Server : Permit traffic to 1.1.1.1 on port 53\r\n```\r\nOn this PC, interface index 6 is the **AmneziaVPN WireGuard Tunnel** adapter left over from AmneziaWG sessions. It is not the `tun2` adapter that XRay uses. As a result, everything entering `tun2` is blocked except DNS to 1.1.1.1/1.0.0.1, which is permitted by a separate rule. This matches the logs exactly: the Xray engine only ever sees `accepted udp:1.1.1.1:53` / `udp:1.0.0.1:53`, repeated hundreds of times and never answered. In one other XRay session in the same log, the kill switch picked adapter 43 instead, so the index looks like it comes from stale state rather than from the freshly created `tun2`.\r\n\r\nA second Windows 10 user on 5.1.0.6 (different PC, same ISP) has the same symptom and the same log pattern. The same keys work in AmneziaVPN 5.1.0.6 on Android (5 devices). On the same Windows PC and network, the official `xray.exe` v26.7.28 (same core as `amnezia_xray.dll`) works with the key's `last_config` unchanged. So the key, the server and the network are fine.\r\n\r\n**To Reproduce**\r\n1. Use AmneziaWG at least once on Windows, so the WireGuard adapter exists (here it is interface index 6).\r\n2. Import an XRay (VLESS + REALITY, XHTTP `stream-one`) key into AmneziaVPN 5.1.0.6 on Windows 10 22H2, with the kill switch enabled.\r\n3. Connect. The app shows \"Connected\". No site opens. The tunnel log shows `Enabling Killswitch Using Adapter: 6`.\r\n4. Disable the kill switch and connect again. Everything works.\r\n\r\n**Expected behavior**\r\nThe kill switch should allow traffic on the `tun2` adapter that the XRay/tun2socks connection actually uses. A connection that cannot pass any traffic should not be reported as \"Connected\".\r\n\r\n**Side observation**\r\nEven when it works, the client opens ~200 new TCP connections per minute to the server, most of them short-lived, although the profile sets `xmux.maxConnections`. 5.0.3.0 used a handful of long-lived connections. Bursts like this may get the server throttled by DPI. After one burst of ~79 simultaneous connections, our ISP dropped all TLS to `<server-ip>:443` from this home IP for about an hour, while other ports kept working. Happy to file this separately if it is unrelated.\r\n\r\n**Desktop**\r\n- OS: Windows 10 Pro 22H2 (19045), x64\r\n- Version: AmneziaVPN 5.1.0.6 (ac175c8a8); `amnezia_xray.dll` with xray-core v1.260728.0\r\n- Settings: kill switch on (the bug), site split tunneling and app split tunneling on (not related)\r\n\r\n**Server**\r\n- Ubuntu, Docker, `amnezia-xray` container, Xray-core 26.7.28; VLESS, no `flow`, XHTTP `stream-one`, REALITY with a local self-steal `dest`\r\n\r\nFull app/tunnel logs available on request.\r\n\r\n---\r\n*Disclosure: this issue was investigated and written together with Claude Code (Anthropic's AI agent): log analysis, server-side counters/captures, standalone Xray-core comparison and the kill-switch A/B test. All results were reproduced on real devices.*\r\n\r\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\r\n"
-    },
-    {
-     "number": 3418,
-     "title": "[Linux] Split tunneling doesn't work",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-05T22:47:55Z",
-     "updated_at": "2026-11-05T22:47:55Z",
-     "user": "szekelyisz",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3418",
-     "body": "**Describe the bug**\nNo matter what I set split tunneling to, my traffic always goes through the VPN.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Go to Split tunneling settings\n2. Select Via VPN and leave the list empty\n3. Check your external IP address\n4. Disconnect, select Directly, leave list empty\n5. Check your external IP address\n\n**Expected behavior**\nThose two checks above should have showed different IP addresses, but they both show the VPN server's address. You can try with adding *.nonexistent to the list, same results.\n\n**Desktop (please complete the following information):**\n - OS: Debian 13\n - AmneziaVPN app version: 5.1.0.6 (Nov  2 2026, ac175c8)\n\n**Server (please complete the following information):**\n - Self hosted\n - OS: Debian 13\n"
-    },
-    {
-     "number": 3417,
-     "title": "MacOS Arm native builds seem missing",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-05T22:40:49Z",
-     "updated_at": "2026-11-05T22:40:49Z",
-     "user": "alexeedm",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3417",
-     "body": "Hey folks, seems like MacOS aarch64 builds are supported with #2601, however, all the uploaded releases and build artifacts are x86 only. Could you make sure Arm pipeline is running and producing valid artifacts?"
-    },
-    {
-     "number": 3090,
-     "title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-08-29T11:32:06Z",
-     "updated_at": "2026-11-05T21:50:27Z",
-     "user": "pers1307",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090",
-     "body": "**Describe the bug**\n\n  On Linux, client 5.0.1.5 fails to read the routing table and never installs\n  exclusion routes for the VPN endpoint. With `0.0.0.0/1` and `128.0.0.0/1`\n  pointing at the tunnel, WireGuard packets addressed to the server are routed\n  back into the tunnel itself, creating a routing loop. Packets grow with each\n  iteration until the socket rejects them with `sendmmsg: message too long`.\n\n  Client 4.8.21 on the very same machine installs the routes correctly and works.\n  The issue is protocol-independent — reproduced with both AmneziaWG 2.0 and 3.1\n  servers.\n\n  **To Reproduce**\n\n  Steps to reproduce the behavior:\n  1. Install 5.0.1.5 on Ubuntu 24.04 with a normal DHCP default route\n  2. Connect to any AmneziaWG server\n  3. Run `ip route get <server-ip>` — it points at the tunnel (`dev amn0`) instead\n     of the physical gateway\n  4. See `sendmmsg: message too long` in the daemon log; no traffic passes\n\n  **Expected behavior**\n\n  The daemon should add an exclusion route for the server endpoint through the\n  physical default gateway, as 4.8.21 does:\n  ```\n  <server-ip> via 192.168.31.1 dev wlp0s20f3\n  ```\n\n  **Log files**\n\n  Same 15-second window, two client versions on one machine:\n\n  | Log line | 5.0.1.5 | 4.8.21 |\n  |---|---|---|\n  | `Error in received packet: Numerical argument out of domain` | 10 | 0 |\n  | `No default gateway available, skipping exclusion route` | 10 | 0 |\n  | exclusion routes actually installed | none | all |\n\n5.0.1.5:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  Error in received packet: No such file or directory\n  LinuxRouteMonitor : No default gateway available, skipping exclusion route\n  ...\n  WireguardGo : ERROR: (amn0) peer(XXXX…) - Failed to send data packets:\n                write udp 0.0.0.0:54793: sendmmsg: message too long\n  ```\n  \n  4.8.21, same step:\n  ```\n  LinuxRouteMonitor : Adding exclusion route for <server-ip>/32\n  ```\n  (no warning, route present in `ip route`)\n  \n  Other errors present in both versions, possibly related:\n  ``` \n  Error: argument \"amnvpnrt\" is wrong: table id value is invalid\n  mkdir: cannot create directory '/sys/fs/cgroup/net_cls/amnvpnexclusions/'\n  LinuxRouteMonitor : Adding exclusion route for /999999 → Invalid destination prefix\n  net_cls cgroup v1 not available, traffic splitting disabled\n  ```\n  \n  **Screenshots**\n  \n  N/A — the client reports \"Connected\".\n\n  **Desktop (please complete the following information):**\n   - OS: Ubuntu 24.04.4 LTS (kernel 6.17), KDE Plasma / X11\n   - Version: 5.0.1.5 (regression — 4.8.21 works)\n\n  **Smartphone (please complete the following information):**\n   - Not affected — mobile clients handle routing through the OS VPN API\n\n  **Server (please complete the following information):**\n   - OS: Ubuntu 24.04, Docker\n\n**Additional context**\n  \n  Workaround — add the exclusion route manually before connecting:\n  ```\n  sudo ip route add <server-ip> via <lan-gateway> dev <iface>\n  ```\n  The loop disappears and `sendmmsg: message too long` stops.\n  \n  Possibly related: #1498, #1357, #2048 — all report \"connected but no internet\"\n  on Linux with the same `amnvpnrt` / `Invalid destination prefix` log noise."
-    },
-    {
-     "number": 3416,
-     "title": "fix(macos): make connected tray icon a template image to follow menu bar theme",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-05T20:09:27Z",
-     "updated_at": "2026-11-05T20:09:27Z",
-     "user": "anton988",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3416",
-     "body": "Fixes #1979\n\nOn macOS the connected tray icon (`active.png`) is white and is set as a regular\nimage, so it is almost invisible on a light menu bar. Marking it as a template\nimage lets macOS tint it according to the menu bar appearance.\n\nOnly `active.png` is made a template. `default.png` (gray) and `error.png` (red)\nare colored, so making them templates would turn them monochrome and the\nconnection states would no longer be distinguishable.\n\nTesting: I did not build the full app. I checked the approach separately by\nshowing the same icon files in the menu bar with `isTemplate` on and off. With\nthe template flag the icon turns black on a light menu bar and stays white on a\ndark one; the gray and red icons stay unchanged. Screenshots attached.\n\n<img width=\"969\" height=\"36\" alt=\"Снимок экрана — 2026-11-05 в 22 53 46\" src=\"https://github.com/user-attachments/assets/52db7c38-ad04-45d2-8e99-9b0e0f0593f5\" />\n<img width=\"969\" height=\"36\" alt=\"Снимок экрана — 2026-11-05 в 22 50 42\" src=\"https://github.com/user-attachments/assets/6e9f2a5e-40bb-4316-84be-7411d45b5301\" />\n\n"
-    },
-    {
-     "number": 3369,
-     "title": "Android",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-01T13:59:40Z",
-     "updated_at": "2026-11-05T19:52:02Z",
-     "user": "Kotk0",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3369",
-     "body": "Невозможно подключиться. Ьесконечное подключение. Ни на одном из девайсов не подключается (хонор х9 , реалми джейти мастер элишион , инфиникс 40 и 40 про) на сайт HostVD заходит через браузер , можно глянуть свой сервер , оплатить или любая другая манипуляция. Приложение - ни в какую не подключается. \n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/63a8a222-8b1d-476f-bd53-9c9140c02e53\" />\n\n<img width=\"1080\" height=\"2400\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/83ea2f65-f624-4b9b-96d0-6fa8bcee6c91\" />"
     }
    ],
    "comments": [
+    {
+     "id": 6714040015,
+     "issue": 3222,
+     "issue_title": "Winget hash mismatch for 5.0.3.0",
+     "created_at": "2026-11-07T22:45:52Z",
+     "user": "quassnoi",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3222#issuecomment-6714040015",
+     "body": "It's pretty consistent across releases that the windows-x64 version gets replaced some time after the release is announced, with a new hash. Usually it's within a day or so.\n\nIf the release makes it into the winget repository before this change is made, the hashes don't match\n\nWhat is the reason for these follow-up changes in the windows-x64 asset?"
+    },
+    {
+     "id": 6713772879,
+     "issue": 3222,
+     "issue_title": "Winget hash mismatch for 5.0.3.0",
+     "created_at": "2026-11-07T22:19:35Z",
+     "user": "kebikec",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3222#issuecomment-6713772879",
+     "body": "same :-(   \nwindows 11\n\n~ via 🥟 took 42s\n❯ winget update\nName       Id                    Version Available Source\n---------------------------------------------------------\nAmneziaVPN AmneziaVPN.AmneziaVPN 5.0.3.0 5.1.0.6   winget\n1 upgrades available.\n1 package(s) have pins that prevent upgrade. Use the 'winget pin' command to view and edit pins. Using the '--include-pinned' argument may show more results.\n\n~ via 🥟 took 2s\n❯ winget update  AmneziaVPN.AmneziaVPN\nA newer version was found, but the install technology is different from the current version installed. Please uninstall the package and install the newer version."
+    },
+    {
+     "id": 6713037904,
+     "issue": 2933,
+     "issue_title": "Deadlock between AmneziaVPN-service and kernel network locks on lid close (macOS 26.6, app 5.0.0.5, VLESS) — configd killed by WATCHDOG",
+     "created_at": "2026-11-07T21:08:27Z",
+     "user": "antokh1v",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2933#issuecomment-6713037904",
+     "body": "Still happens on 5.1.0 build 6 (package 5.1.0.6). No sleep or lid close in my case: the last wake was about 12 hours before the panic, and I was using the machine at the time.\n\n- AmneziaVPN 5.1.0 (6)\n- macOS 26.5.2 (25F84), Mac16,13, 16 GB\n- VLESS/XRay, tun2socks on utun22, KillSwitch on\n- Docker Desktop was running, but its threads are not in the lock graph\n\nThe spindump report of the relaunched GUI shows the cycle:\n\n```text\nDeadlock: AmneziaVPN-service thread 0x3feee7 -> kernel_task thread 0x268 -> tun2socks thread 0x61c11b -> AmneziaVPN-service thread 0x3feee7\nBlocked by Deadlock: 8 tasks\n```\n\nThe same cycle in `waitInfo` of the configd watchdog stackshot:\n\n| Thread | Holds | Waits on |\n|---|---|---|\n| AmneziaVPN-service 4189927 | mutex `0xfffffe000c5bff50` | krwlock `0xfffffe000c5f2830` (read), held by kernel_task 616 |\n| kernel_task 616 | krwlock `0xfffffe000c5f2830` (write) | a mutex held by tun2socks 6406427 |\n| tun2socks 6406427 | that mutex | mutex `0xfffffe000c5bff50`, held by AmneziaVPN-service 4189927 |\n\nAll three threads are `TH_WAIT, TH_UNINT`. 16 tasks are stuck behind them.\n\nSome details:\n\n- The service thread in the cycle runs Go code (`runtime.asmcgocall`) and is blocked in `write()` -> `sosend()`. I assume it's the in-process Xray core writing to its outbound socket. The middle of its kernel stack matches the tun2socks thread frame for frame.\n- `…bff40` / `…bff50` are probably `pf_perim_lock` and `pf_lock`: an rwlock and a mutex 16 bytes apart, and all three stuck pfctl processes wait on `…bff40` for write inside `ioctl()`. The release kernel has no symbols for these frames, so this is a guess.\n- configd (`IPConfigurationAgentQueue`), mDNSResponder, syslogd and apsd wait on `…bff40` for read, queued behind the pfctl writers.\n\nTimeline (UTC):\n\n```text\n20:21:35  tun2socks starts, VLESS connected\n20:36:21  pfctl #1 starts (parent: AmneziaVPN-service), never returns\n20:36:28  last TCP event on utun22\n20:36:42  I quit the app; client logs \"Failed to disable killswitch\", \"Failed to restore resolvers\", \"Failed to delete tun\"\n20:36:54  GUI crashes with SIGSEGV (stack below)\n20:37:21  pfctl #2 starts, parent: launchd\n20:37:51  pfctl #3 starts, parent: bash\n20:38:09  hang report of the relaunched GUI with the Deadlock line above\n20:40:52  configd watchdog stackshot, IPConfigurationAgentQueue unresponsive\n20:43:23  panic: userspace watchdog timeout: no successful checkins from configd (1 induced crashes) in 180 seconds\n```\n\nTelegram kept reconnecting through the tunnel the whole session: 1753 TCP connections in about 14.5 minutes, 1687 of them closed with 0 bytes received. So the \"lots of sockets through the tunnel\" trigger mentioned earlier in this thread fits here too, but as a steady load rather than a burst.\n\nAbout the pfctl timeout mentioned earlier in this thread: `QProcess::waitForFinished()` defaults to 30 s ([docs](https://doc.qt.io/qt-6/qprocess.html#waitForFinished)). On timeout the `QProcess` in `MacOSFirewall::execute()` is destroyed and kills bash, while pfctl stays stuck and is reparented to launchd. That is pfctl #2 above. So each call is capped at about 30 s, but `XrayProtocol::stop()` runs them one after another. pfctl #1 was started by the service directly, without bash, so that path may have no cap at all.\n\nNone of this helps once the cycle has formed: the stuck processes can't be killed (as reported earlier in this thread), and the panic came about 7 minutes after the first stuck pfctl.\n\nThe GUI crash on quit is probably a separate bug (maybe related to #2931 / #3042):\n\n```text\nEXC_BAD_ACCESS (SIGSEGV), KERN_INVALID_ADDRESS at 0x0000000000239364\nThread 9 (QThread, crashed):\n  QtCore\n  VpnProtocol::connectionStateChanged(Vpn::ConnectionState)\n  VpnProtocol::setConnectionState(Vpn::ConnectionState)\n  XrayProtocol::stop()\n  VpnConnection::disconnectFromVpn()\n  QObject::event(QEvent*)\n  ...\n  QThread::exec()\nThread 0 (main):\n  QThread::wait(QDeadlineTimer)\n  AmneziaApplication::~AmneziaApplication()\n  "
+    },
     {
      "id": 6706121880,
      "issue": 3192,
@@ -1571,24 +1641,6 @@
      "body": "Still reproducing after updating Amnezia (currently 5.1.0 build 6), on macOS 26.3. Networking freezes during normal work and sometimes after wake. Disconnect stays stuck; recovery requires rebooting. Earlier diagnostics show a lock cycle involving AmneziaVPN-service, kernel_task and tun2socks, followed by a configd watchdog panic after 180 seconds. Those older diagnostics are not all from the current Amnezia version. This can happen multiple times a day. Is there a fix or recommended workaround?"
     },
     {
-     "id": 6670469933,
-     "issue": 3090,
-     "issue_title": "Linux 5.0.1.5: exclusion routes never installed — netlink route dump overflows the   fixed 8 KiB buffer",
-     "created_at": "2026-11-05T21:50:27Z",
-     "user": "ssspunto",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3090#issuecomment-6670469933",
-     "body": "I can reproduce the missing VPN endpoint exclusion route with **AmneziaVPN 5.1.0.6**, build **`ac175c8`**, on **Ubuntu 24.04.4 LTS, x86_64**. Manually adding a host route through the physical gateway restored connectivity.\n\n### Environment and versions\n\n- Linux clients tested: **5.0.3.0** and **5.1.0.6**. Both exhibited the “connected, but no working traffic” symptom with an AWG 3 server.\n- The diagnostics below were collected with **5.1.0.6**.\n- Older Linux client **4.8.15.4** worked with my AWG 2 server.\n- Mobile client **5.1.0.6** worked with both my AWG 2 and AWG 3 server configurations.\n- Docker is installed on the desktop.\n- Route counts from `ip -4 route show table all | wc -l` and `ip -6 route show table all | wc -l`: **32 IPv4 routes and 97 IPv6 routes**.\n\nAll addresses and physical interface names below are anonymized placeholders.\n\n### Routing observations\n\nWith the VPN disconnected, `ip -4 route get MY_SERVER_IP` returned:\n\n```text\nMY_SERVER_IP via MY_GATEWAY_IP dev MY_UPLINK_IFACE src MY_HOME_IP\n```\n\nWith the VPN connected, the same command returned:\n\n```text\nMY_SERVER_IP dev amn0 src MY_VPN_IP\n```\n\nOnly the standard IPv4 routing rules for the `local`, `main`, and `default` tables were present.\n\nIn a separate connection attempt to another server (`MY_SECOND_SERVER_IP`), the same Linux client logged:\n\n```text\nAdding exclusion route for MY_SECOND_SERVER_IP/32\nNo default gateway available, skipping exclusion route\n```\n\nIt subsequently added the full-tunnel routes:\n\n```text\nAdding route to 0.0.0.0/1\nAdding route to 128.0.0.0/1\n```\n\nThese are two different VPN servers: the route output and workaround below concern `MY_SERVER_IP`; the log excerpt concerns `MY_SECOND_SERVER_IP`.\n\n### Confirmed workaround\n\nWhile the VPN was connected, I ran:\n\n```bash\nsudo ip -4 route add MY_SERVER_IP/32 via MY_GATEWAY_IP dev MY_UPLINK_IFACE\n```\n\nInternet access through the VPN immediately started working. This workaround was verified for `MY_SERVER_IP`.\n\nThis appears consistent with the gateway-detection failure discussed in this issue. I have not measured the netlink dump size or tested the proposed patch, so my results confirm the missing endpoint route and the workaround, rather than buffer exhaustion itself.\n"
-    },
-    {
-     "id": 6666916357,
-     "issue": 3369,
-     "issue_title": "Android",
-     "created_at": "2026-11-05T19:14:01Z",
-     "user": "alexanderpolytech",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3369#issuecomment-6666916357",
-     "body": "Hi! \nIf you reinstalled the Amnezia, there are some reg-files that need to be manually deleted\nTake a look on this, maybe it can help\nhttps://github.com/amnezia-vpn/amnezia-client/issues/917\n\nAlso, try checking if the Firewall is blocking the connection with\n`sudo ufw status`\nif needed, open the connection with \n`sudo ufw allow 123/udp`\nwhere 123 is your port number from Amnezia app "
-    },
-    {
      "id": 2242443380,
      "issue": 902,
      "issue_title": "Bug: Can't see and manage users of the Xray protocol",
@@ -1600,19 +1652,7 @@
    ]
   },
   "apernet/hysteria": {
-   "issues": [
-    {
-     "number": 1718,
-     "title": "Closed",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-05T19:11:05Z",
-     "updated_at": "2026-11-05T19:37:30Z",
-     "user": "llll415",
-     "url": "https://github.com/HyNetworks/hysteria/pull/1718",
-     "body": "Closed by author."
-    }
-   ],
+   "issues": [],
    "comments": []
   }
  }

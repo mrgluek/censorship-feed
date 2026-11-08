@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-08T17:55:35Z",
- "since": "2026-11-06T17:55:35Z",
+ "generated_at": "2026-11-08T22:03:53Z",
+ "since": "2026-11-06T22:03:53Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -102,6 +102,17 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7350,
+     "title": "tun: end UDP flows and cancel dispatches when the inbound closes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T19:35:04Z",
+     "updated_at": "2026-11-08T19:47:58Z",
+     "user": "RoyHP",
+     "url": "https://github.com/XTLS/Xray-core/pull/7350",
+     "body": "## Problem\n\nClosing a core instance that has a `tun` inbound leaves its UDP flows alive, and everything they hold with them.\n\n- `Handler.Init` detaches the handler's context from the instance (`core.ToBackgroundDetachedContext`), and nothing cancels it on `Close`.\n- `stack.Close` resets the TCP connections and closes the sockets opened by `DialUDP`, but never touches the UDP flow table (`udpConnectionHandler.udpConns`).\n\nSo each UDP flow's reader keeps waiting on its packet queue after `Close`, which pins its XUDP mux session, the mux `ClientWorker` and that worker's connection to the server.\n\nMeasured in a client that embeds the tun inbound and restarts the instance per session (goroutine origins from `runtime.Stack`): about 80 goroutines, 0.8 MB of live heap and stacks, and one established outbound connection leaked per instance, with no decay over 8+ minutes. After 25 instances: 1600 goroutines, all created by `tun.(*udpConnectionHandler).HandlePacket`, `mux.(*ClientWorker).Dispatch`, `mux.NewClientWorker` and `mux.(*DialingWorkerFactory).Create`, and 17 established connections to the server.\n\n## Fix\n\n- `Handler` owns a `cancel` for its detached context and calls it in `Close` before closing the stack, so in-flight dispatches unwind (also the ones not blocked on the reader).\n- `stack.Close` ends every UDP flow (`udpConnectionHandler.closeAll`): their readers get EOF, the dispatches return and release their outbounds. The flow table also refuses new flows from then on, mirroring `handleTCP`'s `closed` check: a packet already in flight between the stack closing and the tun closing used to open a fresh flow (and, with a mux outbound, dial a worker) during shutdown.\n\nThe remaining XUDP mux workers then close on the mux client's idle check (two 16 s monitor ticks after their last session), after which goroutines and heap are back at the baseline and no server connections remain.\n\n## Verification\n\n- New tests: `TestUDPHandlerCloseAllEndsFlows` (flows end on close, a late packet opens none) and `TestHandlerCloseCancelsDispatches` (a dispatch that is not reading returns when the handler closes). `go test -race ./proxy/tun/` passes.\n- With the patch, 20 instance start/stop cycles end with 0 established connections to the server and the baseline goroutine count; without it, 17 connections and 1600 goroutines that never go away."
+    },
     {
      "number": 7349,
      "title": "XDNS finalmask: `tcp://` resolvers send unframed queries; a domain like `t.example.com.` crashes the client",
@@ -673,61 +684,6 @@
      "user": "Dv2Corn",
      "url": "https://github.com/XTLS/Xray-core/pull/7342",
      "body": "The Hysteria validator does not check emails:\n\n- [`Add`](https://github.com/XTLS/Xray-core/blob/1c8bf4067b881e5f21442882013d0617e4d5dc6d/proxy/hysteria/account/config.go#L52-L62) stores a second user with an email that is already present.\n- [`DelByEmail`](https://github.com/XTLS/Xray-core/blob/1c8bf4067b881e5f21442882013d0617e4d5dc6d/proxy/hysteria/account/config.go#L64-L77) then removes whichever of them `sync.Map` iterates first and returns nil, so the other password keeps authenticating after a successful `RemoveUser`. It also returns nil for an unknown email.\n\nVLESS and Trojan reject both cases ([VLESS](https://github.com/XTLS/Xray-core/blob/1c8bf4067b881e5f21442882013d0617e4d5dc6d/proxy/vless/validator.go#L35-L59)). This makes the Hysteria validator do the same: emails are compared case-insensitively, `Add` rejects an existing email, `DelByEmail` fails on an empty or unknown one.\n\nBefore the fix, add `u@example.com` with `pass-A`, add it again with `pass-B` (both nil), `DelByEmail(\"u@example.com\")` (nil): one password still authenticates, `GetCount` is 1.\n\nTest: `proxy/hysteria/account/config_test.go` fails before the change and passes after; `go vet ./proxy/hysteria/...`.\n"
-    },
-    {
-     "number": 7219,
-     "title": "Sockopt: Fix swapped TCP keepalive idle and interval on Darwin",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T16:31:26Z",
-     "updated_at": "2026-11-06T21:53:51Z",
-     "user": "Medium1992",
-     "url": "https://github.com/XTLS/Xray-core/pull/7219",
-     "body": ""
-    },
-    {
-     "number": 7332,
-     "title": "TUN inbound: IPv6 entries in `dns` exit the core on Windows when IPv6 cannot be set up, as in `gateway` and `autoSystemRoutingTable`",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-04T17:53:15Z",
-     "updated_at": "2026-11-06T20:13:01Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7332",
-     "body": "https://github.com/XTLS/Xray-core/pull/7325#issuecomment-6628514757\n\nAn IPv6 server in `dns` now counts like IPv6 in `gateway` and `autoSystemRoutingTable`: when IPv6 can't be set up, the TUN doesn't start, instead of silently dropping that server.\n"
-    },
-    {
-     "number": 7336,
-     "title": "XTLS Vision + Mux/XUDP: concurrent mux sessions corrupt the downlink (\"common/mux: unknown status\")",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-11-05T15:19:26Z",
-     "updated_at": "2026-11-06T18:45:25Z",
-     "user": "StarProxima",
-     "url": "https://github.com/XTLS/Xray-core/issues/7336",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nOn a VLESS + `xtls-rprx-vision` + REALITY server, a client with Mux/XUDP (`concurrency: -1`, `xudpConcurrency: 8`) loses UDP sessions when several of them start at once. The client logs `[Error] common/mux: unknown status: <random number>` (194, 196, ...) or only `[Info] common/mux: failed to read metadata > common/mux: insufficient buffer: 0`. After that, no XUDP session on that mux connection gets any more replies.\n\nVersion: v26.10.31, also current `main` (a52db8f6). I think it started in v25.9.5 with 4064f8dd (\"XTLS Vision: Refactor code to use DispatchLink() in VLESS inbound\").\n\nReplies received, with the configs and scripts below (100 UDP associations opened at once, one datagram each):\n\n| | replies of 100 |\n| -- | -- |\n| v26.10.31, Vision + XUDP | 88, 60, 79 |\n| v26.10.31, Vision + XUDP, server built with `-race` | 40 (17 data race reports on the server) |\n| v26.10.31, XUDP without `flow` | 98, 100 |\n| v26.10.31, Vision + XUDP, `xudpConcurrency: 1` | 100, 100 |\n| `main` with #7337, Vision + XUDP | 100, 100, 99 |\n\n**Cause**\n\nSince 4064f8dd, the VLESS inbound passes its `VisionWriter` to `mux.Server.DispatchLink` directly, with no pipe in between. `mux.ServerWorker` runs `handle()` in a goroutine per session, so several goroutines call `VisionWriter.WriteMultiBuffer` at the same time. `VisionWriter` updates the padding state (`writeOnceUserUUID`, `IsPadding`, `NumberOfPacketToFilter`) without a lock. The `BufferedWriter` underneath takes a lock, but only for the socket write. So blocks can reach the wire in a different order from the one their padding was computed in:\n\n- a padding block without the user UUID goes out first: the client `VisionReader` is still in its initial state, does not recognise it and passes it to mux as data;\n- a padded block goes out after the block with `CommandPaddingEnd`: the client has already stopped unpadding.\n\nThe client mux then reads the 5-byte padding header as a frame header. The status byte falls on the low byte of the random padding length, which is where the random `unknown status` comes from. `ClientWorker.fetchOutput` exits and takes all sessions of the connection with it.\n\nThe server built with `-race` shows `VisionWriter.WriteMultiBuffer` called concurrently from `mux.writeMetaWithFrame` of different sessions (first report):\n\n```\nWARNING: DATA RACE\nRead at 0x00c0003141d8 by goroutine 132:\n  github.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer()\n      proxy/proxy.go:357 +0x38c\n  github.com/xtls/xray-core/common/mux.writeMetaWithFrame()\n      common/mux/writer.go:86 +0x200\n  ...\n  github.com/xtls/xray-core/common/mux.handle()\n      common/mux/server.go:113 +0x154\n  github.com/xtls/xray-core/common/mux.(*ServerWorker).handleStatusNew.gowrap1()\n      common/mux/server.go:260 +0x54\n\nPrevious write at 0x00c0003141d8 by goroutine 123:\n  github.com/xtls/xray-core/proxy.XtlsFilterTls()\n      proxy/proxy.go:629 +0x9c\n  github.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer()\n      proxy/proxy.go:358 +0x3d4\n  github.com/xtls/xray-core/common/mux.writeMetaWithFrame()\n      common/mux/writer.go:86 +0x200\n  ...\n  github.com/xtls/xray-core/common/mux.handle()\n      common/mux/server.go:113 +0x154\n  github.com/xtls/xray-core/common/mux.(*ServerWorker).handleStatusNew.gowrap1()\n      common/mux/server.go:260 +0x54\n```\n\nThe client is clean under `-race`: its mux writes through a pipe, so only one goroutin"
-    },
-    {
-     "number": 7295,
-     "title": "XHTTP server: Add `h2Params`",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-30T13:05:19Z",
-     "updated_at": "2026-11-06T18:00:25Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7295",
-     "body": "https://github.com/XTLS/Xray-core/pull/7282#issuecomment-6523157944\n允许按自身需求调整 HTTP2 config 直接按json解析过去 core 基本不需要代码还自带自动更新\n#6268 的受害者也可以自行调整参数 反正一切风险自负就行了"
-    },
-    {
-     "number": 7223,
-     "title": "Inbound: Close and remove the handler when it fails to start",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-10-21T22:25:24Z",
-     "updated_at": "2026-11-06T17:57:42Z",
-     "user": "hmdsefi",
-     "url": "https://github.com/XTLS/Xray-core/pull/7223",
-     "body": "`inbound.Manager.AddHandler` first puts the handler into `taggedHandlers` (or `untaggedHandlers`) and, when the manager is already running, then calls `handler.Start()` and returns its error. Nothing is undone when `Start` fails.\n\nThis is the path of `HandlerService.AddInbound` (`xray api adi`). If the new inbound cannot start, for example because one of its ports is already in use, the API returns the error but the handler stays in the manager. Adding it again with the same tag fails with `existing tag found` until it is removed by hand, and the workers that did start (the ports before the busy one in a port range) keep listening.\n\nNow a handler that fails to start is taken out of the manager again and closed, so the ports it opened are released and the tag can be used again. Startup is not affected: handlers from the config are only started later by `Manager.Start`.\n\nVerified with the new `TestAddHandlerFailedStart`, which adds a tagged and an untagged handler whose `Start` fails to a running manager, and then adds the tag again. On main it fails with:\n\n    handler \"in\" was not closed after failing to start\n    handler \"in\" is still registered after failing to start (1 handlers)\n\nWith this change it passes. I also checked it end to end with a dokodemo-door inbound on two ports where the second one was busy: on main the first port stayed bound after the failed add, and adding the inbound again after freeing the port failed with `existing tag found: in`. With the change the first port is free again and the second add works.\n\nAlso ran `go test ./app/proxyman/inbound/...` (also with `-race`), `go test ./testing/scenarios -run TestCommander`, `go vet ./app/proxyman/inbound/...`, gofmt and `go run ./infra/vformat/main.go -mode check -pwd ./`.\n"
     }
    ],
    "comments": [
@@ -1488,33 +1444,6 @@
      "body": "逻辑不太对，https://github.com/XTLS/Xray-core/pull/7325 https://github.com/XTLS/Xray-core/pull/7332 的逻辑全部推翻，改为\r\n\r\n`gateway`、`dns`、`autoSystemRoutingTable`：若注册表...，则操作 IPv6 时遇到错误仅报错、不退出（包括清空/设置 `dns`）\r\n\r\n`autoSystemWfpBlockLeak` \"misconfigtun\"：若注册表...，则一定 block \"[::/0]:all\"（作为此 PR 之前它的逻辑的补充逻辑）"
     },
     {
-     "id": 6694434235,
-     "issue": 7332,
-     "issue_title": "TUN inbound: IPv6 entries in `dns` exit the core on Windows when IPv6 cannot be set up, as in `gateway` and `autoSystemRoutingTable`",
-     "created_at": "2026-11-06T20:13:01Z",
-     "user": "darabzadzahra-lang",
-     "url": "https://github.com/XTLS/Xray-core/pull/7332#issuecomment-6694434235",
-     "body": "aetrher \n"
-    },
-    {
-     "id": 6692618802,
-     "issue": 7337,
-     "issue_title": "XTLS Vision: Serialize VisionWriter writes from concurrent mux sessions",
-     "created_at": "2026-11-06T18:43:16Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7337#issuecomment-6692618802",
-     "body": "我看了下，可以先作为修复合并，不过 core 里不该有 concurrent write or read 这种东西，仍需修复深层起因（可能就是这种东西导致了 https://github.com/XTLS/Xray-core/issues/5845 ，你试着修下），~~另外虽然你这么改能 work，但我记得 Golang 的锁是不保证先到先得的，标题我懒得改了~~"
-    },
-    {
-     "id": 6691735463,
-     "issue": 7295,
-     "issue_title": "XHTTP server: Add `h2Params`",
-     "created_at": "2026-11-06T17:59:03Z",
-     "user": "Chara-Freedom",
-     "url": "https://github.com/XTLS/Xray-core/pull/7295#issuecomment-6691735463",
-     "body": "`h2Params` 在服务端节点上的实测，供参考。\n\n#6268 和 #7099 的数据来自手机客户端。这里是另一种场景：节点之间的隧道。一台节点作为 XHTTP 客户端（`stream-one` + REALITY）连接两台节点，每个被代理的连接占一条 stream，并发约 8000–11000 条。环境：8 GB 内存、无 swap 的 VM，Go 1.27.3，基于 Xray 的分支（已包含本 PR）。\n\n**修改前：** 约 27 小时内 xray 被 OOM killer 杀死 4 次（anon-rss 6.4–7.2 GiB）。heap profile 中 99.6% 的采样内存来自 `http2.(*clientStream).writeRequestBody`，每个对象正好 524288 字节。\n\n**修改：** 只在服务端 inbound 设置 `\"h2Params\": {\"MaxReadFrameSize\": 16384}`，客户端配置不变。\n\n**两次从零启动，运行时间和负载相近（约 57700 个 goroutine）：**\n\n| MiB | 修改前（135 s） | 修改后（144 s） |\n|---|---|---|\n| RSS | 3172 | 1867 |\n| HeapAlloc | 5371 | 901 |\n| Sys | 7473 | 1969 |\n| NextGC | 9984 | 1473 |\n\n进程运行 12 分 26 秒时，RSS 为 4445 和 2188 MiB。修改后目前只运行了约 12 分钟，尚未发生 OOM；修改前最长一次运行了 24 小时 36 分钟，所以现在还不能确认 OOM 已经解决。\n\n**回环测试**（同一二进制，无 RTT 和丢包，1000 条 stream，5 轮交替，修改前 / 修改后）：上传 1 条 stream 1747 / 1756 Mbit/s，8 条 3439 / 3816 Mbit/s，下载 1426 / 1433 Mbit/s，未见速度下降。反复打开和关闭 stream 8 轮后，RSS 为 311–336 / 139–146 MiB。\n\n#7099 中关于特征的顾虑在逻辑上成立，但我们没有测量，也无法判断其影响有多大，所以这里不是要求修改默认值。对节点间隧道这种场景，可选的 `h2Params` 已经够用。\n\n---\n\nMeasurements of `h2Params` on a server node, for reference.\n\nThe data in #6268 and #7099 comes from phone clients. This is a different case: tunnels between nodes. One node dials two others as an XHTTP client (`stream-one` + REALITY), with one stream per proxied connection, about 8000–11000 concurrent. Environment: 8 GB VM, no swap, Go 1.27.3, an Xray fork that includes this PR.\n\n**Before:** xray was OOM-killed 4 times in about 27 hours (anon-rss 6.4–7.2 GiB). 99.6% of sampled heap came from `http2.(*clientStream).writeRequestBody`, each object exactly 524288 bytes.\n\n**Change:** only `\"h2Params\": {\"MaxReadFrameSize\": 16384}` on the server inbounds; the client config is unchanged.\n\n**Two runs from a cold start, similar uptime and load (about 57700 goroutines):**\n\n| MiB | Before (135 s) | After (144 s) |\n|---|---|---|\n| RSS | 3172 | 1867 |\n| HeapAlloc | 5371 | 901 |\n| Sys | 7473 | 1969 |\n| NextGC | 9984 | 1473 |\n\nAt 12 min 26 s of process uptime, RSS was 4445 and 2188 MiB. The changed setup has only run for about 12 minutes so far, with no OOM yet; the longest run before the change lasted 24 h 36 min, so it is too early to say the OOM kills are gone.\n\n**Loopback test** (same binary, no RTT or loss, 1000 streams, 5 interleaved rounds, before / after): upload on 1 stream 1747 / 1756 Mbit/s, on 8 streams 3439 / 3816 Mbit/s, download 1426 / 1433 Mbit/s; no slowdown seen. After 8 rounds of opening and closing streams, RSS was 311–336 / 139–146 MiB.\n\nThe fingerprint concern in #7099 is logical, but we did not measure it and cannot say how much it matters, so this is not a request to change the default. For node-to-node tunnels like this one, the opt-in `h2Params` is enough.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
-    },
-    {
      "id": 6684072291,
      "issue": 7208,
      "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
@@ -1545,6 +1474,17 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3437,
+     "title": "fix: server persist host firewall setup across reboots",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T20:14:19Z",
+     "updated_at": "2026-11-08T20:14:19Z",
+     "user": "yp-amnezia",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3437",
+     "body": ""
+    },
     {
      "number": 3192,
      "title": "У кого то работает свой впс на протоколе awg?",
@@ -1676,116 +1616,6 @@
      "user": "gitmeatarru",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3038",
      "body": "с выходом новой версии протокола вы советуете сделать что-то там с контейнерами.\n\nизвините, я не устанавливал ни каких контейнеров я просто вводил логин и пароль от сервера и нажимал установить.\n\nпочему в новой версии нет кнопки обновить или обновить протокол, все здесь думаете программисты?!"
-    },
-    {
-     "number": 3430,
-     "title": "Возможность распределения трафика по нескольким туннелям",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-06T21:58:15Z",
-     "updated_at": "2026-11-06T22:01:57Z",
-     "user": "EternalBlueInfinity",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3430",
-     "body": "Просьба рассмотреть возможность создания нескольких параллельных туннелей, но в рамках одного VPN интерфейса.\n\nСейчас для VLESS протокола трафик идет на один сервер с одним IP.\n\nЭто, как бы так сказать, не очень хорошая идея. Сторонний наблюдатель банально по распределению статистики трафика между пользователем и сочетанием IP - SNI может вычислить, что подключения к этому IP с этим SNI - c 99% являются VPN туннелем, даже если вы используете Reality и это выглядит как трафик с настоящего сайта.\n\nКак это можно исправить: поднимать несколько параллельных туннелей и заворачивать трафик в них, с периодической ротацией пула одновременно активных туннелей и случайным распределением не самого трафика, а балансировки нагрузки между туннелями. Это намного более естественный паттерн, который сложно вычислить.\n\nВозможные минусы и проблемы: для корректной работы сайтов нужно, чтобы в пуле одновременно используемых соединений, точка выхода (IP, с которых трафик идет уже на сами сайты) была одной и той же. Это поможет избежать блокировок уже со стороны самих сайтов, т.к. постоянная смена IP может быть воспринята как DDOS или какая-то другая атака. Так как Free и Premium сервера целиком под вашем контролем, маршрутизация с разных точек входа на одну точку выхода не выглядит как неосуществимая задача. У этого решения есть своя цена: вероятность обнаружения точек входа снижается, но при обнаружении они отвалятся все пачкой. Поэтому прежде чем это делать, необходимо убедиться в отсутствии уязвимостей, выдающих точки входа.\n\nЕсли это невозможно и все используемые серверы имеют разные выходные IP (сторонние подписки и Self-Hosted решения) - сегментировать исходящий трафик по GeoIP целевых сайтов, куда идёт обращение, таким образом чтобы допустим на сайты в Германии трафик шел через туннель A, на сайты США - через туннель B. Случайного распределения балансировки тут уже не выйдет, но даже в таком случае оно уже не будет выглядеть как весь трафик в одну точку."
-    },
-    {
-     "number": 3429,
-     "title": "[Android] Публикация адреса XRay в маршрутах VPN позволяет другим приложениям прочитать его",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-06T21:24:54Z",
-     "updated_at": "2026-11-06T21:24:54Z",
-     "user": "EternalBlueInfinity",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3429",
-     "body": "На Хабре вышла [статья](https://habr.com/ru/articles/1089082/) с разбором текущих уязвимостей, позволяющих приложениям обойти раздельное туннелирование и направить трафик в туннель. Если выходной IP не равен входному, это не будет такой уж большой проблемой.\n\nНо мое внимание привлекло вот что:\n\n> И наконец, есть утечка, которую фильтр не закрывает вовсе, потому что она устроена иначе. Путь Xray в AmneziaVPN на Android 13+ публикует адрес сервера в маршрутах VPN, и любое приложение читает его, не отправив ни одного пакета. Это нужно исправлять отдельно. У AmneziaWG такого маршрута нет.\n\nТакая информация содержит уже входной IP туннеля, и это намного серьезнее, чем всё остальное в статье. Если это действительно так работает, то решение этой проблемы должно стать приоритетом номер один."
-    },
-    {
-     "number": 3427,
-     "title": "fix: handle dual-stack WireGuard addresses and IPv6 endpoints",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-06T19:35:51Z",
-     "updated_at": "2026-11-06T20:44:35Z",
-     "user": "icntswm",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3427",
-     "body": "WireGuard/AmneziaWG profiles containing both IPv4 and IPv6 interface addresses are passed to the desktop daemon as a single IPv4 address. On macOS this fails with `Failed to set IPv4: Destination address required`. Resolved IPv6 server addresses are also assigned to IPv4 fields, and the macOS backend emits an unbracketed IPv6 endpoint, failing with IPC error -22.\n\nThe iOS/macOS Network Extension has a separate config serializer which also emits IPv6 endpoints without brackets, causing WireGuardKit to reject the generated config before starting the tunnel.\n\nThis change:\n- Separates interface addresses by family before constructing desktop daemon requests, preserving an explicit IPv6 address and retaining the existing fallback for IPv4-only profiles.\n- Assigns resolved server addresses and gateways to the correct address-family fields for macOS, Windows and Linux.\n- Formats IPv6 endpoints with brackets in the macOS backend, shared config export, and the iOS/macOS Network Extension serializer.\n- Permits only UDP to the configured IPv6 server address and port through the macOS/Linux kill switch, retaining the default IPv6 block. Linux replaces stale endpoint exceptions while keeping a blocking rule installed.\n- Adds C++ regression tests and Apple serialization tests using the real WireGuardKit endpoint parser.\n\nValidation:\n- 18 Qt Test checks passed, including dual-stack address order, invalid/duplicate addresses, IPv4, IPv6, scoped IPv6, NAT64 and hostname endpoints, plus narrow IPv6 firewall exceptions and invalid endpoint/port rejection.\n- 10 Apple config combinations passed (IPv4, IPv6, already bracketed IPv6, NAT64, hostname; IPv4-only and dual-stack interface addresses). The parser also rejects the original malformed IPv6 endpoint.\n- Changed Swift sources type-checked against the iPhoneOS SDK for arm64.\n- Windows/Linux endpoint and interface consumers were reviewed: they already support separate address-family fields, and now receive them correctly from the shared controller. The changed Linux firewall translation unit also compiled with Qt on macOS; native Linux integration was not run.\n- Android was reviewed: it already splits interface addresses and brackets IPv6 endpoints, so no Android change is needed.\n- Full macOS arm64 application, daemon and test targets built successfully.\n- Full CTest run: 32/33 suites passed. OpenSSLLibraryTest fails its Qt/app version equality assertion because Homebrew Qt uses OpenSSL 4 while Conan dependencies use OpenSSL 3. A separate HTTPS probe linking the same Qt and Conan libraries completed TLS verification and returned HTTP 200.\n- Installed the macOS app and updated privileged service, then verified a real connection using a hostname resolving to IPv6 with the kill switch enabled. The UI reports Connected, the separate CLI tunnel is stopped, the default IPv4 route uses the app tunnel, and an HTTPS request through it returned HTTP 200.\n- Ordinary IPv6 Internet traffic remains blocked by the existing kill-switch policy; the new exception is limited to the VPN transport.\n- Windows/Linux/Android application builds and a real-device iOS connection have not been run locally.\n\nFixes #1630.\nFixes #3374.\n"
-    },
-    {
-     "number": 3428,
-     "title": "fix: ios stop hev before restarting xray tunnel",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-06T20:20:22Z",
-     "updated_at": "2026-11-06T20:20:22Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3428",
-     "body": ""
-    },
-    {
-     "number": 3381,
-     "title": "feat: keep domain and wildcard split-tunneling rules current during an active VPN session",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-02T14:41:13Z",
-     "updated_at": "2026-11-06T19:30:58Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3381",
-     "body": "## Feature request\n\nI want to enter a domain once and have it continue following the selected split-tunneling policy when its IP addresses change, without editing the list or reconnecting the VPN. I also want rules such as `*.example.com` for subdomains.\n\nA domain should remain the rule's identity. Addresses resolved when it was added or at connection time must not become a permanent substitute for that rule.\n\nMy immediate use case is Windows with WireGuard/AmneziaWG, in both sites-only and all-sites-except-listed modes.\n\n## Expected behavior\n\n- An exact rule such as `example.com` follows changes to that hostname's DNS addresses during an active session.\n- A wildcard rule such as `*.example.com` matches real queried subdomains, including nested ones, without enumerating them in advance.\n- Proposed wildcard semantics: match `api.example.com` and `a.b.example.com`, not `example.com`, `notexample.com` or `example.com.evil.test`. Add the apex separately when needed.\n- Handle multiple addresses and CNAME chains, and keep mappings/routes current with DNS lifetime and network changes.\n- Establish the selected routing policy before the application uses a newly resolved address, without restarting the tunnel or disrupting unrelated connections.\n- Preserve literal IP/CIDR rules, local hosts mappings and import/export of the domain or mask itself.\n- Show resolution/application failures instead of silently presenting a stale rule as current.\n\nA wildcard is a routing-rule pattern, not a request to resolve the literal hostname `*.example.com`. It also does not automatically include unrelated CDN domains used by a page.\n\n## Acceptance scenarios\n\n1. Add an exact domain whose DNS answer initially points to address A.\n2. Keep the VPN connected, change the answer to B, and let the previous DNS answer expire.\n3. A new connection to that domain must follow the same configured policy through B, without deleting/re-adding the rule or reconnecting.\n4. Add `*.example.com`, then request a previously unseen subdomain. The first connection after its DNS response must follow the wildcard rule.\n5. Repeat for both site-routing modes, multiple DNS answers, CNAME targets, temporary DNS failures, changed networks and rule removal.\n6. Verify that a shared address is not removed while another rule still needs it, and define safe handling of cached answers and existing connections.\n\nThese are acceptance requirements. The implementation PR below documents which scenarios are covered by isolated tests and which still require on-device verification.\n\n## Design constraints\n\nA local DNS handler is a possible foundation, but simply periodically resolving known hostnames is insufficient for previously unseen wildcard subdomains.\n\nDNS-to-IP routes also have a shared-IP limitation: unrelated hostnames on the same address cannot be distinguished by an ordinary IP route. The design must explicitly distinguish dynamic IP-based exclusions from strict per-domain connection routing; stronger isolation may need a domain-aware traffic path.\n\nApplications using their own encrypted DNS can bypass a local DNS handler. Do not silently disable browser Secure DNS/DoH or intercept/decrypt HTTPS. Document supported DNS paths and any required opt-in configuration. IPv6 support or limitations must also be explicit, rather than letting AAAA traffic silently ignore the rule.\n\nDNS updates must respect the chosen direct/tunnel resolver policy and must not introduce unintended DNS leaks.\n\n## Related work\n\n- #1217 asks the same underlying question about changed IPs in Windows exclusions.\n- #1423 is the broader site-split-tunneling feature tracker; its [DNS-refresh discussion](https://github.com/amnezia-vpn/amnezia-client/issues/1423#issuecomment-5131614693) overlaps this request.\n- #3376 / #3380 address normalization and refresh before connection/reconnection. They do not implement continuous live updates or wildcard discovery.\n- Project tracker: #3378.\n\nVerification note: the first CTest domain"
-    },
-    {
-     "number": 3378,
-     "title": "Tracking: improve site split-tunneling reliability",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-02T14:09:15Z",
-     "updated_at": "2026-11-06T19:30:55Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3378",
-     "body": "## Goal\n\nI started investigating two problems in my Windows setup: CIDR exclusions could remain visible without working as expected, and excluded destinations could still use the VPN. Follow-up checks also found that the inverse, sites-only mode could become a full tunnel for certain WG/AWG profiles.\n\nThe fixes previously collected in #3030 have been split into three independently reviewable PRs, each with its own focused issue. This tracker also records follow-up features; an implementation PR is linked when one is available.\n\n## Work items\n\n- [ ] #3375 — WG/AWG AllowedIPs parsing, profile eligibility and correct site-allowlist serialization. **PR: #3379**.\n- [ ] #3376 — CIDR/hostname normalization, duplicate-import merging and bounded DNS refresh before connection/reconnection. **PR: #3380**.\n- [ ] #3377 — transactional Windows exclusion-route batches, rollback, route ownership and reconciliation. **PR: #3030**.\n\nA checkbox should be completed when the corresponding fix lands; publication or a successful local test alone does not mean the work is merged.\n\n## Follow-up feature\n\n- [ ] #3381 — live domain-address updates and wildcard rules such as `*.example.com`. **PR: #3383**. Opt-in Windows WG/AWG implementation; stacked on #3380 and separate from the three bug-fix PRs.\n\n## Verification and acceptance\n\n- The three bug-fix branches can be reviewed separately against `dev`. The follow-up domain-routing PR #3383 is stacked on #3380.\n- Combining the three branches must preserve the previous complete patch.\n- WG and AWG activation-message tests cover all-sites, sites-only and all-sites-except-listed modes, including IPv4-only/reordered defaults and restricted native routes.\n- Existing application-exclusion settings must continue to pass through unchanged.\n- All four PRs were rebased onto release `5.1.0.6` (`ac175c8a`); their patch commits are unchanged. The three bug-fix PRs remain independent, and #3383 remains stacked on #3380.\n- The refreshed combined Windows client/service/installer build passed five isolated suites: LocalSocketController serialization, actual-core domain/DNS/application policy, engine ownership, mocked Windows route monitoring and offscreen QML. These are combined-build results, not separate full builds of each PR. Native TUN/WG/AWG activation, WFP/kill-switch behavior, network transitions and adapter/DNS cleanup still require on-device acceptance.\n- The domain test's first CTest run failed; subsequent diagnostic and full-suite runs passed without code changes. Its initial failure remains unexplained and is documented in #3383.\n\n- Historical full-build/live Windows results must be distinguished from new isolated tests. Live site-allowlist and real application-bypass behavior remain separate verification gaps; they must not be presented as verified by serializer or mocked-driver tests.\n\n## Scope boundaries\n\nThis is a site split-tunneling reliability effort, not a claim that every mode on every platform is fixed. The three existing bug-fix PRs do not implement Windows application allowlist support, wildcard-domain routing, continuous DNS monitoring or a new IPv6 site-list model. Live domain updates and wildcard routing are now tracked separately in #3381.\n\nApplication-based exclusion preparation was checked for regressions, but no application-routing fix is being included without a demonstrated defect and its own change.\n\n## Related issues and overlapping PRs\n\n- #2907 and #3314: related WG/AWG site-routing symptoms; not every platform-specific cause is established.\n- #2939 and #3018: CIDR import history and regression coverage.\n- #2248 and #3020: large Windows exclusion-list setup.\n- #3011 and #3097: overlapping IPv4-only AllowedIPs fixes.\n- #2825: overlapping hostname/DNS work.\n- #3021: overlapping Windows route batching.\n\nThese are references, not automatic requests to close other contributors' PRs. The focused PR descriptions will explain the overlap and their own verification limits.\n\n"
-    },
-    {
-     "number": 3383,
-     "title": "feat(windows): support live domain and wildcard site rules",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T17:40:22Z",
-     "updated_at": "2026-11-06T19:30:50Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3383",
-     "body": "## Why\n\nI want a domain in the site list to keep following its routing policy when its addresses change during a VPN session. I also need `*.example.com` to cover newly encountered subdomains without resolving a wildcard as though it were a hostname.\n\nRefreshing IP routes alone cannot distinguish unrelated domains sharing an address. This adds an opt-in domain-aware path for Windows WireGuard/AmneziaWG connections.\n\n## Changes\n\n- Preserve exact domains, wildcard identities and literal IP/CIDR entries, including import/export. `*.example.com` matches nested subdomains, but not the apex or lookalike suffixes.\n- Use the bundled Xray core locally for TUN, DNS/FakeDNS and connection routing. **The remote VPN remains native WireGuard/AmneziaWG; no Xray server or Xray key is required.** Native credentials, peer AllowedIPs and MTU remain unchanged.\n- Bind direct and tunneled outgoing connections to their respective interfaces and source addresses. Keep the VPN-server exemption outside the domain-routing adapter.\n- Apply both site-list modes and all three application modes. Match HTTP Host/TLS SNI where available and preserve hosts mappings.\n- Use the configured DNS paths, respect answer lifetime, and avoid falling back from a selected domain's resolver group to the opposite path after a DNS failure.\n- Add exclusive ownership and a renewable lease for the local engine, so it cannot replace an active local proxy and stops if its owner disappears.\n- Keep the feature disabled by default and show its limitations before use. Existing literal-only routing stays on the native path.\n\n## Scope and limitations\n\n- Windows with WireGuard/AmneziaWG only. Unsupported combinations fail explicitly rather than silently ignoring a wildcard.\n- The new path handles IPv4 TCP/UDP. It blocks intercepted IPv6 destinations; remote ICMP/ping is not supported by this backend.\n- Application rules match executable paths, without automatic child-process inheritance. DNS resolver selection follows the site policy, not individual applications.\n- Browser Secure DNS/DoH settings are not changed. There is no HTTPS decryption or ECH suppression. An encrypted-DNS connection whose hostname is also hidden cannot reliably be matched by domain.\n- More-specific existing LAN routes retain OS priority. Changes to rules/settings take effect on reconnect; DNS-address changes do not require reconnecting.\n- Explicit IPv4 interface addresses and DNS servers are required. A physical interface using a loopback DNS stub is rejected; the local proxy and this mode cannot run concurrently.\n\n## Verification\n\n- Rebased onto release `5.1.0.6` (`ac175c8a`), still stacked on #3380. `git range-diff` confirms unchanged patch commits.\n- Clean Windows CMake configuration; combined Release client, privileged service and installer built with Qt 6.10.1 / MSVC 19.53.\n- Five isolated suites passed in the refreshed combined build with #3379 and #3030: domain routing, engine ownership, Windows route monitoring, settings QML and LocalSocketController route serialization. These are combined-build results, not separate full builds of each sibling PR.\n- The first combined CTest run failed in DomainRoutingTest without per-case QTest output. The same binary then passed all 44 checks in a diagnostic standalone run, and the full five-suite rerun passed with per-case reports enabled. The initial failure has not been explained; it is not being treated as a proven fix or hidden by the successful reruns.\n- The actual bundled `amnezia-xray-bindings` 1.5.0 was exercised on loopback, including 12 combinations of site mode, application mode and listed/unlisted process. Coverage includes shared-IP separation, wildcard boundaries, HTTP Host/TLS SNI, TCP/UDP, DNS A-to-B changes after TTL expiry, FakeDNS, CNAME, multiple A answers, hosts, CIDRs and DNS failure.\n- Production engine ownership/lease tests and a regression test for overlay creation, recreation and physical-route loss passed. The route test substitutes Windows ro"
-    },
-    {
-     "number": 3380,
-     "title": "fix: preserve site CIDRs and refresh domain routes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T14:12:01Z",
-     "updated_at": "2026-11-06T19:30:46Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3380",
-     "body": "## Summary\n\nFix remaining input, import and DNS-lifecycle gaps in site split tunneling. This is the hostname/CIDR and pre-connect DNS part extracted from #3030.\n\nFixes #3376.\nTracking issue: #3378.\n\n## Problem\n\nI encountered excluded destinations still using the tunnel or timing out after reconnecting. This part addresses the stored inputs and addresses, independently of WG/AWG profile eligibility and Windows route installation:\n\n- duplicate imported hostname records replace rather than merge their address lists;\n- stored addresses can become stale between connections;\n- asynchronous DNS results can be written to a different list after the selected route mode changes;\n- malformed CIDR-like input can fall through to URL/path normalization.\n\nCurrent dev already preserves basic valid CIDRs and supports multiple addresses. This PR hardens and completes that behavior; it does not introduce those capabilities from scratch.\n\n## Changes\n\n- Validate IPv4/CIDR inputs before URL parsing, retaining valid prefixes and rejecting malformed ones.\n- Normalize URLs/hostnames with QUrl, including IDN-to-ACE conversion, case and trailing dots.\n- Validate imported addresses and merge duplicate hostname entries.\n- Continue reading legacy single-IP settings and retaining both the complete `ips` array and legacy `ip` export field.\n- Keep asynchronous results associated with their original route mode; do not recreate deleted entries.\n- Resolve domain entries before desktop WG/AWG activation and on reconnect: at most 16 concurrent lookups, with a 10-second preparation deadline.\n- Replace only successfully resolved address lists; retain last known addresses on failure.\n- Cancel obsolete lookups on a new connection, disconnect or destruction.\n- Use unique queued reconnect subscriptions to avoid accumulating duplicate callbacks.\n\nThe resolver uses the system hostname-resolution path, including hosts mappings. On reconnect, DNS follows the networking state available at that point; this does not forcibly reroute DNS outside an already active tunnel.\n\n## Scope and compatibility\n\nShared controller/repository changes are separate from the desktop-only WG/AWG preparation path. Resolution retains IPv4 addresses only. No wildcard-domain support, continuous DNS monitoring, new IPv6 site model or application-routing behavior is added.\n\n## Verification\n\n- The implementation was previously included in the Windows x64 client, service and installer built on upstream `94b51df2` (5.0.3.1), and used in my local 5.0.3.2 build.\n- Earlier live checks covered public multi-address services, a private hostname resolved through hosts, excluded HTTPS and disconnect/reconnect behavior.\n- For this split, the branch was based directly on dev `3f6ecacf`; its changes merge cleanly with both sibling branches. The combined tree preserves the original complete patch, with only an unchanged parsing helper relocated in the sibling AllowedIPs PR.\n- `git diff --check` passes.\n\nThe subsequent combined client/installer rebuild is recorded below. I have not rerun a live DNS-transition matrix after the split. The controller serialization tests in the AllowedIPs sibling do not validate this PR's asynchronous DNS lifecycle.\n\n### 5.1.0.6 refresh\n\n- Rebased onto release `5.1.0.6` (`ac175c8a`); `git range-diff` confirms that the patch commits are unchanged.\n- A clean Windows x64 configuration and combined Release client/service/installer build include #3030, #3379, #3380 and #3383, using Qt 6.10.1 and MSVC 19.53.\n- Five isolated suites passed: local-socket route serialization, domain routing with the actual bundled core, engine ownership, mocked Windows route monitoring and offscreen settings QML.\n- The domain suite had an unexplained initial CTest failure, followed by passing diagnostic and full-suite reruns; details are recorded in #3383.\n- These are combined-build results, not separate full builds of each PR. The installed VPN was not stopped or replaced. Real TUN/WG/AWG activation, WFP/kill-switc"
-    },
-    {
-     "number": 3379,
-     "title": "fix: honor WG and AWG site split tunneling",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-02T14:11:58Z",
-     "updated_at": "2026-11-06T19:30:42Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3379",
-     "body": "## Summary\n\nFix WG/AWG site split tunneling when AllowedIPs are IPv4-only, reordered, duplicated or formatted differently. This is the profile-eligibility/route-serialization part extracted from #3030.\n\nFixes #3375.\nTracking issue: #3378.\n\n## Problem\n\nI found two decisions that could silently defeat the selected site-routing mode:\n\n- `VpnConnection` required both IPv4 and IPv6 default routes, disabling site splitting for valid IPv4-only profiles.\n- `LocalSocketController` compared AllowedIPs against one exact two-element array. In sites-only mode, an IPv4-only or reordered default list could therefore bypass the site allowlist and produce a full tunnel.\n\nThe custom-route branch also marked IPv6 prefixes as IPv4.\n\n## Changes\n\n- Normalize AllowedIPs from JSON arrays, strings and native configuration text, independent of comma spacing.\n- Allow the currently IPv4-based site list when the profile contains `0.0.0.0/0`.\n- Honor the site allowlist independently of default-route order, duplicates or IPv6 presence.\n- Preserve restricted native AllowedIPs and the original address-family coverage in all-sites/exclusion modes.\n- Use `IPAddress` for canonical prefix/address-family serialization and deduplicate generated ranges.\n- Add isolated LocalSocketController regression tests and register them in the Windows CMake test suite.\n\nApplication-exclusion settings are passed through unchanged. This does not implement Windows application allowlist support. The existing frontend fallback from an empty selected site list to all-sites mode is unchanged.\n\n## Verification\n\nOn Windows x64 with Qt 6.10.1 and MSVC 19.53, I compiled the actual controller and regression tests from this standalone branch on dev `3f6ecacf`:\n\n- Before: **36 passed, 26 failed**.\n- After: **62 passed, 0 failed** (60 data cases plus setup/cleanup).\n- 42 route-generation cases: both protocols, all three site modes, empty/IPv4-only/ordered/reordered/duplicated defaults, restricted routes and default-plus-specific routes.\n- 18 application-passthrough cases: both protocols and all site modes, with application splitting disabled, enabled-empty or enabled-populated.\n\nThe tests capture activation JSON through an isolated local socket; they do not contact the real service or change routes. These results validate serialization, not end-to-end VPN traffic. I have not switched my live connection to sites-only mode. The subsequent combined installer build is recorded below.\n\n`git diff --check` passes. Combining the three split branches reproduces the previous complete patch, apart from relocating the unchanged parsing helper so the independent branches merge cleanly.\n\n### 5.1.0.6 refresh\n\n- Rebased onto release `5.1.0.6` (`ac175c8a`); `git range-diff` confirms that the patch commits are unchanged.\n- A clean Windows x64 configuration and combined Release client/service/installer build include #3030, #3379, #3380 and #3383, using Qt 6.10.1 and MSVC 19.53.\n- Five isolated suites passed: local-socket route serialization, domain routing with the actual bundled core, engine ownership, mocked Windows route monitoring and offscreen settings QML.\n- The domain suite had an unexplained initial CTest failure, followed by passing diagnostic and full-suite reruns; details are recorded in #3383.\n- These are combined-build results, not separate full builds of each PR. The installed VPN was not stopped or replaced. Real TUN/WG/AWG activation, WFP/kill-switch behavior, network transitions and disconnect cleanup still require on-device acceptance.\n\n## Related issues and overlapping PRs\n\n- #3011 overlaps both IPv4-only eligibility and the sites-only controller branch. This PR provides an alternative covering reordered/duplicate defaults, prefix/family serialization and the regression matrix as well.\n- #3097 overlaps the earlier frontend eligibility check.\n- #2907 and #3314 report related macOS symptoms; their complete root causes and platform behavior are not established by these Windows-hosted tests.\n\nI am"
-    },
-    {
-     "number": 3030,
-     "title": "fix(windows): apply exclusion routes transactionally",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-08-24T10:15:19Z",
-     "updated_at": "2026-11-06T19:30:37Z",
-     "user": "makkoar",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3030",
-     "body": "## Summary\n\nMake Windows WG/AWG exclusion-route installation batched and transactional, and stabilize route reconciliation.\n\nFixes #3377.\nTracking issue: #3378.\n\nThis PR has been narrowed to the Windows route-application portion of the original combined patch. The other parts are now #3379 (AllowedIPs/site allowlist) and #3380 (CIDRs, hostnames and DNS lifecycle).\n\n## Problem\n\nI encountered exclusions remaining visible in settings while their destinations still used the tunnel, and slow/intermittent connectivity with a large exclusion list.\n\nThe daemon previously ignored individual exclusion-route installation failures. Activation or server switching could proceed with a partial list. Windows also fetched and scanned the growing route table separately for each prefix, while route notifications could trigger repeated reconciliations.\n\n## Changes\n\n- Introduce a batch exclusion API, with a rollback-capable fallback for non-Windows backends.\n- Update daemon reference counts only after the requested additions succeed.\n- Roll back additions when activation or server switching fails; propagate installation errors.\n- Preserve the previous peer when switching fails and clean up newly installed prefixes.\n- Reuse routing-table/interface information for a batch and select the physical route for each exclusion.\n- Preserve equivalent pre-existing routes without claiming ownership; clean up only owned routes.\n- Deduplicate destinations and skip non-routable entries.\n- Debounce route-change bursts, handle notifications without a route row, and avoid retrying the same conflicting captured route within one pass.\n- Use type-safe address copies in the Windows route monitor.\n\nThe existing large-batch optimization is retained: for batches of at least 500 entries, the code attempts to suspend the process hosting `wcmSvc` while applying routes, then resume it on scope exit. This uses NT process APIs and is process-wide, not a service-only pause. Missing APIs/privileges fall back to ordinary batch installation. This behavior deserves explicit review; it is not a claim that every Windows configuration or failure path has been tested.\n\n## Scope\n\nSeven changed files: the common daemon/batch interface and Windows route-monitor/backend implementation. No hostname/DNS or AllowedIPs parser changes remain in this PR. Application-based split-tunneling behavior and the application version are unchanged.\n\n## Verification\n\n### Previous full-build/live results\n\n- Built the Windows x64 client, service and IFW installer on upstream `94b51df2` (5.0.3.1); the route implementation was used in my local 5.0.3.2 build.\n- Earlier checks covered a mixed domain/CIDR exclusion list and disconnect/reconnect behavior.\n- A later read-only route audit of that installed build sampled 2,784 addresses, including subnet boundaries, from 1,104 IPv4 exclusions: none selected the VPN interface. Representative excluded HTTPS destinations used the physical interface and a non-excluded control used the tunnel.\n\n### Original split\n\n- Based directly on dev `3f6ecacf`.\n- `git diff --check` passes.\n- All three independent branches merge without conflicts and reconstruct the previous complete patch, apart from moving an unchanged helper in the AllowedIPs sibling.\n- No full rebuild was performed at the initial split. The subsequent combined rebuild is recorded below. Earlier live checks do not establish every rollback/failure path, IPv6 topology or real application-bypass behavior.\n\n### 5.1.0.6 refresh\n\n- Rebased onto release `5.1.0.6` (`ac175c8a`); `git range-diff` confirms that the patch commits are unchanged.\n- A clean Windows x64 configuration and combined Release client/service/installer build include #3030, #3379, #3380 and #3383, using Qt 6.10.1 and MSVC 19.53.\n- Five isolated suites passed: local-socket route serialization, domain routing with the actual bundled core, engine ownership, mocked Windows route monitoring and offscreen settings QML.\n- The domain suite had an unexplained initi"
     }
    ],
    "comments": [
@@ -1869,15 +1699,6 @@
      "user": "EnovaMaker",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3038#issuecomment-6699210172",
      "body": "For those running your own server: before you update it, how do you check that the clients your users already have will still connect? Or do you find out afterwards, from them?\n\n(Drafted with help from Claude, an AI assistant; the question is mine.)"
-    },
-    {
-     "id": 6695077885,
-     "issue": 3427,
-     "issue_title": "fix: handle dual-stack WireGuard addresses and IPv6 endpoints",
-     "created_at": "2026-11-06T20:44:35Z",
-     "user": "icntswm",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3427#issuecomment-6695077885",
-     "body": "@vkamn @ygurov could you review this IPv6/dual-stack WireGuard fix when you have a chance? I’m tagging you because you authored and reviewed the AWG 3.1 changes in these connection paths.\n\nThe PR fixes desktop address-family handling, IPv6 endpoint serialization in the Apple Network Extension, and a kill-switch rule that blocks the IPv6 VPN transport itself. A real macOS connection through an IPv6 endpoint now succeeds with the kill switch enabled; regression tests and the remaining platform-validation limitations are listed in the description.\n\nIf someone else owns this area now, please point me to the right reviewer. Thanks!\n"
     }
    ]
   },

@@ -1,9 +1,20 @@
 {
- "generated_at": "2026-11-12T19:53:12Z",
- "since": "2026-11-10T19:53:12Z",
+ "generated_at": "2026-11-13T01:49:12Z",
+ "since": "2026-11-11T01:49:12Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 682,
+     "title": "Egypt: Investigating severe broadband throttling after monthly data caps",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-12T20:13:18Z",
+     "updated_at": "2026-11-12T20:13:18Z",
+     "user": "mostfinx",
+     "url": "https://github.com/net4people/bbs/issues/682",
+     "body": "**\n\n# Egypt: Investigating severe broadband throttling after monthly data caps\n\nHello everyone,\n\nI'm looking for technical insights into residential broadband throttling in Egypt.\n\n**ISP:** Telecom Egypt (WE)\n\n**Issue:** After the monthly data allowance is exhausted, some residential plans are reduced to approximately **256 Kbps**.\n\nWE also advertises special access arrangements for certain educational and government websites. Examples include:\n\n- https://digital.gov.eg\n- https://mcit.gov.eg\n- https://tra.gov.eg\n- https://www.ekb.eg\n- https://maharatech.gov.eg\n\nThe exact behavior of these exemptions after quota exhaustion may vary.\n\nI would appreciate technical guidance on the following questions:\n\n1. How can users distinguish an account-wide bandwidth limit from traffic-specific throttling?\n2. What privacy-preserving tests could determine whether certain services retain higher speeds?\n3. Are there legitimate VPN or network optimizations that improve usability on a 256 Kbps connection?\n4. Are there existing open-source tools or research projects that investigate comparable ISP policies?\n\nI understand that a VPN cannot necessarily remove a hard account-level speed cap.\n\nMy goal is to understand the technical restrictions and identify practical, measurable improvements.\n\nFor personal safety reasons, I prefer to remain anonymous and ask that no personally identifying information be requested publicly.\n\nThank you for any technical insights or references.\n\n**"
+    },
     {
      "number": 129,
      "title": "Large scale blocking of TLS-based censorship circumvention tools in China",
@@ -43,37 +54,70 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7364,
+     "title": "VLESS: run multiplexing directly on transport",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T12:20:09Z",
+     "updated_at": "2026-11-13T01:35:28Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364",
+     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
+    },
+    {
+     "number": 5599,
+     "title": "TUN: Windows 下高负载时连接不稳定",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-01-23T19:44:26Z",
+     "updated_at": "2026-11-13T01:24:18Z",
+     "user": "KiGamji",
+     "url": "https://github.com/XTLS/Xray-core/issues/5599",
+     "body": "在 Windows 上使用 TUN 模式时，高带宽场景下（如 Speedtest）连接会在达到 10-15 Mbps 后卡住或断开。系统代理模式下一切正常。\n\n据我理解，gVisor 的 TCP Recovery 机制在 Windows 上会导致问题。禁用它后，之前无法加载的网站和应用完全恢复正常，Speedtest 时的卡顿和断连问题也解决了：\n\n```go\nif runtime.GOOS == \"windows\" {\n    rOpt := tcpip.TCPRecovery(0)\n    gStack.SetTransportProtocolOption(tcp.ProtocolNumber, &rOpt)\n}\n```\n\n**测试情况：**\n- Windows 11：已测试，修复后稳定运行\n- Linux：暂未测试\n- Android：v2rayNG 正常工作（可能 Android 不受此问题影响）\n\n请问我的方向对吗？"
+    },
+    {
      "number": 7372,
      "title": "Fix noise after udphop",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-11-10T22:20:53Z",
-     "updated_at": "2026-11-12T19:51:18Z",
+     "updated_at": "2026-11-12T23:52:00Z",
      "user": "FDeghy",
      "url": "https://github.com/XTLS/Xray-core/pull/7372",
      "body": "Fix noise emission when `noise` and `udphop` are used together.\n\nPreviously, noise state was keyed by the destination passed to `WriteTo`. udphop could replace that destination internally or switch the source socket without invalidating the noise state. Continuous outgoing traffic also refreshed the noise reset timeout, allowing repeated hops without another noise sequence.\n\n**Implementation**\n\n- Add shared `UDPPath` state through the existing finalmask dialer, containing the actual destination, a generation counter, and a mutex.\n- Increment the generation after a successful hop changes the local endpoint, destination IP, or destination port.\n- Have the noise wrapper clear its cached reset state when it observes a new generation. The next write emits noise before its payload, then resumes the existing reset behavior.\n- Serialize the complete masked write against hopping, keeping all noise packets, configured delays, and the associated payload on the same socket and destination.\n\nGeneration tracking also handles returning to a previously used endpoint. Failed hops retain the active path and generation; attempts that leave the endpoints unchanged do not trigger additional noise.\n\nBoth configured noise items and Lua scripts use the existing emission code. Mask ordering, socket deadline propagation, receive handling, and connection cleanup remain unchanged. The existing connection stays in place, preserving Hysteria continuity. No configuration fields are added.\n\n**Regression coverage**\n\n- Source-port-only, destination-port-only, destination-IP-only, and combined changes.\n- Continuous traffic, repeated writes on one path, and returning to a previous endpoint.\n- Unchanged endpoints and failed hops.\n- Concurrent hopping during delayed noise emission.\n- Configured items and Lua scripts, mask ordering, reset behavior, deadline propagation, and socket cleanup.\n\n**Verification**\n\n- Focused noise/udphop tests and race detection passed.\n- Finalmask and Hysteria package checks passed in short mode.\n- GitHub’s formatting/protobuf check passed after applying the repository formatter.\n- The full package run timed out in the separate Sudoku end-to-end harness; that run did not complete."
     },
     {
-     "number": 7390,
-     "title": "Add Hiddify multi platform app",
+     "number": 7391,
+     "title": "XHTTP: Synchronize QUIC test shutdown",
      "is_pr": true,
      "state": "open",
-     "created_at": "2026-11-12T17:53:17Z",
-     "updated_at": "2026-11-12T17:53:17Z",
-     "user": "hiddify-com",
-     "url": "https://github.com/XTLS/Xray-core/pull/7390",
-     "body": "We recently updated our core to be fully compatible with Xray Core. \nOur goal is to make things easier for everyone, especially non-expert users.\nSo i think it is a good time to be included in the apps"
+     "created_at": "2026-11-12T23:26:49Z",
+     "updated_at": "2026-11-12T23:35:34Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7391",
+     "body": "## Why\n\n`Test_ListenXHAndDial_QUIC` writes `serverClosed` from its server goroutine and reads it from the test goroutine. Sleeping for 100 ms after closing the client leaves those accesses unsynchronized. The Go race detector reports the read and write on clean `main` (`c4561418`).\n\n## Change\n\nSignal completion through a channel after the server handler closes its connection. Wait for the signal within the existing five-second test deadline. The patch changes only the test.\n\n## Verification\n\n- The standalone QUIC test passed 10 consecutive runs on Windows amd64 with Go 1.27.0.\n- With #7348 applied locally to address the independent TLS certificate race, `go test -race -timeout=90s -count=5 ./transport/internet/splithttp ./transport/internet/httpupgrade` passed. The draft targets `main` directly.\r\n"
     },
     {
      "number": 7389,
      "title": "TCP TLS traffic separation",
      "is_pr": false,
-     "state": "open",
+     "state": "closed",
      "created_at": "2026-11-12T17:27:29Z",
-     "updated_at": "2026-11-12T17:27:29Z",
+     "updated_at": "2026-11-12T20:20:23Z",
      "user": "salehMomtaz",
      "url": "https://github.com/XTLS/Xray-core/issues/7389",
      "body": "Thanks to rapid developement of XHTTP i could get use of all domestic cdns i could not use before becuase of lacking websocket and grpc, instead now reaching different combinations for upload/download stream.\nTurning one bi-directional connection in two separate uni-direction connections with different specifics helped in circumventing gfw.\ni believe implementing such separation for TCP+TLS is also beneficial and can help a lot. a lot of the times middle boxes create delays and problems like the INTERNAL_ERROR log.\nI think this can be much more stable than xhttp since we have seen flow control in tcp tls in https://github.com/radkesvat/WaterWall way before splithttp - half duplex connections\ni hope developers of the core consider this enhancement \ni used copilot to make sure such feature has not been requested before in any issue or discussion to prevent duplicate request. If there has been i apologize for the duplication."
+    },
+    {
+     "number": 7390,
+     "title": "Add Hiddify multi platform app",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-12T17:53:17Z",
+     "updated_at": "2026-11-12T19:58:06Z",
+     "user": "hiddify-com",
+     "url": "https://github.com/XTLS/Xray-core/pull/7390",
+     "body": "We recently updated our core to be fully compatible with Xray Core. \nOur goal is to make things easier for everyone, especially non-expert users.\nSo i think it is a good time to be included in the apps"
     },
     {
      "number": 7378,
@@ -184,17 +228,6 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7384",
      "body": "dup"
-    },
-    {
-     "number": 7364,
-     "title": "VLESS: Run client Mux directly on its transport",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-10T12:20:09Z",
-     "updated_at": "2026-11-12T04:16:44Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364",
-     "body": "Let's use #7355 to fix write interruption in both client and server Mux. #7359 solves the same problem with a different wrapper and removes the MutexWriter this proposal uses.\n\nFor VLESS, keep pool configuration and selection in the existing outbound handler. When VLESS is selected, the Mux factory opens a direct connection and passes frames straight through the VLESS codec. This removes two intermediate pipes and their copy loops. Other protocols keep the current Mux path.\n\nThe direct connection also needs to stop XDrive writes. If the ring is full and a write is waiting for space, stopping the connection interrupts that write. During a normal close, the peer still receives EOF.\n\nWe tested VLESS Mux against stock Xray v26.11.9 and reproduced the XDrive shutdown case with a full ring on local test storage."
     },
     {
      "number": 7383,
@@ -503,53 +536,117 @@
      "user": "kmbandods",
      "url": "https://github.com/XTLS/Xray-core/issues/7374",
      "body": "大佬，现在最新的v26.11.9 和 merlin clash的magic catling 2 无法连接上网。好像是mihomo内核，最新版v1.9.33，也还是不行。但是小火箭和v2rayn却可以连接上网。什么情况呢？怎么解决呢？只能在服务器端用老版本，那个三月份的版本。"
-    },
-    {
-     "number": 7359,
-     "title": "VLESS Multiplex (mux.cool): Replace MutexWriter with buf.BufferedWriter",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-09T12:51:05Z",
-     "updated_at": "2026-11-11T01:44:05Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7359",
-     "body": "两行完工的东西何苦呢("
-    },
-    {
-     "number": 7373,
-     "title": "Wait for log writers to close on shutdown",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-11T00:45:21Z",
-     "updated_at": "2026-11-11T00:45:21Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7373",
-     "body": "On Windows, an application that shuts down Xray and immediately renames its log file can get a sharing violation. `Close` signals the log worker, which releases the file later when it exits.\n\nWait for the worker to release the writer before returning from `Close`. Ignore messages received after shutdown and check for shutdown again when acquiring the worker permit. In `app/log`, detach both handlers before waiting so a worker can finish formatting a message that itself records a log. Keep `Start` and `Close` serialized.\n\nThe regressions hold a real file writer open during message formatting, rename the file as soon as `Close` returns, and check that a late message cannot create another writer. Both regressions fail on the previous implementation. The Windows run reproduces the sharing violation.\n\n`Close` can now wait for in-flight formatting and writes to finish. The message queue remains best effort.\n\nWindows and Linux each passed all 14 tests in `./common/log`, `./app/log`, and `./app/log/command`. The Linux run used `-race`. `go vet` passed for all three packages on both platforms, and the Windows main build passed.\n\nAI-assisted implementation and tests.\n"
-    },
-    {
-     "number": 7362,
-     "title": "Geodata: Retain successful asset updates when another asset fails",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-10T09:49:21Z",
-     "updated_at": "2026-11-11T00:36:53Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7362",
-     "body": "When a scheduled GeoIP/GeoSite update loses a configured category in one asset, keep successful updates to the other asset. For example, a bad GeoSite release should not prevent fresh GeoIP data from remaining installed on disk and in live matchers, including after the next restart.\n\nApply each already-downloaded asset independently. Commit it if the existing registries reload successfully. Otherwise restore only that asset, reload the restored files, retain the error, and continue to later assets. This preserves successful updates in either configured asset order. Stop if a swap, file rollback, or recovery reload fails; a backup-cleanup error does not roll back an already accepted update.\n\nEight synthetic HTTPS regression cases cover missing GeoSite/GeoIP/both categories and successful updates, in both asset orders. They independently check each file and each live matcher. The four partial-success cases fail on the previously submitted implementation.\n\nValidation:\n- Windows Go 1.27.3: all 66 tests in `./app/geodata ./common/geodata` pass, with no skips; scoped `go vet` and main build pass.\n- Linux Go 1.27.1 / CGO: the same 66 tests pass with `-race`, with no skips; scoped `go vet` and main build pass.\n- Repository format check passes on the exact Git source archive.\n- Existing tests use checksum-verified public CI GeoIP-lite/GeoSite assets from release 20261110012153; new update fixtures are synthetic and use a trusted local HTTPS test server.\n- The full repository suite and macOS runtime were not run locally.\n\nDownloads are still staged before any asset is changed. Recovery is per asset, including when a file is used by multiple registries; this does not promise per-registry partial acceptance of one shared file or global atomicity. The tradeoff is one full registry reload per accepted asset instead of one per bundle, plus recovery reloads for rejected updates.\n\nImplemented and tested with Codex assistance.\n"
-    },
-    {
-     "number": 7355,
-     "title": "VLESS Multiplex (mux.cool): MutexWriter passes Interrupt and Close through",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-09T08:10:01Z",
-     "updated_at": "2026-11-10T22:13:23Z",
-     "user": "Medium1992",
-     "url": "https://github.com/XTLS/Xray-core/pull/7355",
-     "body": "Since 5745dea2 `common.Interrupt(link.Writer)` in the mux client and server workers hits a `MutexWriter`, which embeds only `buf.Writer`, so it does nothing: a closed worker leaves its link open, and a write stuck on a peer that stopped reading never returns.\n`MutexWriter` now passes `Interrupt` and `Close` to the writer inside, without the lock; the tests fail on v26.11.9 and pass with this.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
     }
    ],
    "comments": [
+    {
+     "id": 6839400592,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T23:51:11Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6839400592",
+     "body": "> off-topic\r\n> \r\n> 我不是很了解伊朗，听说谷歌在你们那没有被封，所以很好奇你们翻墙是为了访问什么网站，是否有 geosite:gfw-iran @patterniha\r\n\r\ninstagram, X, telegram, youtube, whatsapp, ... . also for bypassing sanctions to access AI,...\r\nalso CDNs are now whitelisted (all upload packets dropped after about 20 packets for non-whitelist domains), so gfw-iran is meaningless."
+    },
+    {
+     "id": 6838977756,
+     "issue": 7348,
+     "issue_title": "TLS: Fix data race between certificate hot reload and handshakes",
+     "created_at": "2026-11-12T23:27:50Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7348#issuecomment-6838977756",
+     "body": "I tested `d6abd207` on top of `main` at `c4561418` with Go 1.27.0 on Windows amd64.\n\n- On clean `main`, the XHTTP TLS and QUIC tests both reported the certificate publication race. After applying this PR, that race was no longer reported in three runs of `go test -race -count=3 -run '^Test_ListenXHAndDial_(TLS|QUIC)$' ./transport/internet/splithttp`. The two certificate regression tests added here also passed five runs under `-race`.\n- The only remaining race in that XHTTP rerun was the QUIC test's shared `serverClosed` Boolean. I opened #7391 for that test-only fix. With both patches applied locally, the XHTTP and HTTP Upgrade suites passed five runs under `-race`.\n\nOne remaining issue is ownership of the protobuf certificate. [`setupOcspTicker`](https://github.com/XTLS/Xray-core/blob/d6abd20773188970f2c63a5dd2ce8a75f618ac5e/transport/internet/tls/config.go#L103-L138) still assigns the reloaded PEM to `entry.Certificate` and `entry.Key`. `entry` is the same object held in `Config.Certificate`. I reproduced the mutation by creating a TLS config with an initial key pair in memory and a different valid pair at the configured paths. After `GetCertificate` returned the replacement, the original protobuf entry contained the replacement PEM too. That leaves a potential race with another `GetTLSConfig` call on the same config, since building the root pool also reads `entry.Certificate`.\n\nCould the refresh goroutine keep its own copy of the protobuf certificate? My local prototype passes the reload check with both atomic publication and a goroutine-owned copy. In this PR, a small follow-up could clone the entry before starting the ticker and have the key-pair loader read the same copy.\r\n"
+    },
+    {
+     "id": 6836073996,
+     "issue": 7364,
+     "issue_title": "VLESS: run multiplexing directly on transport",
+     "created_at": "2026-11-12T21:12:09Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6836073996",
+     "body": "RPRX, I reworked Mux inside VLESS.\n\nI removed the intermediate pipes from the VLESS Mux and Reverse paths. On the client, Mux passes data directly into the prepared VLESS connection. On the server, each stream is passed to the dispatcher through `DispatchLink` with its read and write endpoints already prepared. The existing VLESS codec, including Vision, is reused.\n\nChanges by file:\n\n- `multiplex/connection.go` and `vless/outbound/outbound.go`: direct access to the VLESS connection, decoded reads, error propagation, and connection shutdown.\n- `multiplex/server.go` and the new `multiplex/xudp.go`: shared data handling for ordinary streams and XUDP. Data belongs to the flow, and the XUDP association survives reconnection. One emitter owns both data and stream completion.\n- `multiplex/session.go`: removed duplicate server completion state. An old stream's completion cannot remove a newer binding with the same ID.\n- Removed `multiplex/frame_sender.go`. Client sending now lives in `carrier.go`; server sending belongs to the flow emitter.\n- In `carrier.go`, the sender combines **at most two already-ready batches**. It does not wait for another batch. Queue capacity and the four-frame encoding batch are unchanged.\n- `client.go` and `reverse/portal.go`: updated connection opening and reuse, and Reverse control-message handling.\n- `reader.go`: TCP data is still delivered as it arrives, while UDP packets remain whole. Data for a closed stream is drained to the end of its frame.\n- `common/buf/writer.go`: added a way to invoke the existing write operation while its lock is already held. No additional lock is introduced.\n\nTemporary storage for slow writes and UDP-association retention remains inside the flow handler.\n\nComparison with **original Xray at `f0820585`**:\n\n- **One TCP stream, 512 MiB, and a parallel small latency probe, six rounds:** median throughput increased from **168.1 to 193.9 MiB/s**. Combined client/server CPU time for the same verified data volume decreased by about **5.3%**. Median loaded p95 latency was nearly unchanged. One run recorded a **307 ms** maximum latency.\n- **Eight TCP streams, 1 GiB total, and a latency probe, six rounds:** throughput **253.3 → 332.0 MiB/s**, CPU time about **−6.1%**, and loaded p95 latency **28.8 → 21.3 ms**.\n- **4 GiB upload:** I separately compared client sending with the same server for the two reworked-client cases. Combining ready batches improved throughput over the fixed final 2 GiB in all six paired runs, with a **3.95%** median increase. In this series, the new client was close to the original: **535.6 → 539.0 MiB/s**.\n- **UDP through the real SOCKS → VLESS → server client path:** 100,000 packets at each of 64 and 1,200 bytes, with two opposite execution orders. Throughput was close to the original; combined CPU time for the two Xray processes was lower by about **2.6% and 7.3%**, respectively. Every packet and destination was validated. For 64-byte packets, individual maximum latencies were higher than the original.\n- **Slow link:** transmission was byte-limited to 10 MiB/s in each direction. With 256 MiB of data, all variants completed and collected enough probe samples. Latency varied between rounds; no consistent benefit or penalty was established here.\n\nThe new commit changes **12 runtime Go files, +689/−450 lines against the previous PR head `05fc0e3f`**. Across the full PR, handwritten runtime Go code is **+2,226/−2,207 lines against the original, net +19**.\n\nI am also considering removing the pipes from the VMess adapter."
+    },
+    {
+     "id": 6835931056,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T21:05:45Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6835931056",
+     "body": "off-topic\r\n\r\n我不是很了解伊朗，听说谷歌在你们那没有被封，所以很好奇你们翻墙是为了访问什么网站，是否有 geosite:gfw-iran @patterniha "
+    },
+    {
+     "id": 6835356130,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T20:40:05Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6835356130",
+     "body": "我关的点是因为这方案没起效果？就这种只是实现 udphop+noise 我有几百种方式，但你有没有考虑过其他 mask 的搭配方式，当初设计的架构就不允许出现这种情况，~早知道当初老老实实搞个 hy2 就好了~"
+    },
+    {
+     "id": 6835189890,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T20:32:39Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6835189890",
+     "body": "`It's okay, you can reopen it, but I hope you can handle all finalmask-related issues in the future`\r\n\r\n~I didn't open the PR because the code is correct. I opened it because the issue it addresses is valid.~\r\n\r\nCurrently, UDP follows a whitelist-based pattern in Iran, so a random pattern like Salamander won't work.\r\n\r\nAlso, currently by using finalmask-udp-header-custom and appending a white header (for example SIP header), we can bypass the firewall."
+    },
+    {
+     "id": 6835019118,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T20:25:04Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6835019118",
+     "body": "反正谁要实现这个\"开创性\"的 udphop + noise 以后整个 finalmask 都可以给他了，有这个实力，另外我说的嵌套 dialer 就是动的架构，就是细节要处理一下"
+    },
+    {
+     "id": 6834915434,
+     "issue": 7389,
+     "issue_title": "TCP TLS traffic separation",
+     "created_at": "2026-11-12T20:20:23Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7389#issuecomment-6834915434",
+     "body": "没看懂你要啥\n\n~~WaterWall 基本是计划中的 NEXT 架构，但对 Xray 来说目前重心不是这个，且过于灵活的话那些安全/实践限制、优化啥的不好搞，明年再做吧~~"
+    },
+    {
+     "id": 6834729921,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T20:11:48Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6834729921",
+     "body": "~~不太对，如果是改 noise 的代码的话，其它很多 UDP mask 都得改~~\r\n\r\n我觉得该这么设计：如果 udphop 在先，对后面的 noise 等 mask 来说就是新的 UDP，reapply，如果 noise 在先就是现在这样\r\n\r\n这样才符合直觉，具体代码上不以改某个 mask 为主，而是以改 finalmask 的架构为主，具体的 UDP mask 若要改则只是附带"
+    },
+    {
+     "id": 6834614567,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T20:06:33Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6834614567",
+     "body": "noise 这种纯客户端的怎么搞都行，我上面的评价也带了方案，但我最近完全不想看代码，~能在这里把 finalmask 交出去也不错~"
+    },
+    {
+     "id": 6834543694,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-12T20:03:22Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6834543694",
+     "body": "感觉应该只需要改 noise 的代码？"
+    },
+    {
+     "id": 6834426120,
+     "issue": 7390,
+     "issue_title": "Add Hiddify multi platform app",
+     "created_at": "2026-11-12T19:58:06Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7390#issuecomment-6834426120",
+     "body": "只收录使用 Xray 内核的客户端"
+    },
     {
      "id": 6834274991,
      "issue": 7372,
@@ -706,7 +803,7 @@
     {
      "id": 6812285253,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-12T02:08:16Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6812285253",
@@ -751,7 +848,7 @@
     {
      "id": 6810246889,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-12T00:02:25Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6810246889",
@@ -778,7 +875,7 @@
     {
      "id": 6810128991,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T23:55:04Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6810128991",
@@ -877,7 +974,7 @@
     {
      "id": 6807970937,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T21:55:22Z",
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6807970937",
@@ -913,7 +1010,7 @@
     {
      "id": 6803300284,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T17:56:39Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6803300284",
@@ -922,7 +1019,7 @@
     {
      "id": 6802710165,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T17:29:33Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6802710165",
@@ -1147,7 +1244,7 @@
     {
      "id": 6794936077,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T11:45:42Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6794936077",
@@ -1183,7 +1280,7 @@
     {
      "id": 6794479150,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T11:22:19Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6794479150",
@@ -1273,7 +1370,7 @@
     {
      "id": 6793233401,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T10:20:05Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6793233401",
@@ -1282,7 +1379,7 @@
     {
      "id": 6793097763,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T10:13:16Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6793097763",
@@ -1309,7 +1406,7 @@
     {
      "id": 6791683433,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T09:03:05Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6791683433",
@@ -1327,7 +1424,7 @@
     {
      "id": 6791562791,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T08:56:42Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6791562791",
@@ -1336,7 +1433,7 @@
     {
      "id": 6791513894,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T08:54:04Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6791513894",
@@ -1345,7 +1442,7 @@
     {
      "id": 6791387112,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T08:47:26Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6791387112",
@@ -1552,34 +1649,27 @@
     {
      "id": 6784892866,
      "issue": 7364,
-     "issue_title": "VLESS: Run client Mux directly on its transport",
+     "issue_title": "VLESS: run multiplexing directly on transport",
      "created_at": "2026-11-11T02:07:43Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6784892866",
      "body": "@svlavr rebase main\r\n\r\n https://github.com/XTLS/Xray-core/pull/7355#issuecomment-6739539943 的意思是把 Mux 的代码移到 `proxy/vless/multiplex` 文件夹，然后出入站、reverse 都直接调用它\r\n\r\n其它出站不给开 mux.cool 了，入站的话就 VMess 留一个兼容吧，且等新 Mux 稳定后出站不需要 `common/xudp/xudp.go` 了"
-    },
-    {
-     "id": 6783466548,
-     "issue": 7359,
-     "issue_title": "VLESS Multiplex (mux.cool): Replace MutexWriter with buf.BufferedWriter",
-     "created_at": "2026-11-11T00:42:40Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7359#issuecomment-6783466548",
-     "body": "采用这个 PR 吧\r\n\r\n---\r\n\r\n想了一下 pipe 的设计逻辑应该是 Close 的话仍能把里面缓存的数据取出来，Interrupt 的话就是直接清空缓存\r\n\r\n所以 https://github.com/XTLS/Xray-core/pull/7355#issuecomment-6738888441 应该还有一种情况是，write to pipe 没卡住但从应用程序 read 不出来了所以不继续 copy 而是返回了，就没人管 write to pipe 这侧了，此时再叠上 read from pipe 这侧早没了，如果 pipe 里有一些 buf，就没人把内存放回 pool 了\r\n\r\n~~大概就是这样，不确定好不好触发，还是太烧脑了，尽快改架构吧~~"
-    },
-    {
-     "id": 6779232764,
-     "issue": 7365,
-     "issue_title": "outbound: preserve explicit mux concurrency",
-     "created_at": "2026-11-10T21:04:56Z",
-     "user": "WaveMeUp",
-     "url": "https://github.com/XTLS/Xray-core/pull/7365#issuecomment-6779232764",
-     "body": "> 那也不是这样写啊。。\r\n\r\nmerge this, come on, what are you doing?"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 986,
+     "title": "No local network access",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2024-08-19T02:04:22Z",
+     "updated_at": "2026-11-12T23:22:26Z",
+     "user": "alexbalkan",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/986",
+     "body": "**Describe the bug**\r\nWhen connected, access to local network resources is lost. Including I have a local secure dns\r\nToday I installed this miracle and started testing it. Out of 10 connections, the local network was not blocked once, at the moment when I started writing about the problem).\r\n\r\n**To Reproduce**\r\n\r\n**Expected behavior**\r\n\r\nAdd local networks exception\r\n\r\n**Log files**\r\n\r\n**Screenshots**\r\n\r\n\r\n**Desktop (please complete the following information):**\r\n \r\nDesktop\r\n- OS:  Windows 10\r\n - Version 22H2 Build 19045.4780\r\n\r\n**Server (please complete the following information):**\r\n - OS:  Debian 10\r\n\r\n**Additional context**\r\nPlease forgive me for my English.\r\nThere is a very big problem. Once connected, I will lose access to all my local network management services. Yes, I saw separate connections of networks. Isn’t it better to do it according \r\nto Feng Shui and add the exclusion of local network addresses? Another problem, on my network I use my own secure DNS servers, after connecting to the VPN they also became unavailable.\r\n"
+    },
     {
      "number": 1299,
      "title": "Memory leaks when using the VPN for prolonged periods of time (Linux)",
@@ -1832,53 +1922,18 @@
      "user": "bogser7",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2863",
      "body": "**Describe the bug**\nAmnezia VPN client fails with \"ErrorCode 203. Server error: Docker failed\" during AmneziaWG protocol installation on Debian 13 server until I manually install docker to the server according to the official docker's manual (https://docs.docker.com/engine/install/debian/).\n\n**To Reproduce**\n1. Create a fresh Debian 13 VPS.\n2. In Amnezia VPN client choose \"Self-hosted VPN\" in Connection tab, enter the VPS's IP address, User name, Password, then Continue and Continue.\n3. See the error.\n\n**Log files**\nAmnezia VPN client's log file: [AmneziaVPN.log](https://github.com/user-attachments/files/30288979/AmneziaVPN.log).\n\n**Desktop (please complete the following information):**\n - OS: Windows 10\n\n**Server (please complete the following information):**\n - OS: Debian 13\n\n**Additional context**\nSeems the problem is that the Amnezia VPN client's docker installation script is obsolete for Debian 13. As I see from the log file the client uses \"sudo /usr/bin/apt-get -yq install docker.io\" command to install the docker and the next \"docker --version\" fails with \"bash: line 24: docker: command not found\". The installation command is not valid for Debian 13, according to https://docs.docker.com/engine/install/debian/ docker should be installed with other batch of commands in case of Debian 13."
-    },
-    {
-     "number": 3418,
-     "title": "[Linux] Split tunneling doesn't work",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-05T22:47:55Z",
-     "updated_at": "2026-11-10T23:39:01Z",
-     "user": "szekelyisz",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3418",
-     "body": "**Describe the bug**\nNo matter what I set split tunneling to, my traffic always goes through the VPN.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Go to Split tunneling settings\n2. Select Via VPN and leave the list empty\n3. Check your external IP address\n4. Disconnect, select Directly, leave list empty\n5. Check your external IP address\n\n**Expected behavior**\nThose two checks above should have showed different IP addresses, but they both show the VPN server's address. You can try with adding *.nonexistent to the list, same results.\n\n**Desktop (please complete the following information):**\n - OS: Debian 13\n - AmneziaVPN app version: 5.1.0.6 (Nov  2 2026, ac175c8)\n\n**Server (please complete the following information):**\n - Self hosted\n - OS: Debian 13\n"
-    },
-    {
-     "number": 3412,
-     "title": "[BUG] Self-hosted scripts does not invoke when default shell is not sh/bash",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-05T11:29:41Z",
-     "updated_at": "2026-11-10T22:03:44Z",
-     "user": "stck",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3412",
-     "body": "**Describe the bug**\nServer running ubuntu with fish rejects check_server_is_busy.sh since it cannot use syntax LOCK_FILE='/var/...' since it requires `set` in front of command. \n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Set default shell to fish\n2. Run automatic installation\n3. Script hangs after ~5 seconds saying \"Server is busy installing other software\"\n4. After multiple tries it rejects with \"Package manager error\"\n\n**Expected behavior**\nIf scripts are written in bash/sh they should have at least shebang OR ssh connection must use exec bash.\n\n**Log files**\n```\nfish: Unsupported use of '='. In fish, please use 'set LOCK_FILE \"/var/lib/dpkg/lock-frontend\"'.\nif which apt-get > /dev/null 2>&1 || command -v apt-get > /dev/null 2>&1; then LOCK_CMD=\"fuser\"; LOCK_FILE=\"/var/lib/dpkg/lock-frontend\";\\\n```\n\n**Server (please complete the following information):**\n - OS: Ubuntu 24.04\n\n**Additional context**\nFor fish users it might be helpful to temporary append\n```\nif not status is-interactive\n    exec bash\nend\n```\nto a `~/.config/fish/config.fish` of a user that credentials used to connect\n"
-    },
-    {
-     "number": 3435,
-     "title": "Connectivity with Google-services is partially broken (with split tunelling)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-08T11:17:36Z",
-     "updated_at": "2026-11-10T21:39:42Z",
-     "user": "Anton-V-K",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3435",
-     "body": "**Describe the bug**\nConnectivity with Google-services is partially broken when using Amnezia client on Windows with split tunelling.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Setup Amnezia on Windows with split tunelling: exclude the browser (the issue happens with Brave, Firefox, Chromium, Vivaldi)\n2. Connect (Germany, AmneziaWG or VLESS)\n3. Go to https://drive.google.com/ - it will open fine, however in 5-10 seconds the site will show the warning saying you're not connected to Internet, and the site becomes inaccessible\n\n**Expected behavior**\nGoogle Drive site should work fine, when the browser isn't going through the VPN tunnel\n\n**Desktop:**\n - OS: Windows 10 21H2\n - App Version: 5.1.0.6\n\n**Additional context**\nGoogle Drive site works fine when Amnezia isn't connected.\nReinstalling the client doesn't help even with rebooting."
-    },
-    {
-     "number": 2731,
-     "title": "fix: architecture hardening, thread-safety, ipc memory leaks, and native debian packaging",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-06-13T23:23:23Z",
-     "updated_at": "2026-11-10T20:34:57Z",
-     "user": "lmdeuser",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2731",
-     "body": "Comprehensive architectural hardening fixing critical IPC leaks, QEventLoop deadlocks during SSH, UI thread blocking, Thread-Safety in Settings, and implementing compliant native Debian package deployment (CPack DEB) with systemd scripts."
     }
    ],
    "comments": [
+    {
+     "id": 6838850239,
+     "issue": 986,
+     "issue_title": "No local network access",
+     "created_at": "2026-11-12T23:22:26Z",
+     "user": "kodidono",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/986#issuecomment-6838850239",
+     "body": "I would like to request a dedicated **\"Allow Local Network Access\"** option in the AmneziaVPN client, especially for Windows.\n\nMy use case is that I need to access devices on my local network (LAN) while staying connected to the VPN.\n\nFor example, I use YoloLiv Compose to control my YoloCam S3 camera over the local network. When AmneziaVPN is connected, the application cannot properly discover or communicate with the camera.\n\nIt would be very useful to have a simple toggle in the connection settings:\n\n**Allow Local Network Access: ON / OFF**\n\nExpected behavior:\n- Allow access to local IPv4 and IPv6 networks (192.168.x.x, 10.x.x.x, 172.16.x.x, etc.).\n- Keep all regular internet traffic routed through the VPN.\n- Preserve Kill Switch functionality while allowing local LAN communication.\n- Automatically exclude local network traffic from the VPN tunnel without requiring users to manually configure split tunneling or add individual IP ranges.\n\nThis feature would be especially useful for users who need to access network cameras, NAS devices, printers, routers, and other local network services while using a VPN.\n\nCurrently, I have to use another WireGuard client because it provides better control over local network access and Kill Switch behavior.\n\nI would really appreciate it if this functionality could be considered for a future release.\n"
+    },
     {
      "id": 6830178954,
      "issue": 1299,
@@ -2103,65 +2158,22 @@
      "user": "bogser7",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2863#issuecomment-6784949681",
      "body": "Update: The current Amnezia VPN client 5.1.0.6 does not have the issue with Debian 13 (for clarity, the version on which the issue was reproduced is 4.8.21.0)."
-    },
-    {
-     "id": 6782361557,
-     "issue": 3418,
-     "issue_title": "[Linux] Split tunneling doesn't work",
-     "created_at": "2026-11-10T23:39:01Z",
-     "user": "szekelyisz",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3418#issuecomment-6782361557",
-     "body": "In the meantime I discovered that it might not support wildcard URLs and hostnames.\n\nAlso if you add your VPN range to the Via VPN list, then only those addresses go into the tunnel. This doesn't change the fact that an empty list in this case should route no addresses through the tunnel, but indeed it routes everything so this is still a bug."
-    },
-    {
-     "id": 6782257372,
-     "issue": 3418,
-     "issue_title": "[Linux] Split tunneling doesn't work",
-     "created_at": "2026-11-10T23:33:12Z",
-     "user": "grnzucc",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3418#issuecomment-6782257372",
-     "body": "I confirm the bug.\nSelf hosted, Ubuntu 26.04.1, AmneziaVPN app version: 5.1.0.6 (Nov  2 2026, ac175c8)"
-    },
-    {
-     "id": 6780496018,
-     "issue": 3412,
-     "issue_title": "[BUG] Self-hosted scripts does not invoke when default shell is not sh/bash",
-     "created_at": "2026-11-10T22:03:44Z",
-     "user": "arty-name",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3412#issuecomment-6780496018",
-     "body": "This is likely a duplicate of  #2013 "
-    },
-    {
-     "id": 6780017346,
-     "issue": 3418,
-     "issue_title": "[Linux] Split tunneling doesn't work",
-     "created_at": "2026-11-10T21:42:08Z",
-     "user": "airseliverstov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3418#issuecomment-6780017346",
-     "body": "Think my bug the same #3449.\nBut in my case self hosted - work, but premium - not."
-    },
-    {
-     "id": 6779965992,
-     "issue": 3435,
-     "issue_title": "Connectivity with Google-services is partially broken (with split tunelling)",
-     "created_at": "2026-11-10T21:39:42Z",
-     "user": "airseliverstov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3435#issuecomment-6779965992",
-     "body": "Think my bugt the same #3449 "
-    },
-    {
-     "id": 6779890333,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-10T21:36:02Z",
-     "user": "airseliverstov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6779890333",
-     "body": "Столкнулся с тем же в на хостинге в Нидерландах."
     }
    ]
   },
   "apernet/hysteria": {
    "issues": [
+    {
+     "number": 1722,
+     "title": "能否在HTTP 验证的 JSON 载荷中添加用户在线数量",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T01:00:52Z",
+     "updated_at": "2026-11-13T01:00:52Z",
+     "user": "CrimsonBerry",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1722",
+     "body": "**你的功能请求是否与某个问题有关？**\n无\n\n**描述你希望的解决方案**\n可以作为一个可选特性，当验证信息与用户名一一对应时启用\n原\n```\n{\n  \"addr\": \"123.123.123.123:44556\", \n  \"auth\": \"something_something\", \n  \"tx\": 123456 \n}\n```\n新 \n```\n{\n  \"addr\": \"123.123.123.123:44556\", \n  \"auth\": \"something_something\", \n  \"tx\": 123456,\n  \"online\": 5\n}\n```\n\n**有没有其他替代方案**\n无\n\n**额外信息**\n无"
+    },
     {
      "number": 1721,
      "title": "支持所有CONFIG相关的环境变量 （例如：HYSTERIA_LISTEN）",
@@ -2183,17 +2195,6 @@
      "user": "feenn",
      "url": "https://github.com/HyNetworks/hysteria/issues/843",
      "body": "**Is your feature request related to a problem? Please describe.**\r\nNo\r\n\r\n**Describe the solution you'd like**\r\nTo integrate Hysteria2 into other programs and capture its output using controls such as Textarea, a command-line option is needed to disable Hysteria2's colored output.\r\n"
-    },
-    {
-     "number": 1720,
-     "title": "feat(acl): switch ACL engine to expr",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-09T23:56:51Z",
-     "updated_at": "2026-11-10T22:00:15Z",
-     "user": "tobyxdd",
-     "url": "https://github.com/HyNetworks/hysteria/pull/1720",
-     "body": "Replaces the ACL engine with one based on [expr](https://expr-lang.org/), so rules can match on more than the destination. The main use case is routing by authentication ID:\n\n```yaml\nacl:\n  rules:\n    - outbound: alice_exit\n      match: auth.id == \"alice\"\n    - outbound: reject\n      match: geoip(\"cn\") || cidr(\"10.0.0.0/8\", client.ip)\n    - outbound: default\n      match: dst.port == 53 && cidr(\"8.8.8.8\")\n      hijack: 1.1.1.1\n    - legacy: reject(geosite:category-ads-all)\n    - legacyFile: /etc/hysteria/acl.txt\n    - outbound: direct\n```\n\n- New `acl.rules` / `acl.rulesFile` (YAML list). Rules see `proto`, `dst.{host,port,ipv4,ipv6}`, `auth.id` and `client.{ip,port}`, plus `domain`, `suffix`, `cidr`, `geoip`, `geosite` and `legacy` matchers. Called with one argument they match the destination like before; with two, an explicit value (e.g. `client.ip`). Typos, non-boolean rules and unknown GeoIP/GeoSite names fail at load time\n- Legacy `acl.file` / `acl.inline` keep working and are translated to expr internally. Legacy lines can also be mixed into `acl.rules` via `legacy` / `legacyFile` entries, so you can add a rule above an existing list without converting it\n- `hysteria acl translate` prints the legacy rules as `acl.rules` YAML; `hysteria acl test -c server.yaml [--auth ID] [--client IP] [--proto udp] host:port` shows which rule and outbound a request would use, without connecting\n- The match cache key only includes auth ID / client address when a rule uses them, so legacy rulesets cache exactly as before\n\n**Breaking changes**\n- `server.Outbound` methods now take a `*server.RequestInfo` (auth ID and client address) as the first argument. This affects programs that embed core\n- Legacy port ranges starting at 0 (e.g. `udp/0-100`, `tcp/0`) used to match every port; they now match only the given range\n\n**Performance** (100 rules, no GeoIP/GeoSite)\n\n| | Old engine | New engine |\n|---|---|---|\n| Cache hit | 184 ns | 114 ns |\n| Cache miss (no rule matches) | 2.9 µs | 8.4 µs |\n\nMisses cost about 3× more because expr allocates an argument list per function call. A miss happens once per new destination (up to the 1024-entry cache), and is small next to the DNS lookup every request already does when ACL is enabled. Hits are faster because the cache key is now a struct instead of a formatted string.\n\n**Testing**\n- Every existing compile test runs against both the old compiler (kept in a test file for now) and the translated rules. A comparison test checks 30 legacy rule types against ~700 requests and requires identical results except the port-0 fix. A fuzzer found no mismatches in ~850k inputs\n- Integration test checks the auth ID and client address reach the outbound for TCP, the first UDP packet, and later UDP destinations\n- End to end with two users: the same destination is rejected for one and allowed for the other\n"
     }
    ],
    "comments": [

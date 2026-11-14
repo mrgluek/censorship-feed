@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-14T10:24:32Z",
- "since": "2026-11-12T10:24:32Z",
+ "generated_at": "2026-11-14T17:59:58Z",
+ "since": "2026-11-12T17:59:58Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -10,7 +10,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-14T05:44:12Z",
-     "updated_at": "2026-11-14T05:44:12Z",
+     "updated_at": "2026-11-14T14:39:29Z",
      "user": "n-yarvex",
      "url": "https://github.com/net4people/bbs/issues/683",
      "body": "Hello all,\n\nI would like to share a small project and ask for feedback from people who know this area better than I do. Nakis is a SOCKS5-in, TLS-tunnel-out proxy written in Go. Its main goal is transfer efficiency: get a ready tunnel to the application with as little waiting as possible, and keep per-write overhead low. Resistance to DPI was a secondary concern. I have not tested it against any real censor, so please read the DPI-related parts as hypotheses.\n\nRepo: https://github.com/n-yarvex/nakis (MIT). The wire format and notes on the reference implementation are in doc/SPEC.md.\n\n## Where the waiting goes\n\nMost browser sessions are short, so the cost is dominated by setting up a tunnel: TCP, TLS, then whatever authentication the protocol adds. Nakis tries to take that off the critical path.\n\n**Pre-connected pool.** The client keeps tunnels that have already finished the TLS handshake and authentication. A new session takes one from the pool and starts sending right away. This is always on, because turning it off could only make things slower.\n\n**Reuse.** When a session ends, each side sends a zero-length frame (called NAP in the spec) for its own direction. Once both have been seen, no error occurred, and the tunnel has not used up its lifespan, it goes back to the pool and the next session reuses it without a new handshake. Each tunnel draws its own lifespan: a number of sessions (by default between 4 and 8) and a byte budget (log-uniform between 8 and 256 MiB), so there is no fixed \"Nth session\" or \"Nth byte\" boundary.\n\n**Racing when the pool is empty.** The client dials several candidate addresses: the first two immediately, the rest staggered by 50 ms. The first to finish the handshake serves the session. The others are not thrown away; they go into the pool. The idea is mostly for lossy links and servers with several addresses, where one slow path should not stall everything.\n\n## Write coalescing\n\nMany proxies write each application read as its own frame. Nakis puts a queue (a \"Box\") in front of the tunnel and decides when to flush (\"Gate\"). One frame is one Write, which under TLS ends up in one record.\n\n- If the queue is empty and the last data arrived at least 40 µs ago, the chunk is sent immediately. This is meant to keep interactive small writes from being delayed.\n- Otherwise chunks queue up and are packed greedily into one frame, up to `send_pack`. A chunk is never split; what does not fit waits for the next frame.\n- The queue is flushed when it reaches `send_pack`, or comes within `send_tail` bytes (default 512) of it.\n- If it is not full, a 250 µs timer runs. If more data arrived in the meantime, it waits another tick, up to `send_quiet` x 4 ticks. With `send_quiet=4` that means at most about 4 ms of merging while data keeps arriving, and at most 250 µs once it stops.\n- Large reads (32766 bytes or more) bypass the queue after flushing what is already queued, to keep ordering.\n- The server has a second layer: small upstream frames are merged into writes of up to `merge_pack` (default 20 KiB) towards the target. When the queue reaches `max_queue`, the server stops reading the tunnel and TCP backpressure slows the client.\n\nThe trade-off is plain: under sustained small writes, latency can rise by up to `send_quiet` milliseconds in exchange for fewer, larger records.\n\n## Shaping the first packets\n\nThe first few packets of a session (up to eight per direction) get a randomly drawn target size, per tunnel, per session, per direction. The target is reached by coalescing application data first. Padding (a frame with length 0xFFFF) is only used if the data has not filled the target after 2 ms, so this does not work like a conventional padding scheme. For the first packet only, that wait is an added latency of up to 2 ms. The plan also looks at the destination port: for ports that usually carry TLS (443 and similar), it covers more packets and draws larger ones more often, on the guess that a TLS handshake is nested insi"
@@ -39,6 +39,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6878985233,
+     "issue": 683,
+     "issue_title": "Nakis: a TLS tunnel proxy built around connection reuse and write coalescing (efficiency first, circumvention effect unverified)",
+     "created_at": "2026-11-14T14:39:29Z",
+     "user": "therealtunge",
+     "url": "https://github.com/net4people/bbs/issues/683#issuecomment-6878985233",
+     "body": "@wkrp another vibe-coded project\ndo people not read the issues"
+    },
     {
      "id": 6858300292,
      "issue": 158,
@@ -77,6 +86,655 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 6769,
+     "title": "XMC finalmask: Make startup `paddings` configurable (`direction`, `length` and `delay`)",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-09-14T13:58:44Z",
+     "updated_at": "2026-11-14T17:50:13Z",
+     "user": "spr334-a",
+     "url": "https://github.com/XTLS/Xray-core/pull/6769",
+     "body": "```markdown\r\nFollow-up to #6487, covering the startup-padding part of #6732.\r\n\r\nAdds an optional `padding` array to XMC settings with configurable direction per turn:\r\n\r\n```json\r\n{\r\n  \"padding\": [\r\n    {\"length\": \"44\", \"direction\": \"c2s\"},\r\n    {\"length\": \"64-128\", \"direction\": \"s2c\"},\r\n    {\"length\": \"25\", \"direction\": \"c2s\"},\r\n    {\"length\": \"32768-49152\", \"direction\": \"s2c\"}\r\n  ]\r\n}\r\n```\r\n\r\nEach entry specifies a fixed length or inclusive range, plus direction (`\"c2s\"` for client-to-server or `\"s2c\"` for server-to-client; full names `\"client-to-server\"` and `\"server-to-client\"` are also accepted). Turns can be in any order and direction, including consecutive same-direction turns. Both endpoints need the same array. The first length includes Login Acknowledged's two bytes; invalid ranges and directions are rejected during config loading and connection setup.\r\n\r\nOmitting the `padding` field entirely preserves the existing 26.1.2 preset. Custom turns have no intentional delays. Data framing, keep-alives, and mask ordering are unchanged. No new dependency or wire-format change.\r\n\r\nThis deliberately leaves profile registries, version negotiation, and ongoing traffic scheduling for separate discussion. In particular, existing length checks are not a configuration-fingerprint handshake and do not detect every endpoint mismatch; the documentation calls this out.\r\n\r\nTests cover range validation, direction validation, prefix and VarInt boundaries, default-preset preservation, and encrypted bidirectional round trips with single, odd, and even turn counts.\r\n\r\nChecked on Windows with Go 1.27.0:\r\n\r\n```text\r\ngo test -count=20 ./transport/internet/finalmask/xmc\r\ngo test -race -count=1 ./transport/internet/finalmask/xmc\r\ngo test -count=1 ./infra/conf\r\ngo test -count=1 ./transport/internet/finalmask/...\r\ngo vet ./transport/internet/finalmask/...\r\ngo build ./main\r\ngo run ./infra/vformat/main.go -mode check -pwd ./\r\n```\r\n\r\n`go vet ./infra/conf` reports existing unreachable code at `infra/conf/xray.go:606`, also reproduced on the base commit."
+    },
+    {
+     "number": 6668,
+     "title": "Extend BitTorrent sniffer",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-08-23T12:12:05Z",
+     "updated_at": "2026-11-14T17:40:24Z",
+     "user": "MakostaDev",
+     "url": "https://github.com/XTLS/Xray-core/pull/6668",
+     "body": "Currently, the BitTorrent sniffer can only detect the BitTorrent Handshake and uTP (uTP is currently broken, but PR #6667 fixes it).\r\n\r\nI decided to add detection for several protocols from the BitTorrent family:\r\n\r\n- UDP Tracker ([BEP15](https://www.bittorrent.org/beps/bep_0015.html))\r\n- DHT ([BEP5](https://www.bittorrent.org/beps/bep_0005.html) & [BEP42](https://www.bittorrent.org/beps/bep_0042.html))\r\n- LSD ([BEP14](https://www.bittorrent.org/beps/bep_0014.html))\r\n\r\nAlso `string(b[1:20])` in `SniffBittorrent()` causes an allocation. It was replaced with `bytes.HasPrefix`.\r\n\r\nI tested this using Wireshark and BitComet/qBittorrent"
+    },
+    {
+     "number": 7404,
+     "title": "Routing: add userRoute matching and opt-in VMess UUID routing",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-14T16:04:51Z",
+     "updated_at": "2026-11-14T16:44:51Z",
+     "user": "ILYAGVC",
+     "url": "https://github.com/XTLS/Xray-core/pull/7404",
+     "body": "Allow a VMess client to select a server-side route by changing UUID bytes 7 and 8 (the third UUID group), while keeping the registered server account unchanged. Add `userRoute` as the shared routing matcher for VLESS, VMess and the existing Hysteria route value.\n\n## Behavior and compatibility\n\n- Existing `vlessRoute` rules retain their original semantics, including a value of zero for VMess. When both rule fields are present, `userRoute` takes precedence.\n- VMess UUID route selection is an **opt-in protocol extension**. Both peers must support it and set `userRoute: true` on their VMess account. For example, a client UUID with third group `0002` selects `routing.rules[].userRoute: 2` without changing the server UUID.\n- With the account flag omitted or false, VMess retains full-UUID authentication and its existing wire format. The shared matcher can still read the registered account's route bytes in this mode.\n- Existing Go routing contexts and Protobuf field numbers remain compatible. The shared value is propagated through routing, DNS wrappers, Lua and the routing API. The README documents configuration, precedence and reconnection requirements.\n\n## VMess extension\n\nDerive credentials from the UUID with bytes 7 and 8 zeroed, then domain-separate the command key using the existing VMess AEAD `KDF16` with path `\"VMess User Route v1\"`. Store the big-endian route in the first two padding bytes of the authenticated request header, use reserved byte 36 as extension version 1, and retain the existing checksum, AEAD and replay checks.\n\nReject unsupported extension versions, short padding and duplicate route identities. Registering a rejected duplicate leaves the existing user and email registry intact. Accounts in standard and extension modes use separate authentication keys. This proposal requires protocol-design review; extension-mode interoperability with existing unmodified peers is not supported.\n\n## Validation\n\nValidated on Windows amd64 with Go 1.27.3 at `06e6e463`:\n\n- `go test -p 4 -count=1 -timeout 4m ./app/router/... ./infra/conf ./features/routing/... ./proxy/vmess/... ./proxy/vless/...`\n- `go test ./testing/scenarios -run '^TestVMess' -count=1 -timeout 5m`\n- `go run ./infra/vprotogen -mode check -pwd .`\n- `go run ./infra/vformat -mode check -pwd .`\n- `git diff --check`\n\nThe committed dynamic routing scenario keeps one server account/configuration fixed and selects two different actual outbounds across TCP/UDP, Mux off/on, AES/ChaCha and route boundaries 0/65535. Unit tests also cover identity preservation, malformed requests, replay/tampering, mismatched opt-in, duplicate registration/removal and API range validation.\n\nAdditional local executable checks passed: 120 default-mode interoperability cases in both directions against official releases 1.8.24, 25.12.8 and 26.11.9; seven legacy configurations compiled to byte-identical Protobuf against the unmodified base; 34 routing/interoperability cases and 20 configuration/API checks passed. These supplemental checks used a local harness and Windows loopback. WAN coverage, independent cryptographic review and a passing unrestricted full-suite run are not claimed; an earlier full-suite QUIC DNS failure was also reproduced on the unmodified base.\n"
+    },
+    {
+     "number": 4320,
+     "title": "XHTTP Client: Race Dialer",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-01-23T16:01:59Z",
+     "updated_at": "2026-11-14T15:58:42Z",
+     "user": "rPDmYQ",
+     "url": "https://github.com/XTLS/Xray-core/pull/4320",
+     "body": "Add Race dialer for XHTTP:\r\n- Enable by specifying both `h3` and `h2` in ALPN.\r\n  - QUIC connection uses only `h3` as ALPN.\r\n  - TCP TLS connection uses everything else as ALPN.\r\n- Try connecting to server using both `h3` and `h2` connection. The first connection that succeed dialing is used.\r\n- If there's already established connection, it will be reused.\r\n- Chrome-like try logic:\r\n  - Delay initial h2 attempt to prefer h3.\r\n  - H3 gets broken mark and won't be attempted for a while upon failure."
+    },
+    {
+     "number": 4231,
+     "title": "mux cool: Add maxReuseTimes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2024-12-31T11:23:13Z",
+     "updated_at": "2026-11-14T15:58:42Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/4231",
+     "body": "字面意思\r\n现 mux cool 逻辑:\r\nMaxConcurrency 为一个连接里的最大活动子连接数\r\n还有一个神秘的 MaxConnections 参数 硬编码为128 实际上就是最大复用次数 我不知道为什么叫这个 这个PR将其重命名了\r\n我修改了一下 允许手动指定 maxReuseTimes 并把默认值变成了65535(mux.cool两位流ID允许的最大上限)\r\n\r\n这些限制仅存在于客户端 服务端没有限制 旧的可以正常工作"
+    },
+    {
+     "number": 2762,
+     "title": "Optimize wireguard kernel mode V2",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2023-11-27T07:58:20Z",
+     "updated_at": "2026-11-14T15:58:42Z",
+     "user": "kunsonx",
+     "url": "https://github.com/XTLS/Xray-core/pull/2762",
+     "body": "基于 https://github.com/XTLS/Xray-core/pull/2757 基础上 实现 outbound wireguard 非用户空间模式。\r\n\r\nsys wireguard device + sysnetstack\r\n\r\nrequirements:\r\n\r\n1. cap CAP_NET_ADMIN \r\n2. ptables \r\n3. net.ipv4.conf.all.src_valid_mark=1\r\n4. modprobe wireguard\r\n5. net.ipv6.conf.all.disable_ipv6 (启用 IPv6)\r\n\r\n@yuhan6665 请检阅。"
+    },
+    {
+     "number": 2757,
+     "title": "Optimize wireguard kernel mode",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2023-11-26T08:14:52Z",
+     "updated_at": "2026-11-14T15:58:42Z",
+     "user": "kunsonx",
+     "url": "https://github.com/XTLS/Xray-core/pull/2757",
+     "body": "1. 调整 WireGuard kernel mode 只支持 client 模式并支持要求权限.\r\n2. 不再要求 root 权限（不调整 rp_filter），调整为 cap CAP_NET_ADMIN 和 iptables 与 net.ipv4.conf.all.src_valid_mark=1\r\n3. docker 打包镜像附带 iptables 预先安装\r\n\r\ndocker container 运行最低条件\r\n\r\n```yaml\r\n    cap_add:\r\n      - CAP_NET_ADMIN\r\n    sysctls:\r\n      - net.ipv4.conf.all.src_valid_mark=1\r\n    devices:\r\n        - /dev/net/tun\r\n ```"
+    },
+    {
+     "number": 412,
+     "title": "Add the routing management gRPC API",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2021-03-20T13:40:05Z",
+     "updated_at": "2026-11-14T15:58:42Z",
+     "user": "tat5522",
+     "url": "https://github.com/XTLS/Xray-core/pull/412",
+     "body": "参照handlerService写了一份控制路由的grpc api。\r\n支持使用gRPC 增加 删除 改变 `RuleObject`，`BalancerObject`。风格基本与handlerservice一致。\r\n原本的`RuleObject`没有tag属性，此次修改增加了tag属性。用于控制从配置文件加入的`RuleObject`，不填tag属性时会采用uuid作为`RuleObject`的tag。原本`RuleObject`的tag标签改为TargetTag。\r\n\r\nTest Case只完成了`RuleObject`相关的。`BalancerObject`由于不会添加`Outbound`所以未能完成。"
+    },
+    {
+     "number": 7391,
+     "title": "XHTTP: Synchronize QUIC test shutdown",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-12T23:26:49Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7391",
+     "body": "## Why\n\n`Test_ListenXHAndDial_QUIC` writes `serverClosed` from its server goroutine and reads it from the test goroutine. Sleeping for 100 ms after closing the client leaves those accesses unsynchronized. The Go race detector reports the read and write on clean `main` (`c4561418`).\n\n## Change\n\nSignal completion through a channel after the server handler closes its connection. Wait for the signal within the existing five-second test deadline. The patch changes only the test.\n\n## Verification\n\n- The standalone QUIC test passed 10 consecutive runs on Windows amd64 with Go 1.27.0.\n- With #7348 applied locally to address the independent TLS certificate race, `go test -race -timeout=90s -count=5 ./transport/internet/splithttp ./transport/internet/httpupgrade` passed. The draft targets `main` directly.\r\n"
+    },
+    {
+     "number": 7388,
+     "title": "Simultaneous IPs limit",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-12T15:53:37Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "n1ret",
+     "url": "https://github.com/XTLS/Xray-core/pull/7388",
+     "body": "Just a simple IP limiter for VLESS. I do REALLY need this feature. I know that some odd ways to do similar functional exist, but they can't do the same thing. What should I add to get you to merge the PR? I'm newbie to Golang unfortunately..."
+    },
+    {
+     "number": 7386,
+     "title": "Tunnel inbound: Close idle fake UDP sockets in TPROXY mode",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-12T08:53:58Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "vakame7058",
+     "url": "https://github.com/XTLS/Xray-core/pull/7386",
+     "body": "Fixes #5263 (closed as not planned).\n\n### Problem\n\nWith `tproxy` on a Tunnel (dokodemo-door) inbound, replies go through `PacketWriter`. It opens a fake UDP socket bound to each remote address that sends a reply ([dokodemo.go:231-245](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L231-L245)). The sockets are closed only in `Close()` ([:266-273](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L266-L273)), when the UDP session ends ([:189](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L189)).\n\nA cone session ends after its client port has been silent for 2 minutes ([worker.go:397](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/app/proxyman/inbound/worker.go#L397)). Only client packets count as activity ([worker.go:200](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/app/proxyman/inbound/worker.go#L200)). A P2P application sends from one port to many peers and is never silent for 2 minutes. Its session keeps one fake socket for every peer that ever replied.\n\nOn a router with transparent proxy (TPROXY → dokodemo-door) xray grew by about 1450 sockets and 7 MB of RSS per hour: 6524 open fds 4.5 hours after a restart that followed an OOM kill. #5263 shows the same growth.\n\n### Reproduction\n\n`05-xray-fakeudp-repro.sh` (below) runs as a normal user in network namespaces: `unshare -Urn sh 05-xray-fakeudp-repro.sh ./xray 10 300`. The client sends from one UDP port to 10 new peers per second. Every 10th datagram goes to a peer first contacted more than 180 s ago. Peers echo from the address they were sent to. Inbound:\n\n```json\n{\"listen\": \"0.0.0.0\", \"port\": 1100, \"protocol\": \"tunnel\",\n \"settings\": {\"allowedNetwork\": \"udp\", \"followRedirect\": true},\n \"streamSettings\": {\"sockopt\": {\"tproxy\": \"tproxy\"}}}\n```\n\n```sh\niptables -t mangle -A PREROUTING -i <client-if> -p udp -j TPROXY --on-port 1100 --tproxy-mark 1\nip rule add fwmark 1 lookup 100\nip route add local 0.0.0.0/0 dev lo table 100\n```\n\n### Results\n\n`main` at c456141, linux/amd64, 10 new peers/s, open fds of the xray process:\n\n| time, s | main | with this PR |\n|---|---|---|\n| 60 | 609 | 609 |\n| 120 | 1209 | 1209 |\n| 180 | 1809 | 1508 |\n| 240 | 2349 | 1501 |\n| 300 | 2888 | 1495 |\n\nBoth builds: 3000/3000 replies, 120/120 replies from old peers, none from a wrong address.\n\nRouter, arm64, v26.7.28 with the same change: 6524 fds and growing before; about 880 without a trend 15 hours later, 575 five days later.\n\n### Change\n\n- `PacketWriter` records when each remote last sent a reply.\n- `WriteMultiBuffer`, at most every 30 s, closes and forgets the fake sockets of remotes silent for 2 minutes. The next reply from such a remote opens a new socket through the existing path.\n- The socket of the original destination (`w.conn`) is never closed early. Datagrams without a `UDP` address are written to it too ([:255](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L255)). Before, one write error on it closed it for the rest of the session.\n- On a write error the map entry is deleted instead of set to `nil`.\n\nThe sweep runs on the writer goroutine: no new goroutine, no lock. 2 minutes matches the session timeout in `worker.go`. If replies stop completely, the sweep waits for the next write, which is the old behavior.\n\n### Tests\n\n- `TestSweepIdleClosesOnlyIdleFakeSockets` in `proxy/dokodemo/fakeudp_sweep_test.go`.\n- `go build ./...`, `go test ./proxy/dokodemo/...` (also `-race`), `go vet ./proxy/dokodemo/`, `go run ./infra/vformat/main.go -mode check` pass with go1.27.0.\n\n<details><summary>05-xray-fakeudp-repro.sh</summary>\n\n```sh\n#!/bin/sh\n# Fake UDP socket growth in Tunnel inbound (TPROXY), reproduction.\n# Run as a normal user:  unshare -Urn sh 05-xray-fakeudp-repro.sh /path/to/xray [RATE] [SECONDS]\n# Need"
+    },
+    {
+     "number": 7385,
+     "title": "Keep the started gRPC server in the API goroutine",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-12T06:45:49Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7385",
+     "body": "Stopping an API-enabled Xray instance immediately after `Start` can panic in `grpc.Server.Serve`. The serving goroutine reads `c.server` after `Close` has stopped the server and cleared the field. Both direct `api.listen` and tagged API listeners use this goroutine.\n\nCapture the server created by that `Start` call and use it for service registration and serving. Treat `grpc.ErrServerStopped` as an expected shutdown result when `Close` wins the startup race. Listener cleanup follows gRPC's existing `Stop` and `Serve` behavior.\n\nThe regression uses real `core.New`, `Start`, and `Close` calls for both API configurations. It runs immediate start/stop cycles on one logical processor and yields to the API goroutine after shutdown. Each mode separately reproduces the nil receiver panic on the previous implementation.\n\nBoth regression cases pass on Windows and on Linux with `-race`. `go vet ./app/commander` passes on both platforms. The existing `TestCommanderListenConfigurationItem` and `TestCommanderRemoveHandler` integration tests also pass on Windows, exercising service registration and RPC calls for both listener modes.\n\nAI-assisted implementation and tests.\n"
+    },
+    {
+     "number": 7383,
+     "title": "Observatory: fix data race in observation results",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-12T04:15:18Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "G74v3Dw31137",
+     "url": "https://github.com/XTLS/Xray-core/pull/7383",
+     "body": "## Summary\n\nFix a data race in ordinary Observatory's `GetObservation` by returning an independent snapshot of the observation results.\n\n## Problem\n\n`GetObservation` currently returns a new `ObservationResult` containing references to the observer's internal status slice and messages.\n\nBackground probes update these statuses under `statusLock`, while consumers may read or serialize them after `GetObservation` returns.\n\nThis can cause concurrent reads and writes in routing strategies, metrics, and gRPC protobuf serialization.\n\nThe issue was reproduced on the current upstream `main` with Go's race detector, including a protobuf serialization error:\n\n```text\nWARNING: DATA RACE\nsize mismatch: calculated=22, measured=31\n```\n\n## Solution\n\nDeep-clone the observation result while holding the existing `statusLock`:\n\n```go\no.statusLock.Lock()\ndefer o.statusLock.Unlock()\n\nreturn proto.Clone(&ObservationResult{Status: o.status}), nil\n```\n\nThis ensures that callers receive an independent snapshot, including nested protobuf messages and unknown fields.\n\nThe existing synchronization mechanism, protobuf API, health checks, and routing behavior remain unchanged.\n\n## Testing\n\nAdded two regression tests:\n\n- **Snapshot isolation:** verifies that returned results do not share mutable state with the observer or other snapshots, including nested messages and unknown fields.\n- **Concurrent access:** exercises status updates, additions, removals, and concurrent reads with protobuf serialization.\n\nBoth tests reproduce the original issue. The snapshot test also fails when using a mutex without deep copying.\n\nValidation completed successfully:\n\n- `go test -race ./app/observatory/...`\n- `go test ./app/observatory/... ./app/router/... ./app/metrics/...`\n- Xray build\n- Formatting and diff checks\n\n## Performance\n\nDeep cloning introduces O(n) copying under the existing mutex. Benchmarks covering 2, 20, and 200 outbound statuses confirm the expected linear cost.\n\nThe fix intentionally favors correctness and minimal changes over additional synchronization complexity."
+    },
+    {
+     "number": 7380,
+     "title": "dns: add local UDP nameserver without dispatcher",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-11T15:02:46Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "localzet",
+     "url": "https://github.com/XTLS/Xray-core/pull/7380",
+     "body": "Addresses #7321.\n\nAdd `udp+local://` support for sending plain UDP DNS queries directly through system sockets, bypassing the Xray routing dispatcher.\n\nThe implementation reuses the existing ClassicNameServer request tracking, DNS cache and response handling, including EDNS0 retries.\n\nAdded tests for URL parsing, custom ports, IPv6 addresses and A/AAAA queries against a local UDP resolver without a dispatcher.\n\nThe existing `udp://` URL parsing issue is left unchanged to keep this PR focused.\n\n**Testing:** The new test file was formatted with `gofmt`. Full tests have not been run locally because Xray requires Go 1.27. CI validation is still needed."
+    },
+    {
+     "number": 7378,
+     "title": "DNS outbound: End UDP sessions once their queries are answered",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-11T12:31:36Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "solodecode",
+     "url": "https://github.com/XTLS/Xray-core/pull/7378",
+     "body": "A UDP session of the DNS outbound never reads EOF, so it lasts until the inbound drops it or its idle timer fires. The timer looks for activity once per connIdle, so a session answered right away ends after two periods, ten minutes by default. The dokodemo-door inbound drops idle UDP after two to three minutes; the TUN inbound never does. Stub resolvers and dnsmasq usually send each query from a new source port, so every query holds a session with three goroutines that long.\n\nOn my test bench (linux/arm64, FakeDNS, 5000 queries at 50 per second, a new port per query) RSS grew from 40 MB to 187 MB through dokodemo-door and to 180 MB through TUN, where the goroutines were gone only ten minutes after the last query.\n\nI track the queries a UDP session still owes an answer, hijacked or sent upstream, by ID and question, so a repeated answer settles nothing. While any is open the session keeps connIdle, so a slow lookup is not cut; one second after the last answer it ends, which still leaves room for AAAA sent after A from the same socket. TCP, the session of Xray's own DNS client, a session with more than 256 open queries and a connIdle below one second work as before.\n\nWith this change the same load ends at 62 MB through dokodemo-door and 64 MB through TUN. TestUDPDNSSessionsEnd sends 200 A and MX queries, MX forwarded upstream, each from its own socket: on main they leave 600 goroutines behind; with this change they are gone a second after the last answer.\n"
+    },
+    {
+     "number": 7373,
+     "title": "Wait for log writers to close on shutdown",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-11T00:45:21Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Eljees",
+     "url": "https://github.com/XTLS/Xray-core/pull/7373",
+     "body": "On Windows, an application that shuts down Xray and immediately renames its log file can get a sharing violation. `Close` signals the log worker, which releases the file later when it exits.\n\nWait for the worker to release the writer before returning from `Close`. Ignore messages received after shutdown and check for shutdown again when acquiring the worker permit. In `app/log`, detach both handlers before waiting so a worker can finish formatting a message that itself records a log. Keep `Start` and `Close` serialized.\n\nThe regressions hold a real file writer open during message formatting, rename the file as soon as `Close` returns, and check that a late message cannot create another writer. Both regressions fail on the previous implementation. The Windows run reproduces the sharing violation.\n\n`Close` can now wait for in-flight formatting and writes to finish. The message queue remains best effort.\n\nWindows and Linux each passed all 14 tests in `./common/log`, `./app/log`, and `./app/log/command`. The Linux run used `-race`. `go vet` passed for all three packages on both platforms, and the Windows main build passed.\n\nAI-assisted implementation and tests.\n"
+    },
+    {
+     "number": 7372,
+     "title": "Fix noise after udphop",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T22:20:53Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "FDeghy",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372",
+     "body": "Fix noise emission when `noise` and `udphop` are used together.\n\nPreviously, noise state was keyed by the destination passed to `WriteTo`. udphop could replace that destination internally or switch the source socket without invalidating the noise state. Continuous outgoing traffic also refreshed the noise reset timeout, allowing repeated hops without another noise sequence.\n\n**Implementation**\n\n- Add shared `UDPPath` state through the existing finalmask dialer, containing the actual destination, a generation counter, and a mutex.\n- Increment the generation after a successful hop changes the local endpoint, destination IP, or destination port.\n- Have the noise wrapper clear its cached reset state when it observes a new generation. The next write emits noise before its payload, then resumes the existing reset behavior.\n- Serialize the complete masked write against hopping, keeping all noise packets, configured delays, and the associated payload on the same socket and destination.\n\nGeneration tracking also handles returning to a previously used endpoint. Failed hops retain the active path and generation; attempts that leave the endpoints unchanged do not trigger additional noise.\n\nBoth configured noise items and Lua scripts use the existing emission code. Mask ordering, socket deadline propagation, receive handling, and connection cleanup remain unchanged. The existing connection stays in place, preserving Hysteria continuity. No configuration fields are added.\n\n**Regression coverage**\n\n- Source-port-only, destination-port-only, destination-IP-only, and combined changes.\n- Continuous traffic, repeated writes on one path, and returning to a previous endpoint.\n- Unchanged endpoints and failed hops.\n- Concurrent hopping during delayed noise emission.\n- Configured items and Lua scripts, mask ordering, reset behavior, deadline propagation, and socket cleanup.\n\n**Verification**\n\n- Focused noise/udphop tests and race detection passed.\n- Finalmask and Hysteria package checks passed in short mode.\n- GitHub’s formatting/protobuf check passed after applying the repository formatter.\n- The full package run timed out in the separate Sudoku end-to-end harness; that run did not complete."
+    },
+    {
+     "number": 7371,
+     "title": "XHTTP client: Add `scMaxPostRetries` to resend failed packet-up uploads",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T21:58:21Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7371",
+     "body": "## Why\n\npacket-up is there for CDNs and proxies that don't pass a streaming upload, so every packet goes through them as its own POST. Today the first POST that fails closes the whole connection, with everything that runs inside it. Behind a CDN a single 502 or 504 is not rare even when the server is fine, the CDN may time out waiting for the origin or lose its connection to it. An ordinary HTTP client would just send such a request again. Here it is safe to, since every packet carries its seq and with #7370 the server drops duplicates. It can't be done higher up, VLESS and mux don't see the packets.\n\nOne example we measured. With Yandex Cloud CDN about 2% of requests got a 504 after the CDN waited 5 seconds for the origin, and some got a 502. 3 of 10 uploads up to 3 MB broke with the current client and all 10 went through with resending. On a CDN emulator that checks integrity it was 12 of 12 against 4 of 12.\n\n## What changed\n\n- New client option `scMaxPostRetries`, 0 by default. Above 0, a packet that is not answered with 200 is sent again up to `scMaxPostRetries` times before the connection is closed as it is today.\n- A 504 from a CDN comes only after several seconds. So one more copy is sent when the last copy was fully written but got no answer in 2 seconds. The first 200 wins and the other copies are cancelled. A packet with no 200 in 30 seconds fails the connection.\n- The server gives up once it holds more than `scMaxBufferedPosts` packets after a missing seq. So with resending on, seq N is sent only after seq N minus `scMaxBufferedPosts`/2 is answered.\n- `PostPacket` now uses the context it is given. The normal path detaches it from the connection as before, and the resend path uses it to cancel copies that are no longer needed. A cancelled copy no longer marks the HTTP/2 client as closed, otherwise each resend would open a new connection.\n- With `scMaxPostRetries` at 0 the upload loop works as before.\n\n## Why it is off by default\n\nA resent packet may reach the server twice, for example when the CDN delivered it and then timed out waiting for the answer. A server without #7370 may read that copy again and corrupt the stream, and the client cannot tell which server it talks to. So resending stays off unless the server is known to drop duplicates. It could become the default some releases later.\n\n## Testing and limits\n\n- New `Test_PacketUpRetriesFailedPost` puts an HTTP/2 proxy in front of the server that answers 502 to the first upload of seq 1. The echo goes through with `scMaxPostRetries` 2 and times out with 0.\n- `go test ./transport/internet/splithttp/... ./infra/conf/...` passes, also with `-race`.\n- Together with #7370 I also ran a proxy that forwards every third upload to the server and still answers 504, so duplicates do reach the server. The stream stays intact.\n- Only packet-up. A stream-up or stream-one upload is one long request, and the client cannot know how much of it the server got.\n- It does not help when the CDN fails the download GET.\n- HTTP/1.1 `PostPacket` does not read the answer status, so there only failed writes are resent. The browser dialer has no write callback, so it only resends on errors.\n- The extra copy after 2 seconds assumes the server answers soon after the body is written. On a slow uplink with large `scMaxEachPostBytes` the body may still sit in the socket buffer, and a copy is sent for nothing. Behind a CDN small posts are the norm, so this should be rare. 2 and 30 seconds are constants.\n\n"
+    },
+    {
+     "number": 7370,
+     "title": "XHTTP server: Drop resent packet-up uploads instead of reading them again",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T21:58:14Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7370",
+     "body": "## Why\n\nA packet-up upload can reach the server twice. A CDN or a reverse proxy may send a POST to the origin again after a timeout, and a client may resend a packet that got a 502 or 504 although it went through. The server already drops a copy of a seq it has fully read. It does not handle a copy that is in the queue while the first one is only partly read. `uploadQueue` pushes the unread rest of a packet back into the heap with the same seq, so the next `Read` may pop the full second copy and return it from the start. The stream is then silently corrupted, and nothing in the logs says why.\n\nWith this change a duplicate of any seq is dropped, whatever sent it. It also makes it safe for a client to resend failed uploads, which is #7371.\n\n## What changed\n\n- The unread rest of a packet is kept in `uploadQueue.partial` instead of going back to the heap, and `nextSeq` moves on as soon as the packet starts being read.\n- Any other copy of that seq is then below `nextSeq` and is dropped by the existing check.\n\n## Testing and limits\n\n- New `Test_UploadQueueDropsDuplicateSeq` pushes seq 1 twice before seq 0 and reads with an 8 KiB buffer. On main it fails with a corrupted stream, with this change it passes.\n- `go test ./transport/internet/splithttp/... ./infra/conf/...` passes, also with `-race`.\n- Nothing changes for clients that do not resend.\n- A copy that arrives before its seq is read still takes a place in the reorder heap and counts towards `scMaxBufferedPosts`.\n\n"
+    },
+    {
+     "number": 7367,
+     "title": "Sockopt: Report the real ioctl error from OriginalDst on Darwin",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T20:55:07Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "anonymousmeower",
+     "url": "https://github.com/XTLS/Xray-core/pull/7367",
+     "body": "### Problem\n\n`OriginalDst` in `transport/internet/sockopt_darwin.go` reports success when the `DIOCNATLOOK` ioctl fails:\n\n```go\nif _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd, DIOCNATLOOK, uintptr(unsafe.Pointer(&nl))); errno != 0 {\n\treturn net.IP{}, -1, os.NewSyscallError(\"ioctl\", err)\n}\n```\n\n`err` is the `os.Open(\"/dev/pf\")` result from the top of the function, which already returned early if it was non-nil, so `err` is always `nil` here — and `os.NewSyscallError` returns `nil` for a nil error. The `errno` the ioctl returned is dropped.\n\nBoth callers (`tcp.GetOriginalDestination`, `udp.RetrieveOriginalDest`) only test `err != nil`, so they build a destination from the zero IP and port `-1`: `net.IPAddress(net.IP{})` returns a nil `Address`, `net.Port(-1)` wraps to 65535, and `IsValid()` does not catch it since it only checks `Network != Network_Unknown`.\n\n### Fix\n\nReport `errno`. It is already the branch condition, so the error is always non-nil.\n\n### Notes\n\nTwo further issues in this function, left alone because Darwin's `struct pfioc_natlook` cannot be verified (no `net/pfvar.h` in the SDK) and the path has no test coverage: `nl.proto` is always `IPPROTO_TCP` although `hub_darwin.go` reaches this function for UDP, and `nl.af` is never set to `AF_INET6` although the result is switched on `nl.af`. `sockopt_freebsd.go` sets both.\n\n`go build ./...`, `go vet ./...`, `go run ./infra/vformat -mode check` and `go test ./...` are clean on this branch; the three geodata-dependent packages fail identically on unmodified `main` here because `geoip.dat` / `geosite.dat` are absent locally.\n"
+    },
+    {
+     "number": 7364,
+     "title": "VLESS: run multiplexing directly on transport",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T12:20:09Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364",
+     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
+    },
+    {
+     "number": 7357,
+     "title": "chore(finalmask): code clean",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-09T09:52:21Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7357",
+     "body": ""
+    },
+    {
+     "number": 7350,
+     "title": "tun: end UDP flows and cancel dispatches when the inbound closes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T19:35:04Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "RoyHP",
+     "url": "https://github.com/XTLS/Xray-core/pull/7350",
+     "body": "## Problem\n\nClosing a core instance that has a `tun` inbound leaves its UDP flows alive, and everything they hold with them.\n\n- `Handler.Init` detaches the handler's context from the instance (`core.ToBackgroundDetachedContext`), and nothing cancels it on `Close`.\n- `stack.Close` resets the TCP connections and closes the sockets opened by `DialUDP`, but never touches the UDP flow table (`udpConnectionHandler.udpConns`).\n\nSo each UDP flow's reader keeps waiting on its packet queue after `Close`, which pins its XUDP mux session, the mux `ClientWorker` and that worker's connection to the server.\n\nMeasured in a client that embeds the tun inbound and restarts the instance per session (goroutine origins from `runtime.Stack`): about 80 goroutines, 0.8 MB of live heap and stacks, and one established outbound connection leaked per instance, with no decay over 8+ minutes. After 25 instances: 1600 goroutines, all created by `tun.(*udpConnectionHandler).HandlePacket`, `mux.(*ClientWorker).Dispatch`, `mux.NewClientWorker` and `mux.(*DialingWorkerFactory).Create`, and 17 established connections to the server.\n\n## Fix\n\n- `Handler` owns a `cancel` for its detached context and calls it in `Close` before closing the stack, so in-flight dispatches unwind (also the ones not blocked on the reader).\n- `stack.Close` ends every UDP flow (`udpConnectionHandler.closeAll`): their readers get EOF, the dispatches return and release their outbounds. The flow table also refuses new flows from then on, mirroring `handleTCP`'s `closed` check: a packet already in flight between the stack closing and the tun closing used to open a fresh flow (and, with a mux outbound, dial a worker) during shutdown.\n\nThe remaining XUDP mux workers then close on the mux client's idle check (two 16 s monitor ticks after their last session), after which goroutines and heap are back at the baseline and no server connections remain.\n\n## Verification\n\n- New tests: `TestUDPHandlerCloseAllEndsFlows` (flows end on close, a late packet opens none) and `TestHandlerCloseCancelsDispatches` (a dispatch that is not reading returns when the handler closes). `go test -race ./proxy/tun/` passes.\n- With the patch, 20 instance start/stop cycles end with 0 established connections to the server and the baseline goroutine count; without it, 17 connections and 1600 goroutines that never go away."
+    },
+    {
+     "number": 7348,
+     "title": "TLS: Fix data race between certificate hot reload and handshakes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T12:59:06Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "ZeN220",
+     "url": "https://github.com/XTLS/Xray-core/pull/7348",
+     "body": "in `transport/internet/tls/config.go` the ocsp callback had a block like this:\n  ```go\n  } else if string(newOCSPData) != string(cert.OCSPStaple) {\n      cert.OCSPStaple = newOCSPData\n  }\n  ```\n  `cert` here is the same `*tls.Certificate` that `GetCertificate` has already returned, so the staple was being changed while handshakes could be reading it. `OCSPStaple` is a slice, so this write is not\n  atomic and a handshake can see the old pointer with the new length or vice versa. this can end up in a truncated staple or in a read past the end of the buffer. the window is very small and i haven't\n  reproduced it on a real handshake\n\n  now the callback makes a copy of the certificate, sets the new staple on the copy and publishes it, so a certificate that was already returned is never changed. to publish the copy safely\n  `BuildCertificates` now returns `[]*atomic.Pointer[tls.Certificate]` instead of `[]*tls.Certificate`, it's only called from `GetTLSConfig`\n\n  i have added a test with a local ocsp responder which checks that a previously returned certificate keeps its staple. it fails without this change even without `-race`"
+    },
+    {
+     "number": 7347,
+     "title": "TUN inbound: Half-close the app connection when the outbound is done, instead of waiting for `uplinkOnly`",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T08:24:57Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7347",
+     "body": "## Why\n\nWith Xray's TUN as the system VPN, an app that reads a response until the server closes waits about 1 s more than it should on every such connection. The outbound already knows the response is over, but TUN keeps the app's connection open until the whole dispatch ends, and that happens only after `uplinkOnly`. Examples are HTTP/1.0 without `Content-Length`, RTSP (Moonlight in #5845) and simple request and reply protocols. With this change the app gets the end of the response right away\n\n## What changed\n\n- TUN sends FIN to the app as soon as the outbound is done with the response. The app can still send, and the connection is closed as before when the dispatch is over\n- the lightweight TCP stack gets `CloseWrite` for that\n- the rest of the core still closes links in pairs, as agreed in the thread\n\n## Testing and limits\n\n- `TestTCPCloseWrite` checks that FIN goes out, that data from the app is still read after it and that `Close` sends nothing more. `go test -race ./proxy/tun` passes\n- this helps only when the outbound itself sees the end of the response, for example freedom or VMess. Over VLESS the outbound ends only after `uplinkOnly` on the server, so the wait there stays\n\nRelated #5845 #7345\n"
+    },
+    {
+     "number": 7346,
+     "title": "TUN inbound: Route each new UDP destination, keeping FullCone NAT within a route",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T05:58:35Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "osypai",
+     "url": "https://github.com/XTLS/Xray-core/pull/7346",
+     "body": "The UDP FullCone table (#5509) is keyed by the source only, and only the first packet of a session is routed, so later destinations of that source reuse its outbound. As the TUN never sees a socket close, a port that the OS reuses before the session expires inherits the old route. For example, DNS on a port last used by a direct or blocked flow never reaches the DNS outbound, and a resolver that retries from the same port (mDNSResponder) keeps the stale session alive.\n\nNow a new destination is routed once, with fake IPs judged by their domain and no DNS lookup made. It then joins its source's session for the same rule, or gets a session of its own. Destinations of one rule still share a session, so FullCone is kept within a rule, and a balancer picking another outbound doesn't split it. Routing runs off the goroutine that reads the tun. WireGuard and MASQUE servers are unchanged.\n\nChecked on a real utun on macOS with the system resolver: DNS on a reused port is answered and destinations of one rule leave from one port, while on main the DNS goes nowhere and every destination leaves from the first one. A new destination costs about 2 µs more; established flows and throughput are unchanged.\n\nAI disclosure: this PR was completed using Claude Opus 5.5."
+    },
+    {
+     "number": 7296,
+     "title": "XHTTP server: unblock writes and serialize connection close",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-30T19:48:48Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "ODtian",
+     "url": "https://github.com/XTLS/Xray-core/pull/7296",
+     "body": "## Summary\n\nAn XHTTP response write can hold the connection mutex while blocked on a slow reader. Closing the logical connection then waits on that mutex, including when a proxy inactivity timeout cancels the business context while the HTTP request stays open.\n\nSignal closure before waiting for the writer and interrupt an active write using `http.ResponseController`. Serialize the complete transition with `sync.Once` so concurrent business/handler closes join the deadline call and the writer before `ServeHTTP` returns.\n\n```text\nClose (once)\n  signal closure\n  interrupt active write\n  wait for writer completion\n```\n\n## Evidence\n\n- Added `TestConcurrentCloseWaitsForDeadline`, using a real HTTP test server and a gated response writer. The gates ensure the business close owns the first deadline call before the handler closes.\n- Upstream implementation: fails with `Close waited for the blocked writer without interrupting it`.\n- An unserialized close transition: fails with `deadline call outlived ServeHTTP during concurrent Close`.\n- Commit `8628110`, rebuilt with Go 1.27.3 on Linux/amd64: `go test -buildvcs=false ./transport/internet/splithttp -count=1` passes (`ok`, 2.434s).\n- Bounded loopback `packet-up` fixtures run against a binary rebuilt from commit `8628110`: peer half-close and an internal inactivity timeout with the HTTP request still open both finish with `CLOSE_FRAMES=0`, `WRITE_FRAMES=0`, and `CLOSE_WAIT_CONNECTIONS=0`.\n\n## Merge Danger\n\n**Door:** Two-way.\n\n**Blast Radius:** XHTTP shutdown. Active I/O is interrupted on close; the existing transport tests cover normal completion.\n"
+    },
+    {
+     "number": 7281,
+     "title": "New Blackhole",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-28T15:24:00Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7281",
+     "body": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6467092152\n\n旧的黑洞拆掉，用户配置不变：\n- 纯阻断在 infra 转译为 freedom + finalRules block\n- 带响应的自动转为新的 `responder` 出站，有迁移警告\n\n`responder` 未来可以堆更多东西\n\n仍解决不了的是 UDP 首包绕过黑洞，后面还是能发出\n以及 UDP 首包是黑洞，后面想继续发出的问题\n在出站层面解决不了"
+    },
+    {
+     "number": 7248,
+     "title": "XHTTP: Add configurable error responses",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T15:24:38Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7248",
+     "body": "## What\n\nAdds an optional `errorResponse` object to the XHTTP inbound settings, replacing the bare status-only rejections with a service-consistent appearance.\n\nCurrently every rejected request is answered with a bare status code: no body, no `Content-Type` (Go's default \"404 page not found\" or nothing at all). From the terminating side (CDN, reverse proxy, monitoring) a server that answers *every* unknown path with a naked status code and no content type does not look like a normal service.\n\n- `body` and `contentType` apply to every error response the hub writes (404 unknown path, 400/405/409/413/500 etc.), giving all rejections a uniform, service-consistent appearance.\n- `statusCode` overrides the status for requests failing the padding validation — the effective authentication gate — allowing 403 semantics instead of the default 400.\n- When `errorResponse` is unset, the behavior is unchanged.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"errorResponse\": {\n    \"statusCode\": 403,\n    \"body\": \"{\\\"error\\\":\\\"forbidden\\\"}\",\n    \"contentType\": \"application/json\"\n  }\n}\n```\n\nResulting surface: unknown paths → `404 {\"error\":\"forbidden\"}`, the API gate without valid padding → `403` with the same body — a coherent API host instead of a bare 404/400 machine.\n\n## Notes\n\n- Server-side only. Round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 (matches all existing `.pb.go` headers; unmodified proto regenerates byte-identical with this toolchain).\n- Proto field `errorResponse = 31` — merges cleanly alongside #7247 (`responseHeaders = 30`); both features are independent.\n\n## Tests\n\n- `Test_WriteErrorResponse`: bare default when unset, configured body + content type, padding-reject status default (400) and override (403).\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
+     "number": 7247,
+     "title": "XHTTP: Add configurable response headers",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-24T14:37:17Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "hxehex",
+     "url": "https://github.com/XTLS/Xray-core/pull/7247",
+     "body": "## What\n\nAdds an optional `responseHeaders` map (`map<string, string>`) to the XHTTP inbound settings, giving the server control over the headers it writes on responses.\n\nCurrently the hub hardcodes a set of response headers: the CORS block for the browser dialer (`Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`), `X-Accel-Buffering`, `Cache-Control` and the SSE `Content-Type`. With `responseHeaders` an operator can add, override, or remove any of them, as well as set arbitrary extra response headers.\n\n## Semantics\n\n- A key that doesn't collide with a default header is added to every response.\n- A key that matches a hardcoded header overrides it.\n- An empty value removes that header from the response entirely (including the hardcoded ones).\n- When `responseHeaders` is unset, the behavior is byte-identical to before.\n\nExample:\n\n```json\n\"xhttpSettings\": {\n  \"path\": \"/api/v2/stream\",\n  \"responseHeaders\": {\n    \"Server\": \"nginx\",\n    \"Cache-Control\": \"no-cache, no-transform\",\n    \"Access-Control-Allow-Origin\": \"https://example.com\",\n    \"X-Accel-Buffering\": \"\"\n  }\n}\n```\n\n## Why\n\n- The CORS headers only matter for the browser dialer; a plain server deployment currently emits `Access-Control-Allow-Origin: *` on every response, which is undesirable behind a specific origin and gets flagged by security reviews.\n- Reverse-proxy and CDN setups sometimes require specific response headers (`Server`, `Via`, custom headers) or different cache semantics.\n- Operators running behind intermediaries may want the response header set to stay consistent with the profile of the service they front, instead of carrying markers that no other service on that endpoint emits.\n\n## Notes\n\n- Server-side only; the client ignores it. It round-trips through `extra` like the other settings.\n- `config.pb.go` regenerated with protoc v6.33.5 / protoc-gen-go v1.36.11 — the header matches all existing `.pb.go` files (`check-proto` passes; I verified the unmodified proto regenerates byte-identical with this toolchain first).\n\n## Tests\n\n- `Test_SetResponseHeader`: default / override / removal via empty value.\n- `Test_WriteResponseHeader_ResponseHeaders`: CORS default, override, removal, custom header addition, origin echo.\n- `go test ./...` passes locally across all packages, except the pre-existing network-dependent `TestQUICNameServer` in `app/dns`, which fails identically on pristine `main` in my environment (no QUIC egress)."
+    },
+    {
+     "number": 7189,
+     "title": "Replace outdated XTool with 3x-setup in the One Click section",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-17T16:41:06Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Anthrop44",
+     "url": "https://github.com/XTLS/Xray-core/pull/7189",
+     "body": "## Summary\r\n\r\nReplace the outdated XTool entry (not updated for 3 years) with [3x-setup](https://github.com/Anthrop44/3x-setup), a secure-by-default, Nushell-based deployment and management solution for Xray-core.\r\n\r\nIt automates a modern Xray-core best-practice architecture, combining direct VLESS + XHTTP + TLS with Cloudflare-proxied VLESS Encryption + XTLS Vision + XHTTP.\r\n\r\n## Features\r\n\r\n- **Secure by default:** Enforces SSH key-only authentication, restrictive firewall rules with Cloudflare-only origin access, and localhost-only management interfaces accessible through SSH tunneling.\r\n- **Resilient deployment:** Remote initialization continues independently after SSH disconnects, with detailed per-stage logs and verification.\r\n- **Easy configuration and maintenance:** Schema-validated JSON configuration, one-command client/CDN configuration synchronization, and persistent subscription URLs across server rebuilds.\r\n- **Fully automated:** Handles Caddy camouflage, Xray inbounds, 3X-UI clients, TLS certificate issuance and renewal, and end-to-end connectivity checks.\r\n\r\nI've been developing this for months and will keep maintaining. Should be reliable enough. I'll never accept any sponsorship for it too.\r\n\r\n<img width=\"943\" height=\"615\" alt=\"image\" src=\"https://github.com/user-attachments/assets/318d2f4e-a864-4a93-bb92-fbb9dce9682f\" />\r\n\r\n"
+    },
+    {
+     "number": 7178,
+     "title": "grpc: close cached clients with their outbound handler",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T08:57:31Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "konezumi0",
+     "url": "https://github.com/XTLS/Xray-core/pull/7178",
+     "body": "Related to #7177. Requesting review of resource ownership, shutdown semantics, and API compatibility\r\n\r\n## Problem\r\n\r\nOutbound gRPC clients are cached by destination and MemoryStreamConfig, but core shutdown never closes or removes them. In an embedding process that stays alive, clients can retain connections and continue reconnecting after their core has stopped.\r\n\r\n## Change\r\n\r\nGive memory stream settings synchronous close-hook registration, and close the resources from their owning outbound handler. Register each ClientConn for exact-entry cache removal and ClientConn.Close. Refuse both reuse and creation after owner closure starts; racing creation must either register for cleanup or close its unpublished client. Cleanup runs outside the settings/cache locks, and concurrent Close callers wait for the same result.\r\n\r\nThe supported Instance lifecycle is single-start. Each fresh core retains separate ownership even when endpoint and outbound tags match. No per-run generation model, idle-timeout change or per-RPC closure of the shared ClientConn is added.\r\n\r\n## Validation\r\n\r\n- Synthetic regression reproduces the problem on v26.3.27 and main da2248c.\r\n- `go test -race ./transport/internet ./transport/internet/grpc -count=1 -timeout=120s` passes on this exact branch.\r\n- Official `go run ./infra/vformat/main.go -mode check -pwd ./` passes.\r\n- Tests cover two live cores, sibling streams, normal/MultiMode, fresh-core cycles, failed-start cleanup, multiple destinations, owner/acquisition races, cancellation/backoff and forced dialerProxy lookup contention with Manager.Close.\r\n- Earlier candidate testing also ran the target race suites five times and the dialerProxy test ten times. Those results are supplementary, not a claim that the whole upstream suite passes.\r\n\r\n## Review questions / limits\r\n\r\n- Handler.Close previously always returned nil. This candidate propagates cleanup errors. Is propagation preferred, or should transport cleanup be logged while preserving the existing return policy? Embedders must distinguish a cleanup error from a still-running core.\r\n- MemoryStreamConfig with resource/mutex state must not be copied; direct external transport callers must close their settings.\r\n- Manager.RemoveHandler still bypasses Handler.Close. XHTTP/nested download settings and TUN eventfd cleanup remain unfixed.\r\n- No general multi-instance guarantee for Xray's other process-global networking state, TLS/Reality/masking matrix, or physical Android packet boundary is claimed.\r\n\r\nThis is intended as a draft for ownership/API review, not a claim that the Android product defect is resolved.\r\n"
+    },
+    {
+     "number": 7175,
+     "title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T07:16:03Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175",
+     "body": "#7174 bolted a second Lua mask onto header-custom, which was the wrong way around. One `lua` mask covers all of it now: it is both a `tcpMasks` and a `udpMasks` entry, and the script decides what it does by the hooks it defines.\n\n-- `HandleHeader(stream, address, role)`, TCP: a free handshake before any traffic, with `stream:Write`, `stream:Read` and `stream:Sleep`. Return a string or an error and the connection is dropped\n-- `HandleHeaderWrite(header, address, role)` and `HandleHeaderRead(packet, address, role)`, UDP: prefix every packet with a header, and strip it on the other side by returning its length, or `nil` to drop the packet\n-- `HandleNoise(plan, address, role)` is the old noise hook, so `noise`'s `script` is gone (it has not been in a release yet)\n-- `role` is `client` or `server`, so one file serves both ends\n-- a hook the script does not define is not wrapped at all: a noise only script leaves TCP connections alone and never touches a packet\n-- the module is `xray.finalmask` now, with `Random` and `RandomBetween`\n\n```json\n{\n    \"udpMasks\": [{\"type\": \"lua\", \"settings\": {\"script\": \"mask.lua\", \"reset\": \"30-60\"}}]\n}\n```\n\nPer call it takes at most 64 noise packets and 65535 bytes of noise, 1024 bytes of header, and 65535 bytes each way in a handshake. A packet hook gets 1s, a handshake 30s. A UDP header is one Lua call per packet, the benchmarks in the package cover its cost.\n\nThe static lists can follow later, the same script can already do what they do.\n"
+    },
+    {
+     "number": 7171,
+     "title": "TUN inbound: Add disableFakeICMP config option for pongs",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T22:15:42Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "navidmafi",
+     "url": "https://github.com/XTLS/Xray-core/pull/7171",
+     "body": ""
+    },
+    {
+     "number": 7159,
+     "title": "XHTTP: packet-down in stream-down with downlink keep-alive",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T04:03:56Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "izislesar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7159",
+     "body": "# XHTTP: packet-down in stream-down with downlink keep-alive\n\nFollows RPRX's packet-down design in https://github.com/XTLS/Xray-core/pull/6755#issuecomment-5720463978, which was written while closing the earlier downlink-resume attempt (#6755). That attempt was rejected because \"restore connection\" is too complex, with latency, ACK and so on. This one does not attempt connection restoration at all. No reconnection, no state machine, nothing to tune: each stream-down GET stays a single request; if the GET dies, the connection dies the ordinary way.\n\n## Problem (from #4846)\n\nCDNs kill a stream-down GET on body inactivity. This matters during uploads: with packet-up the uplink posts keep flowing, but the downlink proxy payload only arrives while the origin sends, so during a pure upload the GET idles and gets cut. Same story for any target that goes quiet for a while after responding.\n\n## What this PR adds\n\nWhen enabled on both ends, the stream-down response body is cut into packet-down frames with the five elements from the design comment:\n\n- omittable session id excerpt: first 8 bytes of the session id, present on data and keep-alive frames (absent in stream-one where the session id is empty)\n- omittable packet seq: uint64, counting data/keep-alive frames per stream-down GET\n- mandatory type: data or padding\n- mandatory length: uint16\n- payload\n\nUse today is the first one from the design comment: downlink keep-alive. While the downlink has been idle for a whole period, the server writes a padding frame (base62, in the spirit of tokenish x-padding) instead of staying silent. Everything the dispatcher sends rides in data frames, which is what lets the client tell padding apart from payload safely; the seq keeps the format ready for the future uses listed in the design comment (retransmission, multi-path-down) without another wire change.\n\nh1, h2 and h3 are covered, since the framers sit on the body, not on a specific transport. stream-one gets the same treatment on its single response body. Browser dialer is out of scope for now: it has no place to read the response header that confirms the framing.\n\n## Negotiation\n\nStrictly opt-in and per request, so old servers are unaffected and nothing breaks behind middleboxes:\n\n1. client config has packetDown: XHTTP stream requests not used as pure uplink (stream-down GET, stream-one request) carry X-Packet-Down: 1\n2. server has packetDown configured and sees the marker: it answers with X-Packet-Down: 1 on the response, and frames; without the confirmed header the client never parses frames\n3. any other combination: byte-identical wire format as today\n\n## Config\n\n```jsonc\n\"xhttpSettings\": {\n  \"path\": \"/sh\",\n  \"packetDown\": {              // absent = disabled, as today\n    \"keepAlive\": true,\n    \"keepAlivePeriod\": \"10-30\",  // seconds; padded when inactive this long. defaults to 10-30\n    \"keepAliveLength\": \"24-64\"   // padding size. defaults to 24-64\n  }\n}\n```\n\nServer side is the same block in the inbound; the server only honors the feature when the client asks.\n\n## Not in this PR (deliberately)\n\n- obfs of the frames (later, per the design comment)\n- retransmission, multi-path-down, same-packet racing, ACK: the format carries seq and the session excerpt, but none of the machinery, exactly like packet-up carries seq today without using it\n- nothing about #4846's larger downlink freeze problem (the 15-20 KB per TCP connection cut): this only discards the CDN idle timer, it does not split data across connections\n\n## Tests\n\n- packet_down_test.go: frame round trip (with/without excerpt, with/without seq), byte-stream shaped like a socket, splitting payloads larger than one frame, padding skipped, malformed frame rejected, keep-alive written when idle, keep-alive suppressed while active, config normalization\n- splithttp_test.go: full listen/dial round trip with packet-down on both end (100 KiB), and the fallback case with the client setting present but the server without one\n- infra/conf: JSON un"
+    },
+    {
+     "number": 7112,
+     "title": "Outbound: Close the handler when removing it; VLESS Reverse Proxy: Don't start after closing",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-08T23:17:24Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "earmark-halt",
+     "url": "https://github.com/XTLS/Xray-core/pull/7112",
+     "body": "`outbound.Manager.RemoveHandler`, which `xray api rmo` (`HandlerService.RemoveOutbound`) calls, deletes the handler from the map but never closes it, while `inbound.Manager.RemoveHandler` does. So whatever the removed outbound's `Close()` would release keeps running:\n\n- WireGuard creates its TUN in the constructor (a kernel TUN when available, otherwise a gVisor stack), and once used also has the device with its UDP socket and keepalives.\n- VLESS with `reverse` keeps its monitor task: the removed outbound keeps dialing the server every 2 s.\n- Same for MASQUE's tunnel. VLESS with `testpre` gets closed too, but its pre-connects only stop reliably with #7113: on main, `Close()` stops just the goroutines waiting to hand over a connection, not the ones redialing an unreachable server.\n\nThis shows up wherever outbounds are added and removed at runtime through the API, e.g. by panels.\n\n### Changes\n\n- `RemoveHandler` closes the handler it removed. It does so after releasing the manager lock, so a slow `Close()` (WireGuard) doesn't hold up `Select()`/`GetHandler()` for new connections. Removing an unknown tag still returns nil, and a removed handler is closed only once, since `Manager.Close()` no longer sees it.\n- VLESS starts the reverse 2 s after the outbound is created (a goroutine in `New()`), so an outbound removed within those 2 s would still start it after `Close()`. `Reverse.Start()` is now a no-op once `Reverse.Close()` has run.\n\nThe other callers of `RemoveHandler` (commander, metrics, reverse portal, VLESS inbound's reverse) remove their own internal outbounds, whose `Close()` is a no-op or idempotent.\n\nConnections already in flight on a removed outbound behave as before unless its `Close()` tears them down (WireGuard, MASQUE). A reverse bridge that is already connected is left to end on its own; only new ones stop.\n\n### Reproduction (on 836a6fe)\n\nClient: `api` with `HandlerService` behind a dokodemo-door inbound, `freedom` as the only configured outbound. Server: a plain TCP listener that only counts accepted connections.\n\n**VLESS `reverse`**: the outbound is added with `xray api ado` and removed with `xray api rmo`. Afterwards `xray api lso` lists only the `freedom` outbound in all runs.\n\n| `rmo` after `ado` | build | accepts at `rmo` | 3 s later | 13 s later |\n|---|---|---:|---:|---:|\n| 7 s | main | 3 | 4 | 9 |\n| 7 s | this PR | 3 | 3 | 3 |\n| 0.5 s | main | 0 | 1 | 6 |\n| 0.5 s | this PR | 0 | 0 | 0 |\n\n**WireGuard** (`noKernelTun: true`): five outbounds, each added with `ado` and removed right away with `rmo`. Goroutines from the `metrics` listener's `/debug/pprof/goroutine`: main 11 → 72, this PR 11 → 12.\n\n### Tests\n\n- New `TestRemoveHandlerClosesHandler` (on main the handler is closed 0 times) and `TestReverseNotStartedAfterClose` (on main the monitor runs once).\n- `go test ./...` except `testing/scenarios`: the only failures also fail on main, tests that need `resources/geo*.dat` or network access.\n- `go test ./testing/scenarios`: pass.\n- `go run ./infra/vformat/main.go -mode check -pwd ./`: pass.\n"
+    },
+    {
+     "number": 7103,
+     "title": "feat(xdns): add encrypted DNS resolver support",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-07T23:53:32Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "HPPC114514",
+     "url": "https://github.com/XTLS/Xray-core/pull/7103",
+     "body": "## 改动说明\r\n\r\n为 xdns 增加 DoT、DoH（HTTP/2）、DoQ 和 DoH3 解析器，支持通过加密 DNS 服务传输隧道报文。保留 UDP、TCP 解析器，继续使用原始 DNS 报文，保留 TXT、CNAME 等查询类型和响应内容。\r\n\r\n## 主要改动\r\n\r\n- 新增 `tls://`、`https://`、`quic://` 和 `https+h3://` 地址解析，支持默认端口、HTTPS 路径和查询参数。\r\n- 新增 `serverName`、`bootstrap` 和证书信任配置，并校验解析器地址及 TLS 参数。\r\n- 为解析器增加请求超时、并发及队列限制，校验 DNS 响应与原始查询是否匹配。\r\n- 调整 xdns 发送和关闭流程，向调用方返回发送失败，补充连接、流和 HTTP/3 传输实例的资源回收。\r\n- 为共享 DNS 查询和 finalmask 拨号增加 context 支持，传递查询取消和超时信号。"
+    },
+    {
+     "number": 6824,
+     "title": "XHTTP: randomize packet-up size per request",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-09-26T00:44:45Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "wywywywycloud",
+     "url": "https://github.com/XTLS/Xray-core/pull/6824",
+     "body": "`scMaxEachPostBytes` accepts a range, but packet-up currently samples it once when the logical XHTTP connection is created. Every full POST on that connection therefore uses the same body size.\n\nSample the configured range for each POST instead. The upload pipe uses the range's upper bound for buffering, while fixed-value configurations keep their existing behavior.\n\nThe integration test records real packet-up request bodies. It fails with the previous per-connection sampling and verifies that every body stays within the configured limit while full POST sizes vary.\n\nTests:\n\n- `go test ./transport/internet/splithttp -run 'Test_(maxUpload|packetUpRandomizesPostSizePerRequest)$' -count=20`\n- `go test -race ./transport/internet/splithttp`\n- `go run ./infra/vformat/main.go -mode check -pwd ./`\n- `CGO_ENABLED=0 go build ./main`\n"
+    },
+    {
+     "number": 6425,
+     "title": "DNS outbound: Preserve session context for timeout-only connections",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-07-03T16:14:21Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/6425",
+     "body": "陈年老 BUG 了，只是没人那么无聊这么配过所以没发现\r\n\r\n- 服务端上，客户端 XUDP 进来到 DNS 出站的流量没法判 `isOwnLink()` 特定配置会导致多绕一次\r\n- 如果配了 `sendThrough` 那么 direct 的查询还会 panic"
+    },
+    {
+     "number": 6298,
+     "title": "feat(outbound): introduce generic plugin outbound and dynamic handler registry",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-06-08T20:54:36Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "hossinasaadi",
+     "url": "https://github.com/XTLS/Xray-core/pull/6298",
+     "body": "Introduce a generic Plugin Outbound Protocol and a dynamic Handler Registry to Xray-core. This enables embedding parent applications (like mobile app wrappers) to register custom, packet-preserving network tunnels (e.g. ICMP tunnels, DNS/custom VPN transports) dynamically at runtime, avoiding localhost socket overhead and port collisions.\r\n\r\n**Proposal**: https://github.com/XTLS/Xray-core/issues/6297\r\n\r\n```json\r\n{\r\n  \"outbounds\": [\r\n    {\r\n      \"tag\": \"proxy\",\r\n      \"protocol\": \"plugin\",\r\n      \"settings\": {\r\n        \"name\": \"customtunnel\",\r\n        \"params\": {\r\n          \"password\": \"je101kgas\",\r\n          \"target\": \"1.1.1.1\",\r\n          \"raw_mode\": true\r\n        }\r\n      }\r\n    }\r\n  ]\r\n}\r\n```\r\n\r\n### Wrapper Registration & Initialization\r\n\r\n```go\r\nimport \"github.com/xtls/xray-core/proxy/plugin\"\r\n\r\n// 1. Listen for plugin instantiations\r\nplugin.SetOnPluginRegistered(func(tag string, name string, params string) {\r\n\tlog.Printf(\"Plugin '%s' registered with tag '%s'. Params JSON: %s\", name, tag, params)\r\n\tif name == \"customtunnel\" {\r\n\t\tgo startCustomTunnel(tag, params)\r\n\t}\r\n})\r\n\r\n// 2. Register the processing handler\r\nplugin.RegisterHandler(\"customtunnel\", func(ctx context.Context, dest v2net.Destination, link *transport.Link) error {\r\n\tconn, err := customtunnel.Dial(ctx, dest)\r\n\tif err != nil { return err }\r\n\tdefer conn.Close()\r\n\r\n\trequestFunc := func() error { return buf.Copy(link.Reader, buf.NewWriter(conn)) }\r\n\tresponseFunc := func() error { return buf.Copy(buf.NewReader(conn), link.Writer) }\r\n\treturn task.Run(ctx, requestFunc, responseFunc)\r\n})\r\n```\r\n\r\n\r\n@RPRX "
+    },
+    {
+     "number": 6219,
+     "title": "README.md: Add ovpn to Xray Tools",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-31T12:27:49Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "agentram",
+     "url": "https://github.com/XTLS/Xray-core/pull/6219",
+     "body": "Add ovpn to the Xray Tools list.\n\novpn is a source-available Go CLI for operating self-hosted Xray VLESS + REALITY servers over SSH. It renders Docker Compose runtime files, manages users and client links, supports rolling quotas, monitoring, backups, and optional HAProxy entrypoints.\n\nI placed it under Xray Tools because it is operator tooling rather than a GUI client or web panel. Happy to move it if another category fits better."
+    },
+    {
+     "number": 6164,
+     "title": "Bound shutdown after termination signal",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-19T11:49:53Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "M03ED",
+     "url": "https://github.com/XTLS/Xray-core/pull/6164",
+     "body": "This change prevents Xray from waiting indefinitely during graceful shutdown after receiving SIGTERM or interrupt.\r\n\r\nPreviously, shutdown depended on the deferred server.Close() call returning. If any feature Close() path blocked, the process could stay alive while listeners or active connections continued operating. This made stale Xray processes difficult to detect, especially when another process could bind the same port.\r\n\r\nNow Xray runs server.Close() explicitly after receiving a termination signal and waits up to 10 seconds. If shutdown does not complete in time, the process exits with code 1 so supervisors can treat it as a failed shutdown and avoid leaving a functional stale process behind.\r\n\r\nThis issue was most visible on mobile clients. Some apps, such as Telegram proxy-style traffic, may continue using an already-established path even when the VPN/client UI appears disabled. If the old Xray process remains alive during a stuck shutdown, those connections can continue transferring traffic and updating usage counters, making the node look stopped from the client side while traffic is still flowing server-side.\r\n\r\n"
+    },
+    {
+     "number": 6110,
+     "title": "Remove `xray.cone.disabled` env var",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-10T11:18:09Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/6110",
+     "body": "https://github.com/XTLS/Xray-core/pull/6057#issuecomment-4364744151\r\nhttps://github.com/XTLS/Xray-core/pull/6075#issuecomment-4395258425"
+    },
+    {
+     "number": 6103,
+     "title": "TLS : tls spoofing",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-09T16:20:08Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "codewithtamim",
+     "url": "https://github.com/XTLS/Xray-core/pull/6103",
+     "body": "fix #5964\r\n\r\n### RawPacket aka TLS Spoofing\r\n\r\nSo first lets talk about the idea,\r\n\r\nwhen you connect to a xray server, the censors can see your TLS ClientHello, read the SNI, and figure out what you are doing and block :)\r\n\r\nThe RawPacket aka TLS spoofing fixes that by injecting a fake TLS ClientHello before the real one Hits.\r\n\r\n\r\nThe fake one carries like a decoy domain (ex. baidu.com) and then the real one carries your actual destination (ex. www.example.com).\r\n\r\nA sensor that captures the first packet sees baidu.com and think that you are just browsing, and everything is okay with that, but in reality your connection goes through :)\r\n\r\n\r\nIt can be configured in the `finalmask.tcp` okay? and its only for client side.\r\n\r\n\r\n### How everything works\r\n\r\n\r\nWhen Xray dials a TCP connection and the first `Write()` happens (which also triggers the real TLS handshake) , our Raw Packet setup does the following.\r\n\r\n1.builds a fake Tls ClientHello with whatever SNI you want or you have option to provide the raw bytes (b64).\r\n\r\n2.Then we. wrap it in a raw TCP/ip packet.\r\n\r\n3.Then deliberately we corrupt the TCP header using whatever method is selected okay?\r\n\r\n4. Then we shoot it out via a raw socket\r\n\r\n5. Then immediately let the real `Write()` go through normally\r\n\r\n\r\nIn short : two packets arrive at the server back to back and the fake one gets dropped by the servers TCP stack because of the corruption and then the real handshake proceeds like nothing happened.\r\n\r\n\r\n### Config Example\r\n\r\n```json\r\n{\r\n  \"streamSettings\": {\r\n    \"finalmask\": {\r\n      \"tcp\": [\r\n        {\r\n          \"type\": \"rawpacket\",\r\n          \"settings\": {\r\n            \"sni\": \"baidu.com\",\r\n            \"payload\": \"\",\r\n            \"method\": \"wrong-sequence\",\r\n            \"ttl\": 3,\r\n            \"count\": 1\r\n          }\r\n        }\r\n      ]\r\n    }\r\n  }\r\n}\r\n```\r\n\r\n\r\n### Available Fields\r\n\r\n`sni` : The domain to put in the fake ClientHello. If you set this, it will auto generate a valid TLS ClientHello for you automatically. If you set `payload` and `sni` same time , sni wins here.\r\n\r\n```\r\n\"sni\": \"baidu.com\"\r\n```\r\n\r\n`payload` : If you don't want an auto gnrated ClientHello, then just encode your raw bytes that you want into base64 and put them here. I have added an option to do it from command line also. Do like this \r\n\r\n```\r\n xray tls fake-hello google.com\r\n ```\r\n\r\nIt will out the thing and then just copy paste.\r\n\r\n\r\nNote : If `sni` and payload are empty or not set , the raw packet does nothing and the connection goes through normally.\r\n\r\n\r\n`method` : It defines how we corrupt the fake packet so the server drops it.\r\n\r\n`wrong-sequence` : It duplicates the sequence number (looks like a retransmission so server drops it)\r\n\r\nSo we grab the kernels `snd_nxt` ( the next sequence number the kernel expects to send), then subtract the length of the fake payload and then use that as the sequence number of the injected packet. The results then is a duplicate of the. last segment, so the receivers TCP stack sees it as a retransmit at best, or like out of window at worst and then drops it.\r\n\r\n\r\n`wrong-checksum`: It flips all the bits in the TCP checksum (so server sees a bad checksum and drops it)\r\n\r\nWe build the packet with a correct checksum and then flip every bit(^0xFFFF). The receiver then validates the checksum and its wrong, so the packet goes in trash.\r\n\r\n`wrong-ack`: It sets ACK number way outside the receive window (so server sends dup ACK then drops it)\r\n\r\nIt sets the ACK number to `rcv_nxt - window/2` and that's way outside of the receivers window, and the kernel responds with a dup ACK containing the correct sequence number, then drops it.\r\n\r\n`wrong-md5` : This adds a fake TCP MD5 signature option and server without MD5 drops it\r\n\r\nHere we append a TCP option with kind=19 and length=18 to the TCP header. The kind 19 is the MD5 signature option (RFC 2385), if the receiver doesn't use TCP MD5 (which is basically everything except some BGP routers), it sees an unknown option"
+    },
+    {
+     "number": 6050,
+     "title": "add speed limiter for download and upload speed in megabytes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-05-01T07:43:44Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "SaeedFazlollahzadeh",
+     "url": "https://github.com/XTLS/Xray-core/pull/6050",
+     "body": ""
+    },
+    {
+     "number": 6016,
+     "title": "Move Browser Dialer to `sockopt.dialerProxy` `browser://` URL usage, with UUID path validation, startup-time conflict checks, instance-lifecycle listen/serve control, XHTTP mode constraints, and static initialization simplification",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-04-26T07:27:33Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Copilot",
+     "url": "https://github.com/XTLS/Xray-core/pull/6016",
+     "body": "This PR moves Browser Dialer usage to `sockopt.dialerProxy` with `browser://host:port/uuid` URLs and removes the earlier parse-time listener startup side effects.\n\n### What changed\n\n- `dialerProxy` now uses `browser://host:port/uuid`\n- Browser Dialer URLs are collected and validated during config build\n- URL validation includes host:port parsing, UUID path validation, and same-port/different-IP conflict checks\n- Browser Dialer remains restricted to WebSocket and XHTTP, with XHTTP limited to `auto` / `packet-up`, and REALITY rejected\n- Listener startup is now controlled by the Xray instance lifecycle:\n  - start in `core.Instance.Start()`\n  - stop in `core.Instance.Close()`\n- Startup failure cleanup now also tears down Browser Dialer listeners\n\n### Scope\n\nThe change keeps the simplified non-dynamic model, but ties listener lifetime to the actual Xray instance instead of starting listeners while only parsing/building config."
+    },
+    {
+     "number": 5844,
+     "title": "Add UserConnTracker to manage user connection cancellations across proxies",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-03-25T15:55:41Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "ImMohammad20000",
+     "url": "https://github.com/XTLS/Xray-core/pull/5844",
+     "body": "there is an old bug that lead to a big issue in panels that leve connections open when users remove from inbounds via gRPC api the connection to that user dose not close in some cases so i implement a connection tracker that track all connections and close theme when users remove from the inbounds\r\n\r\nan example of the issue is user limited to 1GB but becouse connections not closed it used 18GB\r\n\r\n<img width=\"231\" height=\"64\" alt=\"image\" src=\"https://github.com/user-attachments/assets/36b906ec-fff1-402c-b6b3-87e63c0dd72e\" />\r\n"
+    },
+    {
+     "number": 5625,
+     "title": "Add listable",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-01-30T14:57:23Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/5625",
+     "body": "这个泛型实现非常通用 目前只加了那个verifyPeerCertInNames和pinnedPeerCertSha256 如果用在出入站上甚至可以这样\r\n```\r\n{\r\n    \"inbounds\": {\r\n        \"port\": 10808,\r\n        \"protocol\": \"socks\"\r\n    },\r\n    \"outbounds\": {\r\n        \"protocol\": \"freedom\"\r\n    }\r\n}\r\n```"
+    },
+    {
+     "number": 5419,
+     "title": "Browser dialer: High-performance pass-through rewrite",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-12-14T12:01:01Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "PoneyClairDeLune",
+     "url": "https://github.com/XTLS/Xray-core/pull/5419",
+     "body": "This PR is currently a draft, just #5334 re-opened because I fucked the Git commit history of the original PR up, as well as having the oversight of choosing the wrong source branch to use in pull requests.\r\n\r\nThis is a complete rewrite of the browser dialer to utilize pass-through without any processing on the browser side, reaching its theoretical maximum performance. A control socket will be used to instruct the browser dialer to initiate relaying on a dedicated separate channel.\r\n\r\nThe JS side, [Appat](https://github.com/team-cloudchaser/appat), is currently being built as an implementation-agnostic solution. I'll post a built version of it and unmark this as draft once it's done."
+    },
+    {
+     "number": 5143,
+     "title": "Refactor code to use DispatchLink() in vmess inbound",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-09-14T03:50:49Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "yuhan6665",
+     "url": "https://github.com/XTLS/Xray-core/pull/5143",
+     "body": "- Always apply NoTerminationSignal"
+    },
+    {
+     "number": 5102,
+     "title": "Add VLESS seed configurations",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-09-07T14:54:57Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "yuhan6665",
+     "url": "https://github.com/XTLS/Xray-core/pull/5102",
+     "body": "https://github.com/XTLS/Xray-core/pull/3260"
+    },
+    {
+     "number": 4283,
+     "title": "Add Datagram transport",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2025-01-13T04:04:04Z",
+     "updated_at": "2026-11-14T15:58:41Z",
+     "user": "yuhan6665",
+     "url": "https://github.com/XTLS/Xray-core/pull/4283",
+     "body": ""
+    },
+    {
+     "number": 7402,
+     "title": "XMC: make startup padding configurable with per-turn delay ranges",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-14T11:59:03Z",
+     "updated_at": "2026-11-14T17:51:12Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402",
+     "body": "Supersedes #6769. Takeover of the XMC startup-padding work requested in #7394, following up on #6487 / #6732.\n\n## What this changes\n\nThe four original commits by @spr334-a are kept as-is:\n\n- `b7c1f0d8` XMC: make startup padding lengths configurable\n- `7eaa1dd0` Allow configurable padding direction per turn\n- `50d8ed43` Fix XMC padding config format\n- `a44b32c8` Rename padding to paddings and add delay field\n\nOn top of them:\n\n1. Merged current `main` into the branch instead of rebasing, to preserve the original commits/hashes. This also resolves the merge fallout that currently makes #6769 fail CI:\n   - `WrapConnClient` now takes `(conn, dest, dialer)`; updated `packet_stream_test.go`.\n   - Ran `gofmt` on `infra/conf/transport_finalmask.go`.\n   - Regenerated `config.pb.go` with `infra/vprotogen`.\n2. Completed the remaining request from [the delay comment](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421): `delay` is now a **string** with an optional range.\n   - JSON: `\"delay\": \"100\"` or `\"delay\": \"50-150\"`, in milliseconds.\n   - The sender waits a uniformly sampled value in `[min, max]` after its turn.\n   - The receiver waits at least `min` before reading or sending the next turn, so both endpoints apply the pause.\n   - The last turn's delay is ignored (no extra latency before the proxy stream starts).\n   - `delay_min` / `delay_max` in the protobuf; negative, reversed and duration-overflowing ranges are rejected at config load and connection setup.\n3. Updated the README/example and added timing coverage. Omitting `paddings` still keeps the 26.1.2 preset unchanged.\n\n## Config example\n\n```json\n\"paddings\": [\n  {\"length\": \"44\", \"direction\": \"c2s\", \"delay\": \"0\"},\n  {\"length\": \"64-128\", \"direction\": \"s2c\", \"delay\": \"100\"},\n  {\"length\": \"25\", \"direction\": \"c2s\", \"delay\": \"50-150\"},\n  {\"length\": \"32768-49152\", \"direction\": \"s2c\"}\n]\n```\n\nBoth endpoints need the same array and the same `delay` ranges. There is no configuration-fingerprint handshake; length mismatches fail a check, while direction/count/delay mismatches can stall until the handshake deadline.\n\n## Tests\n\nRun locally on this branch:\n\n```text\ngo test -count=20 ./transport/internet/finalmask/xmc\ngo test -race -count=1 ./transport/internet/finalmask/xmc\ngo test -count=1 ./infra/conf\ngo test -count=1 ./transport/internet/finalmask/...\ngo vet ./transport/internet/finalmask/xmc\ngo build -o /tmp/xray-core-build ./main\ngo run ./infra/vformat/main.go -mode check -pwd ./\ngo run ./infra/vprotogen/main.go -mode check -pwd ./\n```\n\nAll pass. The fork CI `Tests and Checkings` run also passed on Windows/Linux/macOS: https://github.com/yandujun363/Xray-core/actions/runs/43562333199\n\nPre-existing on `main`, not caused by this PR: `go vet ./transport/internet/finalmask/...` reports `tcp_test.go:30` and `go vet ./infra/conf` reports unreachable code in `infra/conf/xray.go`.\n\n## Merge method\n\nPlease use **Create a merge commit**, not squash or rebase, so the original commits by @spr334-a stay in history. Then #6769 can be closed.\n\n## Known issues intentionally left for follow-ups\n\nKept out of this PR so it stays one feature (configurable startup padding + delay range):\n\n1. **Delay is not cancellable and has no practical cap.** `runPaddingSchedule` uses `time.Sleep`, which ignores connection close and handshake deadlines; a very large configured delay can keep the handshake goroutine alive after close. Follow-up: close/deadline-aware timer and/or a documented maximum.\n2. **Custom `paddings` replace the whole 40-turn preset**, including the 33-turn post-login tail and its chunk/write boundaries. This is documented, but whether it should instead keep the preset tail needs confirmation; if so, follow-up.\n3. **No total turn/byte cap.** Per-turn length is bounded, but the array length is not; a misconfiguration can produce a very large handshake. Follow-up hardening.\n4. **No early-arrival timing check.** The receiver enforces the minimum wait, but does not fail if the peer sends ea"
+    },
+    {
+     "number": 7395,
+     "title": "HTTPUpgrade client: Close the connection when the upgrade fails",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-13T16:59:04Z",
+     "updated_at": "2026-11-14T15:58:40Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7395",
+     "body": "When the upgrade request could not be sent, or the server did not answer with a valid \"101 Switching Protocols\", the dial returned the error and left the TCP connection open until the garbage collector closed it.\n\nWith \"fingerprint\": \"unsafe\", a failed TLS handshake is one of these cases. Go's TLS does the handshake at the first write, and here the first write is the upgrade request."
+    },
+    {
+     "number": 7393,
+     "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-13T13:33:16Z",
+     "updated_at": "2026-11-14T15:58:40Z",
+     "user": "hexband",
+     "url": "https://github.com/XTLS/Xray-core/pull/7393",
+     "body": "## Motivation\n\nWhen the server's domain resolves to several IPs, Happy Eyeballs is supposed to pick a working one. In Russia, however, some ISPs (the DPI boxes installed at them) drop the ServerHello for some of these IPs while TCP to them still connects. Which IPs are affected differs from one ISP and region to another and changes over time: an IP that is blocked for one client works for another, so removing it from DNS would only break it for everyone else. Happy Eyeballs today ends the race at the first TCP connection, so it happily picks such an IP, and then the TLS or REALITY handshake can never complete. A retry usually picks the same IP again, because it wins the TCP race again. In this situation the current Happy Eyeballs is of no use at all, even though other IPs of the same domain work fine.\n\n## What this PR adds\n\nA new optional field `successDefinition` in `sockopt.happyEyeballs`:\n\n| Value | The race is won by |\n|---|---|\n| `tcpConnected` (default) | the first established TCP connection, as before |\n| `tlsHandshakeComplete` | the first connection that completes the TLS or REALITY handshake |\n\n```json\n\"sockopt\": {\n  \"domainStrategy\": \"UseIP\",\n  \"happyEyeballs\": {\n    \"tryDelayMs\": 250,\n    \"maxConcurrentTry\": 4,\n    \"successDefinition\": \"tlsHandshakeComplete\"\n  }\n}\n```\n\nWithout `successDefinition`, or with `tcpConnected`, nothing changes. Without TLS or REALITY, `tlsHandshakeComplete` is the same as `tcpConnected`.\n\nThe behaviour follows section 6.1 of Happy Eyeballs v3, which says clients SHOULD wait for the TLS handshake to complete before canceling other attempts: https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/\nChromium's Happy Eyeballs v3 implementation does the same: a TCP-based attempt runs the TLS handshake inside it and completes only when the handshake does, and an attempt counts as slow (so the next one starts) if TCP and TLS together take longer than the connection attempt delay:\n- https://chromium.googlesource.com/chromium/src/+/main/net/socket/tls_stream_attempt.cc\n- https://chromium.googlesource.com/chromium/src/+/main/net/http/http_stream_pool_attempt.cc\n\nHappy Eyeballs v3 is still a draft, and browsers do not use it by default yet: in Chromium it is behind the `HappyEyeballsV3` feature, which is disabled by default, and Firefox enables it only in Nightly.\n\n## How it works\n\n- The scheduler of `TcpRaceDial` is reused as is (`tryDelayMs`, `maxConcurrentTry`, `prioritizeIPv6`, `interleave`); only the attempt it runs differs. With `tcpConnected` the attempt is the same system dial as before.\n- With `tlsHandshakeComplete` every attempt goes through TCP dial to one IP → FinalMask (if any) → the transport's own TLS or REALITY handshake. Only the TCP destination changes from attempt to attempt; masks apply to each attempt separately, exactly as on a normal dial.\n- An attempt keeps its `maxConcurrentTry` slot until its handshake ends, and a hanging handshake does not stop the scheduler from starting the next attempt after `tryDelayMs`.\n- Losing attempts are stopped by closing their connections. Transports that leave the handshake to the first write (gRPC, and HTTPUpgrade and XHTTP with Go TLS) get it completed inside the race, so a connection is never handshaked twice.\n- The race happens under the same conditions as the TCP race in `DialSystem`: `domainStrategy` set, at least two IPs, no `dialerProxy`, non-zero `tryDelayMs` and `maxConcurrentTry`. Otherwise the transport dials exactly as before.\n\nAll covered transports now dial through `internet.DialTCPWithHandshake(ctx, dest, streamSettings, handshake)`. `handshake` is a function that wraps the TCP connection with the transport's TLS or REALITY client; it holds the same code the transport used to run right after its own TCP dial.\n\nTransports covered: RAW (TLS, REALITY), WebSocket, HTTPUpgrade, gRPC (TLS, REALITY), XHTTP over HTTP/1.1 and HTTP/2 (TLS, REALITY), MASQUE over HTTP/2. For XHTTP the race runs once per new physical connection. UDP"
+    },
+    {
+     "number": 6732,
+     "title": "Proposal: user-configurable traffic shaping profiles for XMC / FinalMask (follow-up to #6487)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-09-07T13:03:35Z",
+     "updated_at": "2026-11-14T15:57:34Z",
+     "user": "BolTun-prog",
+     "url": "https://github.com/XTLS/Xray-core/issues/6732",
+     "body": "The #6487 summary ends with:\n\n> This intentionally does not emit version-specific Play or Chunk Data packets. **User-configurable traffic shaping is deferred to a follow-up PR.**\n\nIn the merge discussion @RPRX also noted that custom traffic-shape configuration would be added later as an incremental feature (流量形状自定义配置下次再补吧，毕竟是增量功能).\n\nThis issue proposes a concrete design for that follow-up and asks for design agreement before any implementation (a draft PR would follow if the direction is acceptable). If the original XMC author already has shaping work in flight, happy to stand down and review/help instead.\n\n## Problem\n\nThe current XMC shaping is a built-in model of one fixed target (uncompressed Minecraft 26.1.2 login/join). Two practical limits:\n\n- Built-in models decay when the camouflage target's traffic shape evolves; updating them requires core releases.\n- Different deployments may need different camouflage targets, but today the XMC shape is a compiled-in preset and is not configurable (other masks, e.g. fragment #6334 or header-custom #5920, already take declarative config).\n\nThe knobs that exist today are scattered across features and do not compose with XMC's directional shaping: freedom fragment `maxSplit` (#4998), XHTTP upload pacing (`minUploadInterval`, #3592) and its padding mechanism (#3643), fragment `lengths`/`delays` (#6334), and the programmable `header-custom` templates (#5920).\n\n## Proposal\n\nMake the XMC shaping data-driven: a declarative profile loaded from config, interpreted by a small engine in `finalmask` — no policy logic in core.\n\nSketch:\n\n```jsonc\n{\n  \"schema\": \"xray.shape@1\",\n  \"name\": \"xmc-default\",\n  \"version\": 1,\n  \"phases\": {\n    \"login\": {\n      \"c2s\": { \"lenDist\": [ /* sampled length histogram */ ] },\n      \"s2c\": { \"lenDist\": [ /* ... */ ] },\n      \"keepAlive\": { \"iatMs\": 1000, \"jitterMs\": 100 }\n    }\n    // phase transitions follow the existing protocol state machine\n  }\n}\n```\n\nRuntime invariants (deliberately conservative):\n\n- Padding only ever increases record length; shortening is fragmentation, which stays a separate mask.\n- Zero added latency for real data: the profile only rate-limits sends (`iatMs` as \"not faster than\") and fills pauses with dummies. Delay-based scheduling is explicitly out of scope here.\n- The turn schedule stays alternating-direction (client first), exactly like the merged XMC padding schedule; a profile only controls lengths and cadence, never the message flow.\n- `shape` composes with the other configured masks rather than replacing them; the chain order stays whatever the `finalmask.tcp` array says (noise in particular remains a standalone pre-data layer).\n- Fail-closed: schema/`version` mismatch between endpoints aborts the connection.\n- Length values the server must reproduce are carried in-band, inside the encrypted channel.\n\n## What this is not\n\n- Not a new protocol and not a wire-format change.\n- Not ML in core: profiles are produced offline elsewhere; core only interprets a table. A separate profile repository and geodata-style distribution can come later — out of scope here.\n- Not delay/jitter scheduling (possible follow-up after measurements).\n\n## Questions\n\n1. Config placement: a profile embedded in `streamSettings` (per inbound/outbound), or a named registry referenced by id?\n2. Are the invariants above (especially zero-delay + padding-only) the intended direction for the follow-up, or was something broader planned?\n3. If the direction is agreed, would a draft PR with a single built-in preset (reproducing today's XMC 26.1.2 shape as a profile), tests, and the still missing XMC config docs be the right first step?\n\nPrior art for profile-driven shaping engines: Maybenot (Karlstad University, arXiv:2304.09510) — a padding engine driven by parameterized state machines; the offline-profile / online-interpreter split here follows the same reasoning at the proxy layer.\n\nRefs: #6487 #6210 #4998 #3592 #3643 #6334 #5920"
+    },
+    {
+     "number": 7396,
+     "title": "dokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-13T20:52:54Z",
+     "updated_at": "2026-11-14T12:16:08Z",
+     "user": "xJohnDoe15",
+     "url": "https://github.com/XTLS/Xray-core/issues/7396",
+     "body": "# Draft: issue в XTLS/Xray-core — tproxy-вход роняет UDP (принимается, туннелируется, не выходит)\n\n## Title\n\ndokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)\n\n## Environment\n\n- Xray-core: 26.11.9 (also reproduced on 26.10.31)\n- Server A (RU node): inbound `dokodemo-door` with `followRedirect: true`, `sockopt.tproxy: \"tproxy\"`, nftables TPROXY (`meta l4proto udp tproxy to :12345 meta mark set 1` + `ip rule fwmark 1 lookup 100`), outbound `vless` + `xhttp` (mode `stream-one`) + `reality` to Server B.\n- Server B (EU node): inbound `vless` + `xhttp` + `reality`, outbound `freedom`.\n- Clients reach Server A via WireGuard tunnel (AWG); UDP and TCP both hit the same TPROXY rule.\n\n## Symptom\n\n- TCP through the same tproxy inbound → egresses on Server B fine (full internet via B's IP).\n- UDP: packet arrives at Server A (tcpdump on WG ingress), xray log shows the correct original destination and `tunneling request to udp:... via <B>:443`, but **nothing egresses on Server B** (tcpdump on egress interface: 0 packets).\n- Browser QUIC from clients silently falls back to TCP — the breakage was invisible until a UDP-only application (Xbox Teredo) failed.\n\n## Isolation experiment\n\nSame Server A host, second xray instance, **identical outbound** (vless+xhttp stream-one+reality to B), inbound changed to plain `dokodemo-door` (fixed `address`/`port`, **no tproxy**) on 127.0.0.1. UDP sent to it **egresses on Server B correctly**. So the transit path and version are fine; the tproxy ingress path drops UDP.\n\nAlso tried `xhttpSettings.mode: \"auto\"` for the outbound — log shows xray still dials `mode stream-one` for UDP; same behavior.\n\n## Minimal repro sketch\n\nServer A:\n```json\n{\n  \"inbounds\": [{\n    \"port\": 12345, \"protocol\": \"dokodemo-door\",\n    \"settings\": { \"network\": \"tcp,udp\", \"followRedirect\": true },\n    \"streamSettings\": { \"sockopt\": { \"tproxy\": \"tproxy\" } }\n  }],\n  \"outbounds\": [{\n    \"protocol\": \"vless\",\n    \"settings\": { \"vnext\": [{ \"address\": \"<B>\", \"port\": 443, \"users\": [{ \"id\": \"<uuid>\", \"encryption\": \"none\" }] }] },\n    \"streamSettings\": {\n      \"network\": \"xhttp\", \"security\": \"reality\",\n      \"realitySettings\": { \"serverName\": \"<sni>\", \"publicKey\": \"<key>\", \"shortId\": \"<id>\" },\n      \"xhttpSettings\": { \"mode\": \"stream-one\" }\n    }\n  }]\n}\n```\nnftables on A: `... udp dport <test> tproxy to :12345 meta mark set 1` (+ `ip rule fwmark 1 lookup 100` → `local default dev lo`... note: our table 100 is `default dev lo` for tproxy delivery — standard setup).\n\nSend any UDP datagram into the TPROXY rule → observe: accepted (log), tunneled (log), zero egress on B.\n\n## Ask\n\nIs UDP via dokodemo-tproxy ingress expected to work in 26.x? If yes — this looks like a regression/bug in the tproxy UDP path (or its interaction with XHTTP UDP carrying); happy to collect any specific diagnostics (pcap, debug logs).\n\n## Notes\n\n- Possibly related area: PR #7386 (fake UDP sockets in TPROXY mode) — symptom there was resource leak, not silent drop.\n- Our workaround (separate non-xray UDP tunnel) is in place; reporting upstream so the tproxy path can be fixed for everyone.\n"
+    },
+    {
+     "number": 7394,
+     "title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T13:53:08Z",
+     "updated_at": "2026-11-14T11:52:01Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394",
+     "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
+    },
+    {
+     "number": 7401,
+     "title": "Diagnose check-format-and-proto failure",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-14T11:24:09Z",
+     "updated_at": "2026-11-14T11:38:23Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7401",
+     "body": "- **Root cause:** gofumpt flagged three files in PR #6769: `infra/conf/transport_finalmask.go`, `transport/internet/finalmask/xmc/config_test.go`, and `transport/internet/finalmask/xmc/padding.go`.\n- **Changes:** None. This checkout lacks the failing PR’s source changes, so the formatting fix could not be applied safely."
+    },
+    {
      "number": 7399,
      "title": "Packet down",
      "is_pr": true,
@@ -86,17 +744,6 @@
      "user": "Shm1ks",
      "url": "https://github.com/XTLS/Xray-core/pull/7399",
      "body": "Изменения"
-    },
-    {
-     "number": 7394,
-     "title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-13T13:53:08Z",
-     "updated_at": "2026-11-14T05:59:00Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7394",
-     "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
     },
     {
      "number": 7398,
@@ -121,17 +768,6 @@
      "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nAn XHTTP/3 inbound passes `quicParams.maxIncomingStreams` to quic-go unchanged (`transport/internet/splithttp/hub.go:494` on main). When it is not set, quic-go's default applies: 100 bidirectional streams per connection.\n\nEvery XHTTP session keeps one stream open for its whole life, and in packet-up each upload request needs one more. Once a QUIC connection carries 100 sessions, no session on it can upload any more, including the ones that had been working. In stream-one the existing sessions keep working and only new ones wait.\n\nResults with the official v26.11.9 binary, loopback, using the configs below. The client is limited to one connection (`xmux.maxConnections: 1`) only to keep the test small:\n\n| Case | Result |\n|---|---|\n| packet-up over h3 | session 100 gets no reply; sessions 1, 2 and 50, opened earlier, get no reply when they send again |\n| stream-one over h3 (same configs, `mode` changed) | session 101 gets no reply; sessions 1, 2 and 50 still get replies |\n| packet-up over h2 (same configs, ALPN changed) | all 110 sessions get replies |\n| packet-up over h3, server with `finalmask.quicParams.maxIncomingStreams: 4096` | all 110 sessions get replies |\n\nWith the client's default XMUX settings (no `xmux` in the config, so 3 connections), tested on main at c4561418: sessions that send one request and then stay open reached the first failure at session 254, 259 and 289 in three runs, and 99 sessions that had been working could no longer upload. Sessions that each sent 12 requests before going idle did not reach it within 700 sessions, because the client retires a connection after 600 to 900 requests.\n\nHTTP/2 inbounds are not affected: at the server's stream limit the client opens another TCP connection.\n\nA possible fix is a large default when the value is not set. With this change on main, 400 sessions with default client settings all kept working:\n\n```diff\n--- a/transport/internet/splithttp/hub.go\n+++ b/transport/internet/splithttp/hub.go\n@@ -495,6 +495,12 @@\n \t\t\tDisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != \"linux\" && runtime.GOOS != \"windows\" && runtime.GOOS != \"darwin\"),\n \t\t}\n \n+\t\tif quicConfig.MaxIncomingStreams == 0 {\n+\t\t\t// quic-go's default of 100 is per connection, and every session holds one stream for its\n+\t\t\t// whole lifetime, while packet-up needs one more stream for each upload request.\n+\t\t\tquicConfig.MaxIncomingStreams = 1 << 16\n+\t\t}\n+\n \t\tvar k *quic.StatelessResetKey\n \t\tif !quicParams.DisableStatelessReset {\n \t\t\tk = &quic.StatelessResetKey{}\n```\n\nPrepared with the assistance of Claude (Anthropic). Every result above comes from a run described here.\n\n### Reproduction Method\n\n1. Start the server and the client with the configs below (official v26.11.9 `Xray-linux-64`).\n2. Run this script. It starts an echo server on 127.0.0.1:9002, opens connections one by one through the client's dokodemo-door inbound, sends `ping` on each and keeps them all open.\n\n```python\nimport socket, threading\n\ndef echo_server():\n    s = socket.create_server((\"127.0.0.1\", 9002))\n    while True:\n        c, _ = s.accept()\n        threading.Thread(target=lambda c=c: [c.sendall(d) for d in iter(lambda: c.recv(65536), b\"\")], daemon=True).start()\n\ndef ping(c, timeout):\n    c.settimeout(timeout)\n    c.sendall(b\"ping\")\n    try:\n        return c.recv(4) == b\"ping\"\n    except socket.timeout:\n        return False\n\nthreading.Thread"
     },
     {
-     "number": 7350,
-     "title": "tun: end UDP flows and cancel dispatches when the inbound closes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-08T19:35:04Z",
-     "updated_at": "2026-11-14T02:45:55Z",
-     "user": "RoyHP",
-     "url": "https://github.com/XTLS/Xray-core/pull/7350",
-     "body": "## Problem\n\nClosing a core instance that has a `tun` inbound leaves its UDP flows alive, and everything they hold with them.\n\n- `Handler.Init` detaches the handler's context from the instance (`core.ToBackgroundDetachedContext`), and nothing cancels it on `Close`.\n- `stack.Close` resets the TCP connections and closes the sockets opened by `DialUDP`, but never touches the UDP flow table (`udpConnectionHandler.udpConns`).\n\nSo each UDP flow's reader keeps waiting on its packet queue after `Close`, which pins its XUDP mux session, the mux `ClientWorker` and that worker's connection to the server.\n\nMeasured in a client that embeds the tun inbound and restarts the instance per session (goroutine origins from `runtime.Stack`): about 80 goroutines, 0.8 MB of live heap and stacks, and one established outbound connection leaked per instance, with no decay over 8+ minutes. After 25 instances: 1600 goroutines, all created by `tun.(*udpConnectionHandler).HandlePacket`, `mux.(*ClientWorker).Dispatch`, `mux.NewClientWorker` and `mux.(*DialingWorkerFactory).Create`, and 17 established connections to the server.\n\n## Fix\n\n- `Handler` owns a `cancel` for its detached context and calls it in `Close` before closing the stack, so in-flight dispatches unwind (also the ones not blocked on the reader).\n- `stack.Close` ends every UDP flow (`udpConnectionHandler.closeAll`): their readers get EOF, the dispatches return and release their outbounds. The flow table also refuses new flows from then on, mirroring `handleTCP`'s `closed` check: a packet already in flight between the stack closing and the tun closing used to open a fresh flow (and, with a mux outbound, dial a worker) during shutdown.\n\nThe remaining XUDP mux workers then close on the mux client's idle check (two 16 s monitor ticks after their last session), after which goroutines and heap are back at the baseline and no server connections remain.\n\n## Verification\n\n- New tests: `TestUDPHandlerCloseAllEndsFlows` (flows end on close, a late packet opens none) and `TestHandlerCloseCancelsDispatches` (a dispatch that is not reading returns when the handler closes). `go test -race ./proxy/tun/` passes.\n- With the patch, 20 instance start/stop cycles end with 0 established connections to the server and the baseline goroutine count; without it, 17 connections and 1600 goroutines that never go away."
-    },
-    {
      "number": 6802,
      "title": "HTTPUpgrade client: Close connection to server on early returns",
      "is_pr": true,
@@ -141,72 +777,6 @@
      "user": "JorikSmith",
      "url": "https://github.com/XTLS/Xray-core/pull/6802",
      "body": "dialhttpUpgrade() dials server, then returns early in three places\r\nwithout closing that connection\r\n-utls handshake fails\r\n-request write fails\r\n-reply is not 101 switching protocols\r\n\r\non these paths nothing is handed to the caller, so nobody can close it\r\nand it stays open until GC finalizer runs\r\n\r\nthird case is the common one, a wrong path or a cdn error page leaks one\r\nsocket per dial attempt\r\n\r\ntested against local server answering 404, GC turned off (50 failed)\r\ndials leak 50 sockets before this patch, 0 after\r\n\r\nsetUpHTTPTunnel() in proxy/http/client.go closes raw connection on its\r\nearly returns same way"
-    },
-    {
-     "number": 7396,
-     "title": "dokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-13T20:52:54Z",
-     "updated_at": "2026-11-13T20:52:54Z",
-     "user": "xJohnDoe15",
-     "url": "https://github.com/XTLS/Xray-core/issues/7396",
-     "body": "# Draft: issue в XTLS/Xray-core — tproxy-вход роняет UDP (принимается, туннелируется, не выходит)\n\n## Title\n\ndokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)\n\n## Environment\n\n- Xray-core: 26.11.9 (also reproduced on 26.10.31)\n- Server A (RU node): inbound `dokodemo-door` with `followRedirect: true`, `sockopt.tproxy: \"tproxy\"`, nftables TPROXY (`meta l4proto udp tproxy to :12345 meta mark set 1` + `ip rule fwmark 1 lookup 100`), outbound `vless` + `xhttp` (mode `stream-one`) + `reality` to Server B.\n- Server B (EU node): inbound `vless` + `xhttp` + `reality`, outbound `freedom`.\n- Clients reach Server A via WireGuard tunnel (AWG); UDP and TCP both hit the same TPROXY rule.\n\n## Symptom\n\n- TCP through the same tproxy inbound → egresses on Server B fine (full internet via B's IP).\n- UDP: packet arrives at Server A (tcpdump on WG ingress), xray log shows the correct original destination and `tunneling request to udp:... via <B>:443`, but **nothing egresses on Server B** (tcpdump on egress interface: 0 packets).\n- Browser QUIC from clients silently falls back to TCP — the breakage was invisible until a UDP-only application (Xbox Teredo) failed.\n\n## Isolation experiment\n\nSame Server A host, second xray instance, **identical outbound** (vless+xhttp stream-one+reality to B), inbound changed to plain `dokodemo-door` (fixed `address`/`port`, **no tproxy**) on 127.0.0.1. UDP sent to it **egresses on Server B correctly**. So the transit path and version are fine; the tproxy ingress path drops UDP.\n\nAlso tried `xhttpSettings.mode: \"auto\"` for the outbound — log shows xray still dials `mode stream-one` for UDP; same behavior.\n\n## Minimal repro sketch\n\nServer A:\n```json\n{\n  \"inbounds\": [{\n    \"port\": 12345, \"protocol\": \"dokodemo-door\",\n    \"settings\": { \"network\": \"tcp,udp\", \"followRedirect\": true },\n    \"streamSettings\": { \"sockopt\": { \"tproxy\": \"tproxy\" } }\n  }],\n  \"outbounds\": [{\n    \"protocol\": \"vless\",\n    \"settings\": { \"vnext\": [{ \"address\": \"<B>\", \"port\": 443, \"users\": [{ \"id\": \"<uuid>\", \"encryption\": \"none\" }] }] },\n    \"streamSettings\": {\n      \"network\": \"xhttp\", \"security\": \"reality\",\n      \"realitySettings\": { \"serverName\": \"<sni>\", \"publicKey\": \"<key>\", \"shortId\": \"<id>\" },\n      \"xhttpSettings\": { \"mode\": \"stream-one\" }\n    }\n  }]\n}\n```\nnftables on A: `... udp dport <test> tproxy to :12345 meta mark set 1` (+ `ip rule fwmark 1 lookup 100` → `local default dev lo`... note: our table 100 is `default dev lo` for tproxy delivery — standard setup).\n\nSend any UDP datagram into the TPROXY rule → observe: accepted (log), tunneled (log), zero egress on B.\n\n## Ask\n\nIs UDP via dokodemo-tproxy ingress expected to work in 26.x? If yes — this looks like a regression/bug in the tproxy UDP path (or its interaction with XHTTP UDP carrying); happy to collect any specific diagnostics (pcap, debug logs).\n\n## Notes\n\n- Possibly related area: PR #7386 (fake UDP sockets in TPROXY mode) — symptom there was resource leak, not silent drop.\n- Our workaround (separate non-xray UDP tunnel) is in place; reporting upstream so the tproxy path can be fixed for everyone.\n"
-    },
-    {
-     "number": 7281,
-     "title": "New Blackhole",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-28T15:24:00Z",
-     "updated_at": "2026-11-13T20:46:49Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281",
-     "body": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6467092152\n\n旧的黑洞拆掉，用户配置不变：\n- 纯阻断在 infra 转译为 freedom + finalRules block\n- 带响应的自动转为新的 `responder` 出站，有迁移警告\n\n`responder` 未来可以堆更多东西\n\n仍解决不了的是 UDP 首包绕过黑洞，后面还是能发出\n以及 UDP 首包是黑洞，后面想继续发出的问题\n在出站层面解决不了"
-    },
-    {
-     "number": 7395,
-     "title": "HTTPUpgrade client: Close the connection when the upgrade fails",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-13T16:59:04Z",
-     "updated_at": "2026-11-13T16:59:04Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7395",
-     "body": "When the upgrade request could not be sent, or the server did not answer with a valid \"101 Switching Protocols\", the dial returned the error and left the TCP connection open until the garbage collector closed it.\n\nWith \"fingerprint\": \"unsafe\", a failed TLS handshake is one of these cases. Go's TLS does the handshake at the first write, and here the first write is the upgrade request."
-    },
-    {
-     "number": 7393,
-     "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-13T13:33:16Z",
-     "updated_at": "2026-11-13T16:38:09Z",
-     "user": "hexband",
-     "url": "https://github.com/XTLS/Xray-core/pull/7393",
-     "body": "## Motivation\n\nWhen the server's domain resolves to several IPs, Happy Eyeballs is supposed to pick a working one. In Russia, however, some ISPs (the DPI boxes installed at them) drop the ServerHello for some of these IPs while TCP to them still connects. Which IPs are affected differs from one ISP and region to another and changes over time: an IP that is blocked for one client works for another, so removing it from DNS would only break it for everyone else. Happy Eyeballs today ends the race at the first TCP connection, so it happily picks such an IP, and then the TLS or REALITY handshake can never complete. A retry usually picks the same IP again, because it wins the TCP race again. In this situation the current Happy Eyeballs is of no use at all, even though other IPs of the same domain work fine.\n\n## What this PR adds\n\nA new optional field `successDefinition` in `sockopt.happyEyeballs`:\n\n| Value | The race is won by |\n|---|---|\n| `tcpConnected` (default) | the first established TCP connection, as before |\n| `tlsHandshakeComplete` | the first connection that completes the TLS or REALITY handshake |\n\n```json\n\"sockopt\": {\n  \"domainStrategy\": \"UseIP\",\n  \"happyEyeballs\": {\n    \"tryDelayMs\": 250,\n    \"maxConcurrentTry\": 4,\n    \"successDefinition\": \"tlsHandshakeComplete\"\n  }\n}\n```\n\nWithout `successDefinition`, or with `tcpConnected`, nothing changes. Without TLS or REALITY, `tlsHandshakeComplete` is the same as `tcpConnected`.\n\nThe behaviour follows section 6.1 of Happy Eyeballs v3, which says clients SHOULD wait for the TLS handshake to complete before canceling other attempts: https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/\nChromium's Happy Eyeballs v3 implementation does the same: a TCP-based attempt runs the TLS handshake inside it and completes only when the handshake does, and an attempt counts as slow (so the next one starts) if TCP and TLS together take longer than the connection attempt delay:\n- https://chromium.googlesource.com/chromium/src/+/main/net/socket/tls_stream_attempt.cc\n- https://chromium.googlesource.com/chromium/src/+/main/net/http/http_stream_pool_attempt.cc\n\nHappy Eyeballs v3 is still a draft, and browsers do not use it by default yet: in Chromium it is behind the `HappyEyeballsV3` feature, which is disabled by default, and Firefox enables it only in Nightly.\n\n## How it works\n\n- The scheduler of `TcpRaceDial` is reused as is (`tryDelayMs`, `maxConcurrentTry`, `prioritizeIPv6`, `interleave`); only the attempt it runs differs. With `tcpConnected` the attempt is the same system dial as before.\n- With `tlsHandshakeComplete` every attempt goes through TCP dial to one IP → FinalMask (if any) → the transport's own TLS or REALITY handshake. Only the TCP destination changes from attempt to attempt; masks apply to each attempt separately, exactly as on a normal dial.\n- An attempt keeps its `maxConcurrentTry` slot until its handshake ends, and a hanging handshake does not stop the scheduler from starting the next attempt after `tryDelayMs`.\n- Losing attempts are stopped by closing their connections. Transports that leave the handshake to the first write (gRPC, and HTTPUpgrade and XHTTP with Go TLS) get it completed inside the race, so a connection is never handshaked twice.\n- The race happens under the same conditions as the TCP race in `DialSystem`: `domainStrategy` set, at least two IPs, no `dialerProxy`, non-zero `tryDelayMs` and `maxConcurrentTry`. Otherwise the transport dials exactly as before.\n\nAll covered transports now dial through `internet.DialTCPWithHandshake(ctx, dest, streamSettings, handshake)`. `handshake` is a function that wraps the TCP connection with the transport's TLS or REALITY client; it holds the same code the transport used to run right after its own TCP dial.\n\nTransports covered: RAW (TLS, REALITY), WebSocket, HTTPUpgrade, gRPC (TLS, REALITY), XHTTP over HTTP/1.1 and HTTP/2 (TLS, REALITY), MASQUE over HTTP/2. For XHTTP the race runs once per new physical connection. UDP"
-    },
-    {
-     "number": 7364,
-     "title": "VLESS: run multiplexing directly on transport",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-10T12:20:09Z",
-     "updated_at": "2026-11-13T16:35:48Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364",
-     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
-    },
-    {
-     "number": 7378,
-     "title": "DNS outbound: End UDP sessions once their queries are answered",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-11T12:31:36Z",
-     "updated_at": "2026-11-13T13:48:04Z",
-     "user": "solodecode",
-     "url": "https://github.com/XTLS/Xray-core/pull/7378",
-     "body": "A UDP session of the DNS outbound never reads EOF, so it lasts until the inbound drops it or its idle timer fires. The timer looks for activity once per connIdle, so a session answered right away ends after two periods, ten minutes by default. The dokodemo-door inbound drops idle UDP after two to three minutes; the TUN inbound never does. Stub resolvers and dnsmasq usually send each query from a new source port, so every query holds a session with three goroutines that long.\n\nOn my test bench (linux/arm64, FakeDNS, 5000 queries at 50 per second, a new port per query) RSS grew from 40 MB to 187 MB through dokodemo-door and to 180 MB through TUN, where the goroutines were gone only ten minutes after the last query.\n\nI track the queries a UDP session still owes an answer, hijacked or sent upstream, by ID and question, so a repeated answer settles nothing. While any is open the session keeps connIdle, so a slow lookup is not cut; one second after the last answer it ends, which still leaves room for AAAA sent after A from the same socket. TCP, the session of Xray's own DNS client, a session with more than 256 open queries and a connIdle below one second work as before.\n\nWith this change the same load ends at 62 MB through dokodemo-door and 64 MB through TUN. TestUDPDNSSessionsEnd sends 200 A and MX queries, MX forwarded upstream, each from its own socket: on main they leave 600 goroutines behind; with this change they are gone a second after the last answer.\n"
     },
     {
      "number": 5101,
@@ -231,17 +801,6 @@
      "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
     },
     {
-     "number": 7372,
-     "title": "Fix noise after udphop",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-10T22:20:53Z",
-     "updated_at": "2026-11-13T02:47:59Z",
-     "user": "FDeghy",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372",
-     "body": "Fix noise emission when `noise` and `udphop` are used together.\n\nPreviously, noise state was keyed by the destination passed to `WriteTo`. udphop could replace that destination internally or switch the source socket without invalidating the noise state. Continuous outgoing traffic also refreshed the noise reset timeout, allowing repeated hops without another noise sequence.\n\n**Implementation**\n\n- Add shared `UDPPath` state through the existing finalmask dialer, containing the actual destination, a generation counter, and a mutex.\n- Increment the generation after a successful hop changes the local endpoint, destination IP, or destination port.\n- Have the noise wrapper clear its cached reset state when it observes a new generation. The next write emits noise before its payload, then resumes the existing reset behavior.\n- Serialize the complete masked write against hopping, keeping all noise packets, configured delays, and the associated payload on the same socket and destination.\n\nGeneration tracking also handles returning to a previously used endpoint. Failed hops retain the active path and generation; attempts that leave the endpoints unchanged do not trigger additional noise.\n\nBoth configured noise items and Lua scripts use the existing emission code. Mask ordering, socket deadline propagation, receive handling, and connection cleanup remain unchanged. The existing connection stays in place, preserving Hysteria continuity. No configuration fields are added.\n\n**Regression coverage**\n\n- Source-port-only, destination-port-only, destination-IP-only, and combined changes.\n- Continuous traffic, repeated writes on one path, and returning to a previous endpoint.\n- Unchanged endpoints and failed hops.\n- Concurrent hopping during delayed noise emission.\n- Configured items and Lua scripts, mask ordering, reset behavior, deadline propagation, and socket cleanup.\n\n**Verification**\n\n- Focused noise/udphop tests and race detection passed.\n- Finalmask and Hysteria package checks passed in short mode.\n- GitHub’s formatting/protobuf check passed after applying the repository formatter.\n- The full package run timed out in the separate Sudoku end-to-end harness; that run did not complete."
-    },
-    {
      "number": 7387,
      "title": "proxy/tun: TUN fails to start on Windows 11 24H2 when DisabledComponents=0x28 (\"unable to set DNS > Access is denied\")",
      "is_pr": false,
@@ -264,17 +823,6 @@
      "body": "在 Windows 上使用 TUN 模式时，高带宽场景下（如 Speedtest）连接会在达到 10-15 Mbps 后卡住或断开。系统代理模式下一切正常。\n\n据我理解，gVisor 的 TCP Recovery 机制在 Windows 上会导致问题。禁用它后，之前无法加载的网站和应用完全恢复正常，Speedtest 时的卡顿和断连问题也解决了：\n\n```go\nif runtime.GOOS == \"windows\" {\n    rOpt := tcpip.TCPRecovery(0)\n    gStack.SetTransportProtocolOption(tcp.ProtocolNumber, &rOpt)\n}\n```\n\n**测试情况：**\n- Windows 11：已测试，修复后稳定运行\n- Linux：暂未测试\n- Android：v2rayNG 正常工作（可能 Android 不受此问题影响）\n\n请问我的方向对吗？"
     },
     {
-     "number": 7391,
-     "title": "XHTTP: Synchronize QUIC test shutdown",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-12T23:26:49Z",
-     "updated_at": "2026-11-12T23:35:34Z",
-     "user": "eliotcougar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7391",
-     "body": "## Why\n\n`Test_ListenXHAndDial_QUIC` writes `serverClosed` from its server goroutine and reads it from the test goroutine. Sleeping for 100 ms after closing the client leaves those accesses unsynchronized. The Go race detector reports the read and write on clean `main` (`c4561418`).\n\n## Change\n\nSignal completion through a channel after the server handler closes its connection. Wait for the signal within the existing five-second test deadline. The patch changes only the test.\n\n## Verification\n\n- The standalone QUIC test passed 10 consecutive runs on Windows amd64 with Go 1.27.0.\n- With #7348 applied locally to address the independent TLS certificate race, `go test -race -timeout=90s -count=5 ./transport/internet/splithttp ./transport/internet/httpupgrade` passed. The draft targets `main` directly.\r\n"
-    },
-    {
      "number": 7389,
      "title": "TCP TLS traffic separation",
      "is_pr": false,
@@ -295,20 +843,90 @@
      "user": "hiddify-com",
      "url": "https://github.com/XTLS/Xray-core/pull/7390",
      "body": "We recently updated our core to be fully compatible with Xray Core. \nOur goal is to make things easier for everyone, especially non-expert users.\nSo i think it is a good time to be included in the apps"
-    },
-    {
-     "number": 7388,
-     "title": "Simultaneous IPs limit",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-12T15:53:37Z",
-     "updated_at": "2026-11-12T15:53:37Z",
-     "user": "n1ret",
-     "url": "https://github.com/XTLS/Xray-core/pull/7388",
-     "body": "Just a simple IP limiter for VLESS. I do REALLY need this feature. I know that some odd ways to do similar functional exist, but they can't do the same thing. What should I add to get you to merge the PR? I'm newbie to Golang unfortunately..."
     }
    ],
    "comments": [
+    {
+     "id": 6881741042,
+     "issue": 7402,
+     "issue_title": "XMC: make startup padding configurable with per-turn delay ranges",
+     "created_at": "2026-11-14T17:51:11Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6881741042",
+     "body": "https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6880324101 rebase main"
+    },
+    {
+     "id": 6881728264,
+     "issue": 6769,
+     "issue_title": "XMC finalmask: Make startup `paddings` configurable (`direction`, `length` and `delay`)",
+     "created_at": "2026-11-14T17:50:13Z",
+     "user": "RPRXX",
+     "url": "https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6881728264",
+     "body": "~~另外导致大号“codespaces 本月配额无端耗完了”的原因，昨天只看到是 15GB 空间耗完，后来想到了应该是因为有几次在 VSC 中安装了 Go 插件，自动把 Xray 那些依赖全 pull 下来了，并且还会安装些工具，这下这个月的 force-push 只能靠这个小号了~~\r\n\r\n~~以前都是随时开个 codespace、用完删掉，看来以后需要安装 Go 插件的话得开个常驻的了，还有些想公开记录的，突然忘了~~"
+    },
+    {
+     "id": 6880324101,
+     "issue": 6769,
+     "issue_title": "XMC finalmask: Make startup `paddings` configurable (`direction`, `length` and `delay`)",
+     "created_at": "2026-11-14T16:06:03Z",
+     "user": "RPRXX",
+     "url": "https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6880324101",
+     "body": "https://github.com/XTLS/Xray-core/commit/5d17b872edde3024a5b906d9cd6c7a3ad4973d81 fmt 了，并把 xmc 文件夹下 README.md 和 *_test.go 删了，~~AI 喜欢写没必要的 tests~~，接下来交给 @yandujun363 "
+    },
+    {
+     "id": 6877128439,
+     "issue": 7396,
+     "issue_title": "dokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)",
+     "created_at": "2026-11-14T12:16:06Z",
+     "user": "xJohnDoe15",
+     "url": "https://github.com/XTLS/Xray-core/issues/7396#issuecomment-6877128439",
+     "body": "**Root cause found on our side — not an Xray bug. Closing, sorry for the noise.**\n\nTL;DR: our host firewall (`nftables` `input` chain, default-drop) was silently dropping every TPROXY-delivered packet whose original destination port was not 443, before it ever reached Xray. TCP/443 worked only by accident (an unrelated `tcp dport 443 accept` rule for the VLESS inbound also covered the TPROXY path, because on Linux TPROXY-delivered packets traverse the `input` chain).\n\nDetails for anyone hitting similar symptoms:\n- `nft trace` showed the SYN entering `inet family_vpn input` with fwmark 1 (set by the TPROXY rule) and dying on `policy drop`. Production traffic to :443 passed via the coincidental accept rule.\n- After adding `meta mark 1 accept` to the input chain: TCP to any port works, and UDP through the very same `dokodemo-door + followRedirect + sockopt.tproxy` ingress egresses correctly on the VLESS+XHTTP peer (verified with tcpdump, plus Xbox Teredo qualification).\n- Our earlier \"isolated repro\" was contaminated: the temporary test rules we added to reach the test Xray instance also (partially) bypassed the same firewall drop, and the remaining \"no egress\" observation was the production-path packet never reaching Xray at all.\n\nThanks to the maintainers — and the UDP-over-tproxy ingress path works fine on 26.11.9."
+    },
+    {
+     "id": 6876990998,
+     "issue": 7402,
+     "issue_title": "XMC: make startup padding configurable with per-turn delay ranges",
+     "created_at": "2026-11-14T12:04:21Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6876990998",
+     "body": "@RPRX Opened #7402 as the takeover of #6769. It keeps the four original commits, resolves the merge fallout currently failing CI on #6769 (WrapConnClient signature, gofmt, protobuf regeneration), and adds the remaining delay requirement: string range, sender random wait, receiver minimum wait, last-turn delay ignored.\r\n#6769 is currently red at 0b98e2a6 (format/proto + all tests), so please review #7402 instead of merging #6769. Could you approve the workflows on #7402 (first-time contributor) and use a merge commit if possible? The original commits should stay in history.\r\nFollow-ups will be separate PRs: cancellable delay/cap, preset tail behavior, total padding caps, early-arrival check, explicit no-padding mode, and docs."
+    },
+    {
+     "id": 6876963752,
+     "issue": 6769,
+     "issue_title": "XMC finalmask: Make startup `paddings` configurable (`direction`, `length` and `delay`)",
+     "created_at": "2026-11-14T12:02:07Z",
+     "user": "RPRXX",
+     "url": "https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6876963752",
+     "body": "https://github.com/XTLS/Xray-core/pull/7401#issuecomment-6876702404 然而刚发现这个 PR 还没开允许修改，只能合并后再 fmt 了，由于要 force-push，~~这下不得不用唯一小号了~~\r\n\r\n~~解释一下：我从不从我的设备连接到 XTLS 仓库，习惯使然，以防哪次没注意泄露了本地 Git 信息，最初甚至只能 Upload files~~"
+    },
+    {
+     "id": 6876854217,
+     "issue": 7394,
+     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "created_at": "2026-11-14T11:52:01Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6876854217",
+     "body": "> [@spr334-a](https://github.com/spr334-a) 很少上线，那就由你来接手 XMC 吧，这两天我会合并那个 PR，然后你开始 PR 就行\n\nOK"
+    },
+    {
+     "id": 6876702404,
+     "issue": 7401,
+     "issue_title": "Diagnose check-format-and-proto failure",
+     "created_at": "2026-11-14T11:38:23Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7401#issuecomment-6876702404",
+     "body": "~~所以 copilot 现在改成直接以用户的号开 PR 了，既然能代操作账号为啥不直接 commit 到那个 PR 的 repo & branch，搞成这样它还不敢改文件，主要是我的 codespaces 本月配额无端耗完了，这两天研究 GitHub 绑虚拟卡还不接受 pre-paid，拿小号开吧~~"
+    },
+    {
+     "id": 6876480694,
+     "issue": 7394,
+     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "created_at": "2026-11-14T11:18:23Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6876480694",
+     "body": "@spr334-a 很少上线，那就由你来接手 XMC 吧，这两天我会合并那个 PR，然后你开始 PR 就行"
+    },
     {
      "id": 6872749132,
      "issue": 7394,
@@ -668,47 +1286,88 @@
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6834274991",
      "body": "不需要 quote，我不会删除我说过的话\r\n\r\n我知道这个 pr 的意思，但不影响我评价这个方案吧\r\n\r\n没事，可以 reopen，但以后 finalmask 相关我希望你都可以出现处理 @patterniha，我很乐意让权，先说好被入侵的部分我不会再碰"
-    },
-    {
-     "id": 6829038605,
-     "issue": 7378,
-     "issue_title": "DNS outbound: End UDP sessions once their queries are answered",
-     "created_at": "2026-11-12T16:13:59Z",
-     "user": "solodecode",
-     "url": "https://github.com/XTLS/Xray-core/pull/7378#issuecomment-6829038605",
-     "body": "@borderlessboy \r\nRight, fixed in 29eecf49: open queries are now tracked by ID and question, so a repeated answer settles nothing. TestUDPDNSRepeatedAnswer (one socket, A answered twice, AAAA after 2 s) fails on fe4e8bee and passes now."
-    },
-    {
-     "id": 6828435772,
-     "issue": 7372,
-     "issue_title": "Fix noise after udphop",
-     "created_at": "2026-11-12T15:50:34Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6828435772",
-     "body": "> It's really a bit strange to have so many first-time contributors.\r\n> \r\n> You can choose to pass a custom dialer to UDPHop in your custom fork; modifying UDPHop's code is absolute shit 💩\r\n\r\nI know @FDeghy , and I know he's knowledgeable.\r\n\r\nHe's right. When the port changes, we have a new connection, and GFW inspects the initial packets of every new connection. If their pattern matches QUIC or WireGuard, it can identify them.\r\n\r\nSo we need to send noise with every new connection (although it is better to use salamander obfuscation instead).\r\n\r\n~Also, I really don't appreciate the way you're talking. Sending a poop emoji is insulting and disrespectful, and I honestly didn't expect that from you.~"
-    },
-    {
-     "id": 6826312597,
-     "issue": 7387,
-     "issue_title": "proxy/tun: TUN fails to start on Windows 11 24H2 when DisabledComponents=0x28 (\"unable to set DNS > Access is denied\")",
-     "created_at": "2026-11-12T14:26:29Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/issues/7387#issuecomment-6826312597",
-     "body": "`DisabledComponents = 0x28` doesn't disable IPv6: 0x08 only turns off Teredo, and 0x20 only makes Windows prefer IPv4. Only the 0x10 bit (as in 0x10, 0x11 or 0xFF) disables IPv6 on non-tunnel interfaces (the TUN, the primary adapter, ...).\n\nI tested different modes on Windows 11 (build 26300), including `0x28`, each after a reboot, and IPv6 was set up successfully: `gateway`, `autoSystemRoutingTable` and `dns` were all applied. Your exact config with v26.11.9 and `0x28` also starts fine here, and the TUN's IPv6 DNS servers are cleared without errors. I only got errors with the 0x10 bit set, because only it disables IPv6 on the TUN interface.\n\nSo something is wrong with your Windows, and we shouldn't ignore IPv6 errors when IPv6 isn't disabled. If you want IPv6 off, set `DisabledComponents` to `0xFF` and reboot; then these IPv6 errors are only logged."
-    },
-    {
-     "id": 6822912200,
-     "issue": 7372,
-     "issue_title": "Fix noise after udphop",
-     "created_at": "2026-11-12T11:55:43Z",
-     "user": "FDeghy",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6822912200",
-     "body": "> It's really a bit strange to have so many first-time contributors.\r\n> \r\n> You can choose to pass a custom dialer to UDPHop in your custom fork; modifying UDPHop's code is absolute shit 💩\r\n\r\nThe correct approach is to apply the noise to every new connection so that the new connection can send data just like the previous ones. A new connection can either be a genuinely new connection or one created as a result of `udphop`, which simply changes the previous connection's port or IP address.\r\n"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3457,
+     "title": "macOS: clicking the Dock icon intermittently fails to restore the window (5.1.0.6, Apple M1)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-12T11:35:12Z",
+     "updated_at": "2026-11-14T16:38:40Z",
+     "user": "ilpuchkov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3457",
+     "body": "**Describe the bug**\nClicking the pinned AmneziaVPN icon in the macOS Dock intermittently activates the application without displaying its main window. The running indicator is visible, but there is no window. Opening the window from the menu bar works; quitting and relaunching can also restore it.\n\n**To Reproduce**\n1. Launch AmneziaVPN from its pinned Dock icon.\n2. Close the main window with the window close button, leaving Amnezia running.\n3. Click the pinned Dock icon again.\n4. Intermittently, the app is activated but its main window does not reappear. Repeat the close/reopen cycle if necessary.\n\n**Expected behavior**\nClicking the Dock icon should reliably restore the main window and bring it to the foreground.\n\n**Desktop / environment**\n- Mac: MacBook Pro (MacBookPro17,1), Apple M1\n- macOS: 27.2.1, build 26B131\n- AmneziaVPN: 5.1.0.6\n- UI language: Russian\n- Autostart: disabled\n- Auto-connect: disabled\n- Start minimized: disabled\n\n**Diagnostic observations**\nThe failure was reproduced manually. The existing GUI process remained alive and responsive. Connecting to its existing AmneziaVPNInstance IPC socket restored the window without restarting the application. The pinned Dock entry points to the installed application.\n\n**Additional context**\nPossibly related to #3423 (macOS window foreground handling), but this report concerns restoring a closed/hidden window by clicking the Dock icon. I have not established whether the underlying cause is the same.\n\nNo custom window helper or patched build is installed."
+    },
+    {
+     "number": 3401,
+     "title": "[iOS][5.1.0.6] AWG 3.1: connected but no traffic — path-update loop rebinds UDP socket every 2–3 s (works in 5.0.3.0 and AmneziaWG)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-04T16:44:28Z",
+     "updated_at": "2026-11-14T16:17:54Z",
+     "user": "cool-matter99",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3401",
+     "body": "## Summary\n\nOn iOS, AmneziaVPN **5.1.0.6** connects with an AWG 3.1 profile (handshake confirmed) but no traffic passes. The same profile works in AmneziaVPN **5.0.3.0** and in the **AmneziaWG** app on the same phone.\n\nThe tunnel log shows a loop: every 2–3 seconds the network extension handles a \"network change\", re-applies the endpoint config and rebinds the UDP socket. The interface list does not change between these events.\n\n## Environment\n\n| | Fails | Works | Works |\n|---|---|---|---|\n| App | AmneziaVPN 5.1.0.6 (`ac175c8a8`) | AmneziaVPN 5.0.3.0 | AmneziaWG (App Store) |\n| Device / iOS | iPhone, iOS 26.6.2 | iPhone, iOS 27.2 | same iPhone as \"Fails\", iOS 26.6.2 |\n| Network | LTE (Russian mobile carrier) | LTE, same carrier | LTE, same carrier |\n| Profile | same AWG 3.1 profile (self-hosted server, MTU 1280) | same | same |\n\n- The server is a self-hosted AmneziaWG 3.1 server (amneziawg-go). The client receives the handshake response. On the server, the peer's transfer stops after ~16 KB.\n- In 5.1.0.6, a profile to a server inside the same country works. Only the server abroad fails. This matches the socket rebind loop: each rebind creates a new UDP flow, and new flows to foreign addresses can be filtered on mobile networks. This part is a hypothesis.\n\n## Steps to reproduce\n\n1. On iOS 26.6.2, install AmneziaVPN 5.1.0.6.\n2. Import an AWG 3.1 profile (`vpn://`).\n3. Connect over LTE.\n4. Open any website.\n\n**Expected:** traffic passes, as in 5.0.3.0 and in AmneziaWG.\n**Actual:** status is \"Connected\" and the handshake is confirmed, but no websites load.\n\n## Tunnel log (excerpt, redacted)\n\n```\n19:34:14 WG: peer(q6Ht…) - Received handshake response\n19:34:16 WG: Observed first handshake at last_handshake_time_sec=...\n19:34:18 WG: Network change detected with satisfied route and interface order [pdp_ip0, pdp_ip0, utun8]\n19:34:18 WG: Path update state: state=started(...) everHadHandshake=true lastNetworkSettingsUpdateAt=2026-11-04 16:34:14 +0000\n19:34:18 WG: peer(q6Ht…) - UAPI: Updating endpoint\n19:34:18 WG: UAPI: Updating h1..h4 / s1..s4 padding, header protection key\n19:34:18 WG: Routine: receive incoming v4 - stopped\n19:34:18 WG: UDP bind has been updated\n19:34:18 WG: Routine: receive incoming v4 - started\n19:34:18 WG: peer(q6Ht…) - Sending keepalive packet\n19:34:21 WG: Network change detected ... [pdp_ip0, pdp_ip0, utun8]   <- same block repeats\n19:34:24 ...                                                          <- every 2–3 s\n19:34:26 ...\n19:34:27 ...\n19:34:30 ...\n```\n\n`lastNetworkSettingsUpdateAt` does not change, so the app does not re-apply network settings. The path updates come from `NWPathMonitor`. On each update, `WireGuardAdapter.didReceivePathUpdate` (amneziawg-apple v3.1.4) calls `wgSetConfig` and `wgBumpSockets`.\n\n## Analysis\n\n- The two app versions use the same `awg-apple/3.1.4` (see `conanfile.py`). The adapter code is the same.\n- One build difference: the `awg-apple` recipe in 5.1.0.6 uses `go/1.27.1` (5.0.3.0 uses `go/1.26.0`).\n- The AmneziaWG app on the same phone and iOS version works with the same profile (I did not collect its log). The cause is therefore in the 5.1.0.6 build or the app shell, not in iOS alone.\n- I did not find what triggers the repeated path updates in 5.1.0.6.\n\n## Possible fix\n\nIn `didReceivePathUpdate`, skip `wgSetConfig` and `wgBumpSockets` when the path has not changed. For example, compare `availableInterfaces` and the status with the last path, and ignore the tunnel's own `utun*` interface.\n"
+    },
+    {
+     "number": 3449,
+     "title": "Split tunneling, not working on premium",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-10T21:38:37Z",
+     "updated_at": "2026-11-14T14:56:08Z",
+     "user": "airseliverstov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3449",
+     "body": "When connect as premium - splin doesn'n work.\nWhen connect as self hosted - all ok.\n\nDesktop \n - OS: Mac OS \n - Version 27.2"
+    },
+    {
+     "number": 3466,
+     "title": "[Android][XRay/REALITY] ClientHello is sent without SNI when address and serverName are the same domain; literal IP in address works",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T22:44:40Z",
+     "updated_at": "2026-11-14T14:33:24Z",
+     "user": "evgenyuleykin",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3466",
+     "body": "**Describe the bug**\nOn Android, an XRay (VLESS + REALITY + xtls-rprx-vision) connection whose `address` and `realitySettings.serverName` are the same domain sends a TLS ClientHello without the SNI extension. The server rejects every connection with `server name mismatch:` (empty name). The app shows \"Connected\", but no traffic passes. With a literal IP in `address` (and the domain kept in `serverName`) the same profile works. The same vless:// link works in Hiddify and Happ on the same phone.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Set up a server with XRay installed via Amnezia (container `amnezia-xray`), with a domain pointing to the server, e.g. example.duckdns.org, and `serverNames: [\"example.duckdns.org\"]` on the server.\n2. Use a client config where `address` = \"example.duckdns.org\" and `serverName` = \"example.duckdns.org\" (fingerprint: chrome, flow: xtls-rprx-vision).\n3. Import it into AmneziaVPN on Android and connect.\n4. See error: the status is \"Connected\", but no site opens (pages load forever).\n\n**Expected behavior**\nThe ClientHello carries SNI \"example.duckdns.org\", the REALITY handshake succeeds and traffic passes, the same as with a literal IP in `address` or with other Xray clients (Hiddify, Happ).\n\n**Log files**\nServer, Xray loglevel debug, one line per connection attempt (hundreds per minute):\n2026/11/13 20:51:39 [Info] transport/internet/tcp: REALITY: processed invalid connection from <ip>: server name mismatch:\n\nServer-side pcap (tcp dst port 443), ClientHellos parsed:\n- AmneziaVPN Android: 3779 ClientHellos, none has the server_name extension (17 extensions);\n- AmneziaVPN macOS, same server and network: ClientHellos carry SNI \"example.duckdns.org\" (18 extensions).\n[Attach the app logs from Android: Settings → Logging]\n\n**Screenshots**\nN/A\n\n**Desktop (please complete the following information):**\n - N/A (macOS with a domain endpoint has a different symptom, already reported in #3132)\n\n**Smartphone (please complete the following information):**\n - Device: Samsung S25 Ultra (SM-S938B/DS)\n - OS: Android version 17\n - Version: AmneziaVPN version 5.1.0.6\n\n**Server (please complete the following information):**\n - OS: \n\n[AmneziaVPN-logs-20261114-014321.zip](https://github.com/user-attachments/files/34828125/AmneziaVPN-logs-20261114-014321.zip)\n\nUbuntu 24.04.4 LTS\n\n**Additional context**\n- Workaround: literal IP in `address`, domain in `serverName`.\n- Suspected cause: the client resolves the hostname to an IP and substitutes it into `realitySettings.serverName` as well. Per Xray docs, when serverName is an IP the SNI extension is not sent.\n- Related: #3132 (macOS, domain endpoint), #2377 (Windows, domain endpoint)."
+    },
+    {
+     "number": 3468,
+     "title": "[Android] Тест RKNHardering на обход split-tunneling показывает утечку IP сервера",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-14T14:04:44Z",
+     "updated_at": "2026-11-14T14:07:23Z",
+     "user": "EternalBlueInfinity",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3468",
+     "body": "Как воспроизвести:\n\n1. Импортировать любую подписку (если еще нет)\n2. Включить Split tunnelling, добавить в туннель только браузер.\n3. Установить и запустить RKNHardering.\n4. Подождать, пока он переберет все порты на предмет локального SOCKS.\n5. В самом конце появится сообщение с двумя IP адресами. Один из них обозначен как VPN IP.\n6. Открыть браузер, который был добавлен в туннель, и зайти на любой сайт, определяющий IP.\n7. Сравнить IP из пунктов 6 и 5. Они совпадают.\n\nВозможно, для Free / Premium, где адрес подключения и адрес выхода в сеть это не настолько большая проблема, но для Self-hosted решений, в которых это может быть один и тот же IP - это проблема, которая может приводить к блокировкам серверов. Вероятнее всего, в этом и состоит причина массовых жалоб на блокировки Self-Hosted серверов."
+    },
+    {
+     "number": 3216,
+     "title": "[Windows] Split tunnel driver leaks paged pool on every process start/exit when app split tunneling is disabled",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-25T13:17:29Z",
+     "updated_at": "2026-11-14T12:42:06Z",
+     "user": "neonatoman",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3216",
+     "body": "### Environment\r\n- AmneziaVPN 5.0.1.5, bundled `mullvad-split-tunnel.sys` 1.2.5.0 (service `AmneziaVPNSplitTunnel`)\r\n- Windows 11 Enterprise LTSC 2024 (build 26100), x64\r\n- Settings: **app split tunneling disabled** (`appsSplitTunnelingEnabled=false`), site split tunneling enabled\r\n\r\n### What happens\r\nWhile `AmneziaVPN-service` is running, kernel paged pool grows without bound. The growth is under\r\nthe split tunnel driver's pool tag `SPTU` (`ST_POOL_TAG 'UTPS'`), about **two allocations per process\r\nlifetime** (one on process start, one on exit), and nothing ever frees them until reboot or a restart of the\r\nservice.\r\n\r\nMeasured on 2026-09-25 (pool tags read with `NtQuerySystemInformation(SystemPoolTagInformation)`, same data\r\nas poolmon):\r\n- after ~6 days of uptime: `SPTU` = **6,759,412 live allocations, ~817 MB of paged pool**;\r\n- the counter grows by the same amount as the number of process start + exit events (checked with batches of\r\n  300 `cmd.exe /c exit`); it never goes down;\r\n- `Restart-Service AmneziaVPN-service` → `SPTU` drops to **259** within 5 s (paged pool −0.54 GiB), then\r\n  immediately starts growing again;\r\n- a WPR `Pool` trace attributes all `SPTU` allocations that were never freed to `mullvad-split-tunnel.sys`.\r\n\r\nOn a developer machine that starts many short-lived processes (build tools, test runners), this is roughly\r\n1 GB of kernel memory per week.\r\n\r\n### Root cause (from the sources)\r\n1. The daemon creates the split tunnel manager at startup, whether or not app split tunneling is used:\r\n   [`windowsdaemon.cpp:40`](https://github.com/amnezia-vpn/amnezia-client/blob/94b51df24790bf52427afe82d81c87a95460bdfd/client/platforms/windows/daemon/windowsdaemon.cpp#L40)\r\n   → `initDriver()` sends `IOCTL_ST_INITIALIZE`:\r\n   [`windowssplittunnel.cpp:269`](https://github.com/amnezia-vpn/amnezia-client/blob/94b51df24790bf52427afe82d81c87a95460bdfd/client/platforms/windows/daemon/windowssplittunnel.cpp#L269).\r\n2. In the driver, `IOCTL_ST_INITIALIZE` initializes process management\r\n   ([`ioctl.cpp:914`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/ioctl.cpp#L914)), which\r\n   registers a process notify routine. Every process start and exit then allocates a `PagedPool` record\r\n   ([`procmon.cpp:69`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/procmon/procmon.cpp#L69),\r\n   [`procmon.cpp:104`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/procmon/procmon.cpp#L104))\r\n   and appends it to `EventQueue`\r\n   ([`procmon.cpp:126`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/procmon/procmon.cpp#L126)).\r\n   The worker that drains and frees the queue is woken only when `DispatchingEnabled` is set\r\n   ([`procmon.cpp:128`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/procmon/procmon.cpp#L128)).\r\n3. `DispatchingEnabled` is set only by `IOCTL_ST_REGISTER_PROCESSES`\r\n   ([`ioctl.cpp:1365`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/ioctl.cpp#L1365) →\r\n   [`procmon.cpp:392`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/procmon/procmon.cpp#L392)).\r\n4. Amnezia sends `IOCTL_REGISTER_PROCESSES` only from `WindowsSplitTunnel::start()`\r\n   ([`windowssplittunnel.cpp:347`](https://github.com/amnezia-vpn/amnezia-client/blob/94b51df24790bf52427afe82d81c87a95460bdfd/client/platforms/windows/daemon/windowssplittunnel.cpp#L347)),\r\n   and `start()` is called only when `m_vpnDisabledApps` is not empty\r\n   ([`windowsdaemon.cpp:110`](https://github.com/amnezia-vpn/amnezia-client/blob/94b51df24790bf52427afe82d81c87a95460bdfd/client/platforms/windows/daemon/windowsdaemon.cpp#L110)).\r\n   Otherwise the daemon calls `stop()` (`IOCTL_CLEAR_CONFIGURATION`), which the driver rejects in the\r\n   `INITIALIZED` state, where only `IOCTL_ST_REGISTER_PROCESSES` is accepted\r\n   ([`driverentry.cpp:600`](https://github.com/mullvad/win-split-tunnel/blob/v1.2.5.0/src/driverentry.cpp#L600)). The service log repeats `Stopping Split tunnel not successfull` on e"
+    },
+    {
+     "number": 3467,
+     "title": "feat: send TestFlight builds to the external test group",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-14T11:59:34Z",
+     "updated_at": "2026-11-14T11:59:49Z",
+     "user": "vkamn",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3467",
+     "body": ""
+    },
     {
      "number": 3448,
      "title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
@@ -719,17 +1378,6 @@
      "user": "KuDeSnik33ra",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448",
      "body": "Примерно месяц как началась полная блокировка IP Amnezia self-hoster раз в неделю в России - сервер неделю доступен, а потом полностью отрубают - доступ остается только из Европы. Кто-нибудь подскажет - что изменилось в детекте и что с этим делать кроме пересоздания раз в неделю?"
-    },
-    {
-     "number": 3466,
-     "title": "[Android][XRay/REALITY] ClientHello is sent without SNI when address and serverName are the same domain; literal IP in address works",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-13T22:44:40Z",
-     "updated_at": "2026-11-13T22:44:40Z",
-     "user": "evgenyuleykin",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3466",
-     "body": "**Describe the bug**\nOn Android, an XRay (VLESS + REALITY + xtls-rprx-vision) connection whose `address` and `realitySettings.serverName` are the same domain sends a TLS ClientHello without the SNI extension. The server rejects every connection with `server name mismatch:` (empty name). The app shows \"Connected\", but no traffic passes. With a literal IP in `address` (and the domain kept in `serverName`) the same profile works. The same vless:// link works in Hiddify and Happ on the same phone.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Set up a server with XRay installed via Amnezia (container `amnezia-xray`), with a domain pointing to the server, e.g. example.duckdns.org, and `serverNames: [\"example.duckdns.org\"]` on the server.\n2. Use a client config where `address` = \"example.duckdns.org\" and `serverName` = \"example.duckdns.org\" (fingerprint: chrome, flow: xtls-rprx-vision).\n3. Import it into AmneziaVPN on Android and connect.\n4. See error: the status is \"Connected\", but no site opens (pages load forever).\n\n**Expected behavior**\nThe ClientHello carries SNI \"example.duckdns.org\", the REALITY handshake succeeds and traffic passes, the same as with a literal IP in `address` or with other Xray clients (Hiddify, Happ).\n\n**Log files**\nServer, Xray loglevel debug, one line per connection attempt (hundreds per minute):\n2026/11/13 20:51:39 [Info] transport/internet/tcp: REALITY: processed invalid connection from <ip>: server name mismatch:\n\nServer-side pcap (tcp dst port 443), ClientHellos parsed:\n- AmneziaVPN Android: 3779 ClientHellos, none has the server_name extension (17 extensions);\n- AmneziaVPN macOS, same server and network: ClientHellos carry SNI \"example.duckdns.org\" (18 extensions).\n[Attach the app logs from Android: Settings → Logging]\n\n**Screenshots**\nN/A\n\n**Desktop (please complete the following information):**\n - N/A (macOS with a domain endpoint has a different symptom, already reported in #3132)\n\n**Smartphone (please complete the following information):**\n - Device: Samsung S25 Ultra (SM-S938B/DS)\n - OS: Android version 17\n - Version: AmneziaVPN version 5.1.0.6\n\n**Server (please complete the following information):**\n - OS: \n\n[AmneziaVPN-logs-20261114-014321.zip](https://github.com/user-attachments/files/34828125/AmneziaVPN-logs-20261114-014321.zip)\n\nUbuntu 24.04.4 LTS\n\n**Additional context**\n- Workaround: literal IP in `address`, domain in `serverName`.\n- Suspected cause: the client resolves the hostname to an IP and substitutes it into `realitySettings.serverName` as well. Per Xray docs, when serverName is an IP the SNI extension is not sent.\n- Related: #3132 (macOS, domain endpoint), #2377 (Windows, domain endpoint)."
     },
     {
      "number": 3132,
@@ -842,17 +1490,6 @@
      "body": "## Why\n\nI want a domain in the site list to keep following its routing policy when its addresses change during a VPN session. I also need `*.example.com` to cover newly encountered subdomains without resolving a wildcard as though it were a hostname.\n\nRefreshing IP routes alone cannot distinguish unrelated domains sharing an address. This adds an opt-in domain-aware path for Windows WireGuard/AmneziaWG connections.\n\n## Changes\n\n- Preserve exact domains, wildcard identities and literal IP/CIDR entries, including import/export. `*.example.com` matches nested subdomains, but not the apex or lookalike suffixes.\n- Use the bundled Xray core locally for TUN, DNS/FakeDNS and connection routing. **The remote VPN remains native WireGuard/AmneziaWG; no Xray server or Xray key is required.** Native credentials, peer AllowedIPs and MTU remain unchanged.\n- Bind direct and tunneled outgoing connections to their respective interfaces and source addresses. Keep the VPN-server exemption outside the domain-routing adapter.\n- Apply both site-list modes and all three application modes. Match HTTP Host/TLS SNI where available and preserve hosts mappings.\n- Use the configured DNS paths, respect answer lifetime, and avoid falling back from a selected domain's resolver group to the opposite path after a DNS failure.\n- Add exclusive ownership and a renewable lease for the local engine, so it cannot replace an active local proxy and stops if its owner disappears.\n- Keep the feature disabled by default and show its limitations before use. Existing literal-only routing stays on the native path.\n\n## Scope and limitations\n\n- Windows with WireGuard/AmneziaWG only. Unsupported combinations fail explicitly rather than silently ignoring a wildcard.\n- The new path handles IPv4 TCP/UDP. It blocks intercepted IPv6 destinations; remote ICMP/ping is not supported by this backend.\n- Application rules match executable paths, without automatic child-process inheritance. DNS resolver selection follows the site policy, not individual applications.\n- Browser Secure DNS/DoH settings are not changed. There is no HTTPS decryption or ECH suppression. An encrypted-DNS connection whose hostname is also hidden cannot reliably be matched by domain.\n- More-specific existing LAN routes retain OS priority. Changes to rules/settings take effect on reconnect; DNS-address changes do not require reconnecting.\n- Explicit IPv4 interface addresses and DNS servers are required. A physical interface using a loopback DNS stub is rejected; the local proxy and this mode cannot run concurrently.\n\n## Verification\n\n- Rebased onto release `5.1.0.6` (`ac175c8a`), still stacked on #3380. `git range-diff` confirms unchanged patch commits.\n- Clean Windows CMake configuration; combined Release client, privileged service and installer built with Qt 6.10.1 / MSVC 19.53.\n- Five isolated suites passed in the refreshed combined build with #3379 and #3030: domain routing, engine ownership, Windows route monitoring, settings QML and LocalSocketController route serialization. These are combined-build results, not separate full builds of each sibling PR.\n- The first combined CTest run failed in DomainRoutingTest without per-case QTest output. The same binary then passed all 44 checks in a diagnostic standalone run, and the full five-suite rerun passed with per-case reports enabled. The initial failure has not been explained; it is not being treated as a proven fix or hidden by the successful reruns.\n- The actual bundled `amnezia-xray-bindings` 1.5.0 was exercised on loopback, including 12 combinations of site mode, application mode and listed/unlisted process. Coverage includes shared-IP separation, wildcard boundaries, HTTP Host/TLS SNI, TCP/UDP, DNS A-to-B changes after TTL expiry, FakeDNS, CNAME, multiple A answers, hosts, CIDRs and DNS failure.\n- Production engine ownership/lease tests and a regression test for overlay creation, recreation and physical-route loss passed. The route test substitutes Windows ro"
     },
     {
-     "number": 3457,
-     "title": "macOS: clicking the Dock icon intermittently fails to restore the window (5.1.0.6, Apple M1)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-12T11:35:12Z",
-     "updated_at": "2026-11-13T09:50:49Z",
-     "user": "ilpuchkov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3457",
-     "body": "**Describe the bug**\nClicking the pinned AmneziaVPN icon in the macOS Dock intermittently activates the application without displaying its main window. The running indicator is visible, but there is no window. Opening the window from the menu bar works; quitting and relaunching can also restore it.\n\n**To Reproduce**\n1. Launch AmneziaVPN from its pinned Dock icon.\n2. Close the main window with the window close button, leaving Amnezia running.\n3. Click the pinned Dock icon again.\n4. Intermittently, the app is activated but its main window does not reappear. Repeat the close/reopen cycle if necessary.\n\n**Expected behavior**\nClicking the Dock icon should reliably restore the main window and bring it to the foreground.\n\n**Desktop / environment**\n- Mac: MacBook Pro (MacBookPro17,1), Apple M1\n- macOS: 27.2.1, build 26B131\n- AmneziaVPN: 5.1.0.6\n- UI language: Russian\n- Autostart: disabled\n- Auto-connect: disabled\n- Start minimized: disabled\n\n**Diagnostic observations**\nThe failure was reproduced manually. The existing GUI process remained alive and responsive. Connecting to its existing AmneziaVPNInstance IPC socket restored the window without restarting the application. The pinned Dock entry points to the installed application.\n\n**Additional context**\nPossibly related to #3423 (macOS window foreground handling), but this report concerns restoring a closed/hidden window by clicking the Dock icon. I have not established whether the underlying cause is the same.\n\nNo custom window helper or patched build is installed."
-    },
-    {
      "number": 3345,
      "title": "WG/AWG .conf import silently ignores a single DNS server and uses application DNS",
      "is_pr": false,
@@ -895,31 +1532,63 @@
      "user": "alexbalkan",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/986",
      "body": "**Describe the bug**\r\nWhen connected, access to local network resources is lost. Including I have a local secure dns\r\nToday I installed this miracle and started testing it. Out of 10 connections, the local network was not blocked once, at the moment when I started writing about the problem).\r\n\r\n**To Reproduce**\r\n\r\n**Expected behavior**\r\n\r\nAdd local networks exception\r\n\r\n**Log files**\r\n\r\n**Screenshots**\r\n\r\n\r\n**Desktop (please complete the following information):**\r\n \r\nDesktop\r\n- OS:  Windows 10\r\n - Version 22H2 Build 19045.4780\r\n\r\n**Server (please complete the following information):**\r\n - OS:  Debian 10\r\n\r\n**Additional context**\r\nPlease forgive me for my English.\r\nThere is a very big problem. Once connected, I will lose access to all my local network management services. Yes, I saw separate connections of networks. Isn’t it better to do it according \r\nto Feng Shui and add the exclusion of local network addresses? Another problem, on my network I use my own secure DNS servers, after connecting to the VPN they also became unavailable.\r\n"
-    },
-    {
-     "number": 1299,
-     "title": "Memory leaks when using the VPN for prolonged periods of time (Linux)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2024-12-11T10:11:51Z",
-     "updated_at": "2026-11-12T16:57:43Z",
-     "user": "kxddry",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1299",
-     "body": "**Describe the bug**\r\nBeing connected to a private server via XRay, memory leaks are present after several hours of usage or suspending and waking the laptop up while connected to the VPN.\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Open up AmneziaVPN\r\n2. Connect to a server\r\n3. Wait several hours, perhaps suspend the laptop without disconnecting\r\n4. Memory leaks appear--AmneziaVPN takes up ~4GiB of RAM.\r\n\r\n\r\n - OS: Arch Linux \r\n - Linux 6.12.3-arch1-1\r\n - Wayland (Hyprland)\r\n - 16GB of RAM\r\n - Ryzen 7 7840HS\r\n\r\n\r\nServer:\r\n- OS: Debian GNU/Linux 12 (bookworm) x86_64 linux 6.1.0-26-amd64 \r\n\r\n"
-    },
-    {
-     "number": 2810,
-     "title": "The AmneziaWG protocol has stopped working, only OpenVPN over Cloak works",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-07-07T09:21:01Z",
-     "updated_at": "2026-11-12T13:12:19Z",
-     "user": "IILLUMINATION",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2810",
-     "body": "Please fix it"
     }
    ],
    "comments": [
+    {
+     "id": 6880814569,
+     "issue": 3457,
+     "issue_title": "macOS: clicking the Dock icon intermittently fails to restore the window (5.1.0.6, Apple M1)",
+     "created_at": "2026-11-14T16:38:40Z",
+     "user": "Neutrino666",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3457#issuecomment-6880814569",
+     "body": "Same issue on mac mini m4 with mac os Tahoe 26.0.2 \nAmneziaVPN 5.0.0.6 / 5.1.1.4"
+    },
+    {
+     "id": 6880502436,
+     "issue": 3401,
+     "issue_title": "[iOS][5.1.0.6] AWG 3.1: connected but no traffic — path-update loop rebinds UDP socket every 2–3 s (works in 5.0.3.0 and AmneziaWG)",
+     "created_at": "2026-11-14T16:17:53Z",
+     "user": "dmittriy13",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3401#issuecomment-6880502436",
+     "body": "I had the exact same situation; toggling airplane mode on and off on my phone helped."
+    },
+    {
+     "id": 6879236112,
+     "issue": 3449,
+     "issue_title": "Split tunneling, not working on premium",
+     "created_at": "2026-11-14T14:56:08Z",
+     "user": "airseliverstov",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3449#issuecomment-6879236112",
+     "body": "Hi,\nclient 5.1.0.6 (Nov  2 2026, ac175c8)\n\nsplit - site-based\n\nwhen connect at my selfhosted protocol AWG - split works (league of legends)\nwhen connect at premium germany (any country) protocol AWG - not work (league of legends)\n\n<img width=\"354\" height=\"489\" alt=\"изображение\" src=\"https://github.com/user-attachments/assets/feecd2e6-96ee-4932-965b-3e4a5a4ecb24\" />\n\n<img width=\"369\" height=\"629\" alt=\"изображение\" src=\"https://github.com/user-attachments/assets/45dc22a4-2dca-4c71-bb65-8a492f73b48a\" />\n\n<img width=\"377\" height=\"472\" alt=\"изображение\" src=\"https://github.com/user-attachments/assets/46a4a8cb-4777-4273-82d8-7533a066e144\" />\n\n<img width=\"532\" height=\"812\" alt=\"изображение\" src=\"https://github.com/user-attachments/assets/fa163680-4b7d-4819-a7ff-1af2d8daf70f\" />"
+    },
+    {
+     "id": 6878893399,
+     "issue": 3466,
+     "issue_title": "[Android][XRay/REALITY] ClientHello is sent without SNI when address and serverName are the same domain; literal IP in address works",
+     "created_at": "2026-11-14T14:33:24Z",
+     "user": "Hoobbaaboobba",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3466#issuecomment-6878893399",
+     "body": "I found a concrete cause in the Android configuration preprocessing.\n\nIn version 5.1.0.6, [`[Xray.kt:89–95](https://github.com/amnezia-vpn/amnezia-client/blob/5.1.0.6/client/android/xray/src/main/kotlin/Xray.kt#L89-L95)`](https://github.com/amnezia-vpn/amnezia-client/blob/5.1.0.6/client/android/xray/src/main/kotlin/Xray.kt#L89-L95) resolves `hostName` and then performs a global replacement across the entire serialized Xray configuration:\n\n```kotlin\nxrayJsonConfigString = xrayJsonConfigString.replace(hostName, ipAddress)\n```\n\nWhen the endpoint hostname and REALITY `serverName` are identical, this replaces **both** with the resolved IP. According to the [[Xray documentation](https://xtls.github.io/en/config/transports/reality.html#realityobject)](https://xtls.github.io/en/config/transports/reality.html#realityobject), an IP-valued `serverName` causes the client to omit the SNI extension. This matches the missing SNI observed in the packet captures.\n\nIt also explains why the literal-IP workaround succeeds: no hostname replacement occurs, and the configured SNI domain survives.\n\nThe fix should update matching outbound endpoint `address` fields through the JSON structure, rather than replacing text across the entire configuration. `realitySettings.serverName`, `tlsSettings.serverName`, and unrelated values should remain unchanged.\n\nA regression test should use identical endpoint and SNI domains, then verify that:\n- the runtime endpoint becomes the resolved IP;\n- `serverName` remains the original domain.\n\nThe same replacement is still present in the [[5.1.1.4 prerelease source](https://github.com/amnezia-vpn/amnezia-client/blob/5.1.1.4/client/android/xray/src/main/kotlin/Xray.kt#L89-L95)](https://github.com/amnezia-vpn/amnezia-client/blob/5.1.1.4/client/android/xray/src/main/kotlin/Xray.kt#L89-L95). A patched Android build should then be checked to confirm that SNI is present and traffic passes."
+    },
+    {
+     "id": 6878484194,
+     "issue": 3468,
+     "issue_title": "[Android] Тест RKNHardering на обход split-tunneling показывает утечку IP сервера",
+     "created_at": "2026-11-14T14:07:23Z",
+     "user": "EternalBlueInfinity",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3468#issuecomment-6878484194",
+     "body": "Пример: \"паравозик, который смог\" - https://github.com/ttrroyy/RawlineMobile\n\nВ последней версии этого клиента такая уязвимость отсутствует, если включить функцию \"Скрывать туннель от приложений вне VPN\" - RKNHardering не находит VPN IP."
+    },
+    {
+     "id": 6877418146,
+     "issue": 3216,
+     "issue_title": "[Windows] Split tunnel driver leaks paged pool on every process start/exit when app split tunneling is disabled",
+     "created_at": "2026-11-14T12:42:06Z",
+     "user": "vasmarfas",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3216#issuecomment-6877418146",
+     "body": "+1 here"
+    },
     {
      "id": 6870331836,
      "issue": 3448,
@@ -1027,33 +1696,6 @@
      "user": "kodidono",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/986#issuecomment-6838850239",
      "body": "I would like to request a dedicated **\"Allow Local Network Access\"** option in the AmneziaVPN client, especially for Windows.\n\nMy use case is that I need to access devices on my local network (LAN) while staying connected to the VPN.\n\nFor example, I use YoloLiv Compose to control my YoloCam S3 camera over the local network. When AmneziaVPN is connected, the application cannot properly discover or communicate with the camera.\n\nIt would be very useful to have a simple toggle in the connection settings:\n\n**Allow Local Network Access: ON / OFF**\n\nExpected behavior:\n- Allow access to local IPv4 and IPv6 networks (192.168.x.x, 10.x.x.x, 172.16.x.x, etc.).\n- Keep all regular internet traffic routed through the VPN.\n- Preserve Kill Switch functionality while allowing local LAN communication.\n- Automatically exclude local network traffic from the VPN tunnel without requiring users to manually configure split tunneling or add individual IP ranges.\n\nThis feature would be especially useful for users who need to access network cameras, NAS devices, printers, routers, and other local network services while using a VPN.\n\nCurrently, I have to use another WireGuard client because it provides better control over local network access and Kill Switch behavior.\n\nI would really appreciate it if this functionality could be considered for a future release.\n"
-    },
-    {
-     "id": 6830178954,
-     "issue": 1299,
-     "issue_title": "Memory leaks when using the VPN for prolonged periods of time (Linux)",
-     "created_at": "2026-11-12T16:57:43Z",
-     "user": "trol228355",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1299#issuecomment-6830178954",
-     "body": "### Additional report: Arch Linux, AmneziaVPN 5.1.0.6, VLESS/Xray — memory usage grows to 3.5 GiB\n\nI am experiencing the same issue on a newer version of AmneziaVPN.\n\n**Environment:**\n- OS: Arch Linux\n- Session: Niri (Wayland)\n- AmneziaVPN: 5.1.0.6 (Nov 2 2026, commit ac175c8)\n- Protocol: VLESS / Xray\n- Architecture: x86_64\n- GPU: AMD Radeon 860M\n\n**Observed behavior:**\n\nAfter approximately 3 hours and 20 minutes of VPN usage, `AmneziaVPN-service` consumes around 3.5 GiB of resident memory.\n\nProcess information:\n```text\nPID     ELAPSED    %CPU    RSS\n21227   03:20:06   76.0    3541712 KB\n```\n\nMemory details from `/proc/21227/smaps_rollup`:\n```text\nRss:           3525712 kB\nPss:           3510385 kB\nPrivate_Dirty: 3474248 kB\nAnonymous:     3474248 kB\n```\n\nThis appears to be private anonymous memory rather than filesystem cache or shared memory.\n\n**Restart experiment:**\n\nI restarted the AmneziaVPN service. Memory usage dropped significantly:\n\nImmediately after restart:\n```text\nRSS: 76872 KB\n```\n\nAfter approximately one minute:\n```text\nRSS: 79008 KB\n```\n\nThis suggests that memory is accumulated during prolonged operation and is released when the service is restarted.\n\n**Component information:**\n\nThe service binary is built with Go 1.27.1 and embeds the Amnezia Xray Core fork:\n```text\ngithub.com/amnezia-vpn/amnezia-xray-core v1.260728.0\n```\n\nThe bundled `tun2socks` binary reports:\n```text\npath github.com/xjasonlyu/tun2socks/v2\nmod  github.com/xjasonlyu/tun2socks/v2 (devel)\ngo1.27.1\n```\n\nIts exact upstream release/commit is not exposed in the Go build metadata.\n\n**Additional observations:**\n- Restarting the service temporarily resolves the memory consumption.\n- Disconnecting and reconnecting the VPN did not noticeably reduce memory usage.\n- The issue occurs with VLESS/Xray.\n\n**Questions:**\n1. Could this be a memory leak in the embedded Xray Core, tun2socks, or the integration between them?\n2. Are there any known fixes or newer internal builds that address this issue?\n3. Could you provide a way to collect useful profiling data (for example, a Go heap profile) from `AmneziaVPN-service`?\n\nI can provide additional logs and diagnostic information if needed."
-    },
-    {
-     "id": 6824566417,
-     "issue": 2810,
-     "issue_title": "The AmneziaWG protocol has stopped working, only OpenVPN over Cloak works",
-     "created_at": "2026-11-12T13:12:19Z",
-     "user": "aarpro",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2810#issuecomment-6824566417",
-     "body": "> I guess not. According to reports on Telegram, it was allegedly blocked a long time ago.\n> It remains a mystery why didn’t removed the other protocols, such as OpenVPN or OpenVPN over SS, which are really blocked.\n> Thoughts on conspiracy theory...\n\nUnfortunately, the developers do not heed our requests."
-    },
-    {
-     "id": 6822462268,
-     "issue": 2810,
-     "issue_title": "The AmneziaWG protocol has stopped working, only OpenVPN over Cloak works",
-     "created_at": "2026-11-12T11:34:06Z",
-     "user": "16bc",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2810#issuecomment-6822462268",
-     "body": "> any news ??? “OpenVPN over Cloak” protocol be restored?\n\nI guess not. According to reports on Telegram, it was allegedly blocked a long time ago.\nIt remains a mystery why didn’t removed the other protocols, such as OpenVPN or OpenVPN over SS, which are really blocked.\nThoughts on conspiracy theory..."
     }
    ]
   },

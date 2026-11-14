@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-13T19:40:49Z",
- "since": "2026-11-11T19:40:49Z",
+ "generated_at": "2026-11-14T01:26:51Z",
+ "since": "2026-11-12T01:26:51Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -44,7 +44,19 @@
    "comments": []
   },
   "PurpleI2P/i2pd": {
-   "issues": [],
+   "issues": [
+    {
+     "number": 2633,
+     "title": "libi2pd_client: fix overflows and crashes in i2cp, socks, and sam",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-13T22:56:11Z",
+     "updated_at": "2026-11-13T23:41:06Z",
+     "user": "jpk68",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2633",
+     "body": ""
+    }
+   ],
    "comments": []
   },
   "markqvist/Reticulum": {
@@ -53,6 +65,39 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 6802,
+     "title": "HTTPUpgrade client: Close connection to server on early returns",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-09-22T21:30:17Z",
+     "updated_at": "2026-11-14T01:04:59Z",
+     "user": "JorikSmith",
+     "url": "https://github.com/XTLS/Xray-core/pull/6802",
+     "body": "dialhttpUpgrade() dials server, then returns early in three places\r\nwithout closing that connection\r\n-utls handshake fails\r\n-request write fails\r\n-reply is not 101 switching protocols\r\n\r\non these paths nothing is handed to the caller, so nobody can close it\r\nand it stays open until GC finalizer runs\r\n\r\nthird case is the common one, a wrong path or a cdn error page leaks one\r\nsocket per dial attempt\r\n\r\ntested against local server answering 404, GC turned off (50 failed)\r\ndials leak 50 sockets before this patch, 0 after\r\n\r\nsetUpHTTPTunnel() in proxy/http/client.go closes raw connection on its\r\nearly returns same way"
+    },
+    {
+     "number": 7396,
+     "title": "dokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T20:52:54Z",
+     "updated_at": "2026-11-13T20:52:54Z",
+     "user": "xJohnDoe15",
+     "url": "https://github.com/XTLS/Xray-core/issues/7396",
+     "body": "# Draft: issue в XTLS/Xray-core — tproxy-вход роняет UDP (принимается, туннелируется, не выходит)\n\n## Title\n\ndokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)\n\n## Environment\n\n- Xray-core: 26.11.9 (also reproduced on 26.10.31)\n- Server A (RU node): inbound `dokodemo-door` with `followRedirect: true`, `sockopt.tproxy: \"tproxy\"`, nftables TPROXY (`meta l4proto udp tproxy to :12345 meta mark set 1` + `ip rule fwmark 1 lookup 100`), outbound `vless` + `xhttp` (mode `stream-one`) + `reality` to Server B.\n- Server B (EU node): inbound `vless` + `xhttp` + `reality`, outbound `freedom`.\n- Clients reach Server A via WireGuard tunnel (AWG); UDP and TCP both hit the same TPROXY rule.\n\n## Symptom\n\n- TCP through the same tproxy inbound → egresses on Server B fine (full internet via B's IP).\n- UDP: packet arrives at Server A (tcpdump on WG ingress), xray log shows the correct original destination and `tunneling request to udp:... via <B>:443`, but **nothing egresses on Server B** (tcpdump on egress interface: 0 packets).\n- Browser QUIC from clients silently falls back to TCP — the breakage was invisible until a UDP-only application (Xbox Teredo) failed.\n\n## Isolation experiment\n\nSame Server A host, second xray instance, **identical outbound** (vless+xhttp stream-one+reality to B), inbound changed to plain `dokodemo-door` (fixed `address`/`port`, **no tproxy**) on 127.0.0.1. UDP sent to it **egresses on Server B correctly**. So the transit path and version are fine; the tproxy ingress path drops UDP.\n\nAlso tried `xhttpSettings.mode: \"auto\"` for the outbound — log shows xray still dials `mode stream-one` for UDP; same behavior.\n\n## Minimal repro sketch\n\nServer A:\n```json\n{\n  \"inbounds\": [{\n    \"port\": 12345, \"protocol\": \"dokodemo-door\",\n    \"settings\": { \"network\": \"tcp,udp\", \"followRedirect\": true },\n    \"streamSettings\": { \"sockopt\": { \"tproxy\": \"tproxy\" } }\n  }],\n  \"outbounds\": [{\n    \"protocol\": \"vless\",\n    \"settings\": { \"vnext\": [{ \"address\": \"<B>\", \"port\": 443, \"users\": [{ \"id\": \"<uuid>\", \"encryption\": \"none\" }] }] },\n    \"streamSettings\": {\n      \"network\": \"xhttp\", \"security\": \"reality\",\n      \"realitySettings\": { \"serverName\": \"<sni>\", \"publicKey\": \"<key>\", \"shortId\": \"<id>\" },\n      \"xhttpSettings\": { \"mode\": \"stream-one\" }\n    }\n  }]\n}\n```\nnftables on A: `... udp dport <test> tproxy to :12345 meta mark set 1` (+ `ip rule fwmark 1 lookup 100` → `local default dev lo`... note: our table 100 is `default dev lo` for tproxy delivery — standard setup).\n\nSend any UDP datagram into the TPROXY rule → observe: accepted (log), tunneled (log), zero egress on B.\n\n## Ask\n\nIs UDP via dokodemo-tproxy ingress expected to work in 26.x? If yes — this looks like a regression/bug in the tproxy UDP path (or its interaction with XHTTP UDP carrying); happy to collect any specific diagnostics (pcap, debug logs).\n\n## Notes\n\n- Possibly related area: PR #7386 (fake UDP sockets in TPROXY mode) — symptom there was resource leak, not silent drop.\n- Our workaround (separate non-xray UDP tunnel) is in place; reporting upstream so the tproxy path can be fixed for everyone.\n"
+    },
+    {
+     "number": 7281,
+     "title": "New Blackhole",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-28T15:24:00Z",
+     "updated_at": "2026-11-13T20:46:49Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7281",
+     "body": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6467092152\n\n旧的黑洞拆掉，用户配置不变：\n- 纯阻断在 infra 转译为 freedom + finalRules block\n- 带响应的自动转为新的 `responder` 出站，有迁移警告\n\n`responder` 未来可以堆更多东西\n\n仍解决不了的是 UDP 首包绕过黑洞，后面还是能发出\n以及 UDP 首包是黑洞，后面想继续发出的问题\n在出站层面解决不了"
+    },
     {
      "number": 7395,
      "title": "HTTPUpgrade client: Close the connection when the upgrade fails",
@@ -118,17 +163,6 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/5101",
      "body": "先前讨论：https://github.com/XTLS/Xray-core/issues/5088#issuecomment-3263093341\r\n\r\n**反向代理（内网穿透）**，第一版先复用现有 reverse 的代码，未来肯定会 break，不保证跨版本兼容性，~~大白鼠们小白鼠们来试试吧~~\r\n\r\n> **这个 PR 的目的就是为了让 Xray 更适合做反向代理 / 内网穿透，独特的优势是你可以直接复用拿来翻墙的那台 VPS、复用 REALITY 的抗量子加密且防封，因为 REALITY 不仅可以稳定地穿透 GFW，也可以穿透公司网络那些奇奇怪怪的审计**\r\n\r\n### 极简配置示例\r\n\r\n公网端配置一个 VLESS 入站，与 UUID 同级配置 `\"reverse\": { \"tag\": \"xxx\" }`，此 tag 视为出站，把流量路由至此即可使用\r\n\r\n**所以公网端一定要有一个默认出站比如 direct，不然会有某一个 reverse 成为默认出站、谁都能访问**\r\n\r\n方便演示这里用 [VLESS Encryption](https://github.com/XTLS/Xray-core/pull/5067)，实际上你直接过墙的话会用 [REALITY](https://github.com/XTLS/Xray-core/pull/4915)，当然你也可以用 [tunnel](https://github.com/XTLS/Xray-core/pull/4968) 直接暴露内网端口到公网\r\n\r\n```jsonc\r\n{\r\n\t\"inbounds\": [\r\n\t\t{\r\n\t\t\t\"listen\": \"0.0.0.0\",\r\n\t\t\t\"port\": 443,\r\n\t\t\t\"protocol\": \"vless\",\r\n\t\t\t\"settings\": {\r\n\t\t\t\t\"decryption\": \"mlkem768x25519plus.native.600s.aCF82eKiK6g0DIbv0_nsjbHC4RyKCc9NRjl-X9lyi0k\",\r\n\t\t\t\t\"clients\": [\r\n\t\t\t\t\t{\r\n\t\t\t\t\t\t\"id\": \"ac04551d-6ebf-4685-86e2-17c12491f7f4\", // for establishing reverse connection\r\n\t\t\t\t\t\t\"flow\": \"xtls-rprx-vision\",\r\n\t\t\t\t\t\t\"reverse\": {\r\n\t\t\t\t\t\t\t\"tag\": \"r-outbound\"\r\n\t\t\t\t\t\t}\r\n\t\t\t\t\t},\r\n\t\t\t\t\t{\r\n\t\t\t\t\t\t\"id\": \"e8758aff-d830-4d08-a59e-271df65b995a\", // for user\r\n\t\t\t\t\t\t\"flow\": \"xtls-rprx-vision\",\r\n\t\t\t\t\t\t\"email\": \"user@example.com\"\r\n\t\t\t\t\t}\r\n\t\t\t\t]\r\n\t\t\t}\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"listen\": \"0.0.0.0\",\r\n\t\t\t\"port\": 80,\r\n\t\t\t\"protocol\": \"tunnel\",\r\n\t\t\t\"tag\": \"t-inbound\"\r\n\t\t}\r\n\t],\r\n\t\"routing\": {\r\n\t\t\"rules\": [\r\n\t\t\t{\r\n\t\t\t\t\"user\": [\r\n\t\t\t\t\t\"user@example.com\"\r\n\t\t\t\t],\r\n\t\t\t\t\"outboundTag\": \"r-outbound\"\r\n\t\t\t},\r\n\t\t\t{\r\n\t\t\t\t\"inboundTag\": [\r\n\t\t\t\t\t\"t-inbound\"\r\n\t\t\t\t],\r\n\t\t\t\t\"outboundTag\": \"r-outbound\"\r\n\t\t\t}\r\n\t\t]\r\n\t},\r\n\t\"outbounds\": [\r\n\t\t{\r\n\t\t\t\"protocol\": \"direct\" // essential\r\n\t\t}\r\n\t]\r\n}\r\n```\r\n\r\n**内网端默认出站 direct 否则回环**，另开一个 VLESS 出站配置  `\"reverse\": { \"tag\": \"yyy\" }` 就会自动连接公网端，无需配置路由\r\n\r\n此 tag 视为入站，可以在内网端的路由等处作为入站 tag 使用，并且它与公网端 reverse 的 tag 没有任何关系，可以不同\r\n\r\n这个 PR 顺便删除了 VLESS outbound 的 vnext 和 users 的 json 嵌套以简化配置，因为上一版 Xray 中已限制它们只能有一个成员\r\n\r\n```jsonc\r\n{\r\n\t\"outbounds\": [\r\n\t\t{\r\n\t\t\t\"protocol\": \"direct\" // essential\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"protocol\": \"vless\",\r\n\t\t\t\"settings\": {\r\n\t\t\t\t\"address\": \"server.com\",\r\n\t\t\t\t\"port\": 443,\r\n\t\t\t\t\"encryption\": \"mlkem768x25519plus.native.0rtt.2PcBa3Yz0zBdt4p8-PkJMzx9hIj2Ve-UmrnmZRPnpRk\",\r\n\t\t\t\t\"id\": \"ac04551d-6ebf-4685-86e2-17c12491f7f4\",\r\n\t\t\t\t\"flow\": \"xtls-rprx-vision\",\r\n\t\t\t\t\"reverse\": {\r\n\t\t\t\t\t\"tag\": \"r-inbound\"\r\n\t\t\t\t}\r\n\t\t\t}\r\n\t\t}\r\n\t]\r\n}\r\n```\r\n\r\n**内网端可以设 CDN 等多条冗余线路均为 `\"reverse\": { \"tag\": \"yyy\" }` 对应公网端多个相同的 `\"reverse\": { \"tag\": \"xxx\" }`**\r\n\r\n这也是 Xray-core / VLESS 做反向代理 / 内网穿透的优势之一，至于哪条线路更优先等设置，先看看用的人多不多吧\r\n\r\n（不会有路由问题，公网端多个入站 reverse tag 相同也只会产生一个出站，目前是多条线路同时存在、每次使用随机选择）\r\n\r\n（现在有的功能是，假如某个线路不通了，比如说内网端没连上来，可用池中就不会有这条线路，流量会自动走其它线路）\r\n\r\n### 安全注意事项\r\n\r\n公网端可以给不同 id 设不同 reverse 穿透至不同的内网设备，**客户端应当用新的 id，不然拿到客户端配置就能劫持你的反向代理**\r\n\r\n用于内网穿透的连接即使开了 XTLS Vision，也只是吃到了 padding，并没有裸奔，是否给用于使用的连接开 XTLS 裸奔自行分析\r\n\r\n内网端 direct 出站可以设置 redirect 以限制访问范围，或者你把默认出站设为 block，只路由允许访问的范围至 direct\r\n\r\n**如果你在用别人提供的内网穿透服务或不信任 VPS，内网应开一个 VLESS Encryption 服务端承接流量，确保身份认证及数据安全**\r\n\r\n## NFTs\r\n\r\n~~这功能不值得支持一下 NFT 吗~~\r\n\r\n**VLESS NFT：https://opensea.io/collection/vless**\r\n\r\n**Project X NFT：https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/1**"
-    },
-    {
-     "number": 7281,
-     "title": "New Blackhole",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-28T15:24:00Z",
-     "updated_at": "2026-11-13T10:46:29Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281",
-     "body": "https://github.com/XTLS/Xray-core/pull/7238#issuecomment-6467092152\n\n旧的黑洞拆掉，用户配置不变：\n- 纯阻断在 infra 转译为 freedom + finalRules block\n- 带响应的自动转为新的 `responder` 出站，有迁移警告\n\n`responder` 未来可以堆更多东西\n\n仍解决不了的是 UDP 首包绕过黑洞，后面还是能发出\n以及 UDP 首包是黑洞，后面想继续发出的问题\n在出站层面解决不了"
     },
     {
      "number": 7208,
@@ -294,53 +328,27 @@
      "user": "G74v3Dw31137",
      "url": "https://github.com/XTLS/Xray-core/pull/7383",
      "body": "## Summary\n\nFix a data race in ordinary Observatory's `GetObservation` by returning an independent snapshot of the observation results.\n\n## Problem\n\n`GetObservation` currently returns a new `ObservationResult` containing references to the observer's internal status slice and messages.\n\nBackground probes update these statuses under `statusLock`, while consumers may read or serialize them after `GetObservation` returns.\n\nThis can cause concurrent reads and writes in routing strategies, metrics, and gRPC protobuf serialization.\n\nThe issue was reproduced on the current upstream `main` with Go's race detector, including a protobuf serialization error:\n\n```text\nWARNING: DATA RACE\nsize mismatch: calculated=22, measured=31\n```\n\n## Solution\n\nDeep-clone the observation result while holding the existing `statusLock`:\n\n```go\no.statusLock.Lock()\ndefer o.statusLock.Unlock()\n\nreturn proto.Clone(&ObservationResult{Status: o.status}), nil\n```\n\nThis ensures that callers receive an independent snapshot, including nested protobuf messages and unknown fields.\n\nThe existing synchronization mechanism, protobuf API, health checks, and routing behavior remain unchanged.\n\n## Testing\n\nAdded two regression tests:\n\n- **Snapshot isolation:** verifies that returned results do not share mutable state with the observer or other snapshots, including nested messages and unknown fields.\n- **Concurrent access:** exercises status updates, additions, removals, and concurrent reads with protobuf serialization.\n\nBoth tests reproduce the original issue. The snapshot test also fails when using a mutex without deep copying.\n\nValidation completed successfully:\n\n- `go test -race ./app/observatory/...`\n- `go test ./app/observatory/... ./app/router/... ./app/metrics/...`\n- Xray build\n- Formatting and diff checks\n\n## Performance\n\nDeep cloning introduces O(n) copying under the existing mutex. Benchmarks covering 2, 20, and 200 outbound statuses confirm the expected linear cost.\n\nThe fix intentionally favors correctness and minimal changes over additional synchronization complexity."
-    },
-    {
-     "number": 7159,
-     "title": "XHTTP: packet-down in stream-down with downlink keep-alive",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-15T04:03:56Z",
-     "updated_at": "2026-11-11T23:31:00Z",
-     "user": "izislesar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7159",
-     "body": "# XHTTP: packet-down in stream-down with downlink keep-alive\n\nFollows RPRX's packet-down design in https://github.com/XTLS/Xray-core/pull/6755#issuecomment-5720463978, which was written while closing the earlier downlink-resume attempt (#6755). That attempt was rejected because \"restore connection\" is too complex, with latency, ACK and so on. This one does not attempt connection restoration at all. No reconnection, no state machine, nothing to tune: each stream-down GET stays a single request; if the GET dies, the connection dies the ordinary way.\n\n## Problem (from #4846)\n\nCDNs kill a stream-down GET on body inactivity. This matters during uploads: with packet-up the uplink posts keep flowing, but the downlink proxy payload only arrives while the origin sends, so during a pure upload the GET idles and gets cut. Same story for any target that goes quiet for a while after responding.\n\n## What this PR adds\n\nWhen enabled on both ends, the stream-down response body is cut into packet-down frames with the five elements from the design comment:\n\n- omittable session id excerpt: first 8 bytes of the session id, present on data and keep-alive frames (absent in stream-one where the session id is empty)\n- omittable packet seq: uint64, counting data/keep-alive frames per stream-down GET\n- mandatory type: data or padding\n- mandatory length: uint16\n- payload\n\nUse today is the first one from the design comment: downlink keep-alive. While the downlink has been idle for a whole period, the server writes a padding frame (base62, in the spirit of tokenish x-padding) instead of staying silent. Everything the dispatcher sends rides in data frames, which is what lets the client tell padding apart from payload safely; the seq keeps the format ready for the future uses listed in the design comment (retransmission, multi-path-down) without another wire change.\n\nh1, h2 and h3 are covered, since the framers sit on the body, not on a specific transport. stream-one gets the same treatment on its single response body. Browser dialer is out of scope for now: it has no place to read the response header that confirms the framing.\n\n## Negotiation\n\nStrictly opt-in and per request, so old servers are unaffected and nothing breaks behind middleboxes:\n\n1. client config has packetDown: XHTTP stream requests not used as pure uplink (stream-down GET, stream-one request) carry X-Packet-Down: 1\n2. server has packetDown configured and sees the marker: it answers with X-Packet-Down: 1 on the response, and frames; without the confirmed header the client never parses frames\n3. any other combination: byte-identical wire format as today\n\n## Config\n\n```jsonc\n\"xhttpSettings\": {\n  \"path\": \"/sh\",\n  \"packetDown\": {              // absent = disabled, as today\n    \"keepAlive\": true,\n    \"keepAlivePeriod\": \"10-30\",  // seconds; padded when inactive this long. defaults to 10-30\n    \"keepAliveLength\": \"24-64\"   // padding size. defaults to 24-64\n  }\n}\n```\n\nServer side is the same block in the inbound; the server only honors the feature when the client asks.\n\n## Not in this PR (deliberately)\n\n- obfs of the frames (later, per the design comment)\n- retransmission, multi-path-down, same-packet racing, ACK: the format carries seq and the session excerpt, but none of the machinery, exactly like packet-up carries seq today without using it\n- nothing about #4846's larger downlink freeze problem (the 15-20 KB per TCP connection cut): this only discards the CDN idle timer, it does not split data across connections\n\n## Tests\n\n- packet_down_test.go: frame round trip (with/without excerpt, with/without seq), byte-stream shaped like a socket, splitting payloads larger than one frame, padding skipped, malformed frame rejected, keep-alive written when idle, keep-alive suppressed while active, config normalization\n- splithttp_test.go: full listen/dial round trip with packet-down on both end (100 KiB), and the fallback case with the client setting present but the server without one\n- infra/conf: JSON un"
-    },
-    {
-     "number": 7376,
-     "title": "TLS config: Keep hot-reloading certificate after a read error",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-11T07:03:21Z",
-     "updated_at": "2026-11-11T22:03:37Z",
-     "user": "ZeN220",
-     "url": "https://github.com/XTLS/Xray-core/pull/7376",
-     "body": "certificate hot reload in `setupOcspTicker` gives up for good after the first failed read. this is what the loop did:\n  ```go\n  if err != nil { \n      errors.LogErrorInner(context.Background(), err, \"failed to parse certificate\")\n      return\n  }   \n  newKey, err := filesystem.ReadCert(entry.KeyPath)\n  if err != nil {\n      errors.LogErrorInner(context.Background(), err, \"failed to parse key\")\n      return\n  }   \n  ```\n  when `certificateFile` or `keyFile` can't be read (e.g. the file is missing for a moment while it's being renewed, or permissions are wrong), the goroutine just returns, and from then on until a restart the certificate on disk is ignored, so after a renewal xray keeps serving the old one, even past its expiry\n  \n  with this change the error is logged as `certificate hot reload failed, will retry` and the next tick tries again, while the callback still runs and ocsp keeps being updated for the current certificate.\n  \nto check it end to end i ran an inbound with `ocspStapling: 2`, moved the `.crt` away for a few seconds and put a different certificate in its place. on\n  main the old serial stays, with the fix the new one shows up right after the file is back:\n  ```bash\n  openssl s_client -connect 127.0.0.1:PORT -servername NAME </dev/null | openssl x509 -noout -serial\n  ```"
-    },
-    {
-     "number": 7379,
-     "title": "XHTTP client: Bound the TLS/REALITY handshake to 10s",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-11T13:07:09Z",
-     "updated_at": "2026-11-11T21:59:49Z",
-     "user": "Medium1992",
-     "url": "https://github.com/XTLS/Xray-core/pull/7379",
-     "body": "A handshake blackholed after ClientHello never ends: x/net queues every request of the transport behind that dial and XMUX keeps giving it new sessions, so the client stays dead even after the path comes back. The server already bounds this with `ReadHeaderTimeout: 4s`, `http.DefaultTransport` uses 10s.\n\nStand, 20 sessions, blackhole for 3s: before 0/20 in 400s, also for sessions started after it; after 20/20 in 10.1s. Same for stream-one/stream-up/packet-up, REALITY/TLS, h2/HTTP/1.1, downloadSettings, RTT 150–300ms with 1–3% loss; long sessions are unaffected. The test fails on main and passes with this.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
-    },
-    {
-     "number": 7382,
-     "title": "Issue with terminating dead connections",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-11T19:53:52Z",
-     "updated_at": "2026-11-11T19:53:52Z",
-     "user": "megasoheilsh",
-     "url": "https://github.com/XTLS/Xray-core/issues/7382",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nHello. When the client terminates the core, the server cuts off idle connection the connection 5 minutes later. Please provide a solution to resolve this issue.\nI discussed this issue with my good friend @patterniha  who suggested using the 'custom sockopt' method. I also tested this configuration with the help of AI, but the problem regarding the closure of dead connections remains unresolved.\n\"customSockopt\": [\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"1\",\n          \"opt\": \"9\",\n          \"value\": \"1\",\n          \"type\": \"int\"\n        },\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"6\",\n          \"opt\": \"6\",\n          \"value\": \"1\",\n          \"type\": \"int\"\n        },\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"6\",\n          \"opt\": \"5\",\n          \"value\": \"1\",\n          \"type\": \"int\"\n        },\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"6\",\n          \"opt\": \"4\",\n          \"value\": \"10\",\n          \"type\": \"int\"\n        }\n      ]\n    }\n  },\n\n### Reproduction Method\n\nxhttp + tls + custom header\n\n### Client config\n\nnone \n\n### Server config\n\n{\n  \"api\": {\n    \"listen\": \"127.0.0.1:60350\",\n    \"services\": [\n      \"HandlerService\",\n      \"LoggerService\",\n      \"StatsService\",\n      \"RoutingService\"\n    ],\n    \"tag\": \"api\"\n  },\n  \"burstObservatory\": null,\n  \"dns\": {\n    \"queryStrategy\": \"UseIP\",\n    \"servers\": [\n      \"https://8.8.8.8/dns-query\",\n      \"https://1.1.1.1/dns-query\"\n    ],\n    \"tag\": \"dns_inbound\"\n  },\n  \"fakedns\": null,\n  \"inbounds\": [\n    {\n      \"listen\": null,\n      \"port\": 443,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [\n          {\n            \"email\": \"\",\n            \"flow\": \"\",\n            \"id\": \"929fb3a2-9c51-4e34-a946-daab72dec7e0\"\n          }\n        ],\n        \"decryption\": \"\",\n        \"encryption\": \"\",\n        \"selectedAuth\": \"ML-KEM-768, Post-Quantum\"\n      },\n      \"sniffing\": {\n        \"destOverride\": [\n          \"quic\",\n          \"fakedns\",\n          \"tls\"\n        ],\n        \"enabled\": true,\n        \"routeOnly\": true\n      },\n      \"streamSettings\": {\n        \"finalmask\": {\n          \"tcp\": [\n            {\n              \"settings\": {\n                \"clients\": [\n                ],\n                \"errors\": [],\n                \"servers\": [\n                ]\n              },\n              \"type\": \"header-custom\"\n            }\n          ]\n        },\n        \"network\": \"xhttp\",\n        \"security\": \"tls\",\n        \"tlsSettings\": {\n          \"alpn\": [\n            \"h2\"\n          ],\n          \"certificates\": [\n          ],\n          \"echForceQuery\": \"none\",\n          \"maxVersion\": \"1.3\",\n          \"minVersion\": \"1.2\"\n        },\n        \"xhttpSettings\": {\n          \"extra\": {\n            \"scMaxBufferedPosts\": 30,\n            \"scMaxEachPostBytes\": \"1000000\",\n            \"scMinPostsIntervalMs\": \"30\",\n            \"scStreamUpServerSecs\": \"10\",\n            \"xPaddingBytes\": \"1\"\n          },\n          \"mode\": \"auto\",\n          \"path\": \"/\"\n        },\n        \"sockopt\": {\n          \"tcpKeepAliveIdle\": 20,\n          \"tcpKeepAliveInterval\": 1\n        }\n      },\n      \"tag\": \"inbound-443\"\n    }\n  ],\n  \"log\": {\n    \"access\": \"none\",\n    \"error\": \"none\",\n    \"loglevel\": \"none\",\n    \"maskAddress\": \"\"\n  },\n  \"observatory\": null,\n  \"outbounds\": [\n    {\n      \"protocol"
     }
    ],
    "comments": [
+    {
+     "id": 6869031071,
+     "issue": 6802,
+     "issue_title": "HTTPUpgrade client: Close connection to server on early returns",
+     "created_at": "2026-11-14T01:04:59Z",
+     "user": "mengyuefeitian",
+     "url": "https://github.com/XTLS/Xray-core/pull/6802#issuecomment-6869031071",
+     "body": "这个问题解决了吗，我的客户端也是无法连接服务器了啊，小火箭正常"
+    },
+    {
+     "id": 6864526217,
+     "issue": 7281,
+     "issue_title": "New Blackhole",
+     "created_at": "2026-11-13T20:46:49Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6864526217",
+     "body": "PROXY protocol 被拆独立 finalmask 我觉得太碎了，别的协议用不到。\r\n这东西唯一场景就是反向代理读真实 IP。其它出站都是代理协议是不可能用到的，服务端也不可能接受这样的篡改。\r\n会增加用户理解成本与配置复杂度。\r\n\r\n文档中 firewall 的 reply 还要跟用户解释为什么同样是 UDP 首包能回复，其它又不能。不符合直觉。以及 allow 其实不该有 reply 功能，会把正常通信破坏，想不到放行时插包的理由。它就该做成独立 action。\r\n\r\n现在首先是用户如果按照全新文档做了一个 direct 出站，忘了防火墙做无条件 block，那流量就出去了。以前没有这种风险。而且还得特别提醒千万别配 dialerProxy，否则黑洞也无效。以及还需要花篇幅解释，direct 出站不是字面上的 direct。你可以配一个 firewall 那么就可以当 block 用。\r\n文档从未跨模块给过配置示例，现在不得不开一片新的文章来解释它。只是为了实现一个 block。"
+    },
     {
      "id": 6858994670,
      "issue": 7393,
@@ -826,182 +834,33 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6812007409",
      "body": "在我看来非要留着本来就已经没什么人用的东西才是问题，如果是单纯 VMess 的话还不能砍，然而 VMess+Mux 组合在 Xray-core 真的还有人用吗？只为了留着这组合导致 dup code 到底图啥？况且现在连机场都几乎没 VMess 了，自建更前沿更没人搭\r\n\r\n就像当年不合 smux 的理由之一，Mux 有一套功能完备的万能的就够了，加法都加给它，顶多再有个客观上的 h2/h3 XMUX，甚至这次还不是加新 mux 而是清理 legacy code，明明已有更好的替代品，我没有兴趣像其它软件一样啥协议都加且永远不删\r\n\r\n协议过时后被删掉是迟早的事，尽早删掉还能加速这一进程，当年旧的 XTLS 我也是直接删，加速用户迁移到了更完善的新协议"
-    },
-    {
-     "id": 6810725121,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-12T00:30:49Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810725121",
-     "body": "可以把已有的mux拷一份精简一下放到vless里再硬分叉改个名 加不兼容的功能也行 简单的复用写outbound那里的mux设置就outbound不加新了 老配置兼容 要用别的新功能就需要去写 vless settings\r\n旧的mux cool保留其他协议简单pass过去 这样vless叠多少新功能都和外面的协议没关系了"
-    },
-    {
-     "id": 6810619563,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-12T00:24:28Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810619563",
-     "body": "一边要蹭mux cool大量部署的兼容性 一边要改名加上vless头 这样一整把无辜的vmess能用的mux cool嚯嚯掉 这整个不是就是很奇怪吗"
-    },
-    {
-     "id": 6810513388,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-12T00:18:04Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810513388",
-     "body": "> 最下面的proxy机制是一模一样甚至能兼容的啊（虽然兼容很重要） 那理论上其实就是一个东西(\r\n\r\n首先早就不是一模一样的一个东西了，原版 mux.cool 就不支持 XUDP，以及以后的修改更不会支持，不改名的话这到底算啥？\r\n\r\n> 搓一个调度TLS连接的东西(xmux) 并且用TLS本来既有的机制塞padding 然后在TLS载荷里面带别的业务数据（xudp） 不能说 我们 refactor 了 TLS 然后改名 xxxx secure 吧\r\n\r\n先不说这个说法合不合理，mux.cool 它那个 padding 并不是设计本意，只是我刚好发现那里能塞数据，长度限制很快会被改掉\r\n\r\n> 要么重新发明起vless的cmd 然后从头设计vless层内部的mux 那确实可以那么叫 只是老的就不兼容了 一个炫酷的新名字和兼容老的是冲突的(\r\n\r\n协议这种东西不能一下子 breaking 掉，以后真有可能彻底不兼容旧版，~~REALITY 那个是他们自己看错了以为是一下子 breaking~~"
-    },
-    {
-     "id": 6810246889,
-     "issue": 7364,
-     "issue_title": "VLESS: run multiplexing directly on transport",
-     "created_at": "2026-11-12T00:02:25Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6810246889",
-     "body": "如果真是一个全新东西那break都炸 如果兼容老的那么本质还是一样的\r\n如果一个东西没什么人在说 要么是没人用 还有可能是跑的很稳定以至于没人提 mux.cool 是 vmess 协议的一部分 砍了等于把vmess协议砍残了\r\n旧reverse那是本来用的就少 怎么可能和 vmess mux 比用户量 最近core限这砍那的最后结果就是很多人不敢升级了呆在旧版 甚至有人整理旧版本xray还支持的特性和交互性 或者有的人就跑去用别的核心了"
-    },
-    {
-     "id": 6810151406,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-11T23:56:29Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810151406",
-     "body": "我对 #7364 疯狂 vibe 比较担心\r\n另一个是别的协议能吃到 mux 消除 tit 继续苟，或者降低 rtt，又或者没有 uot 的协议套 mux 后可以套 reality/tls 非常灵活"
-    },
-    {
-     "id": 6810145541,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-11T23:56:07Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810145541",
-     "body": "要么重新发明起vless的cmd 然后从头设计vless层内部的mux 那确实可以那么叫 只是老的就不兼容了 一个炫酷的新名字和兼容老的是冲突的("
-    },
-    {
-     "id": 6810128991,
-     "issue": 7364,
-     "issue_title": "VLESS: run multiplexing directly on transport",
-     "created_at": "2026-11-11T23:55:04Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6810128991",
-     "body": "> vmess出都要删? 这是vmess的东西的东西啊甚至有mux的协议指令\r\n\r\nhttps://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810034022 本来就不会是原版 mux 了，~~且你没发现今年都没什么人用 VMess 了吗，VLESS Encryption 正在逐步取代它~~\r\n\r\n真要继续支持的话无非是加个调用加些参数的事，但有什么必要，一年前 Reverse 只留 VLESS 了也没人说还要给 VMess 留着"
-    },
-    {
-     "id": 6810113772,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-11T23:54:10Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810113772",
-     "body": "最下面的proxy机制是一模一样甚至能兼容的啊（虽然兼容很重要） 那理论上其实就是一个东西(\r\n搓一个调度TLS连接的东西(xmux) 并且用TLS本来既有的机制塞padding 然后在TLS载荷里面带别的业务数据（xudp） 不能说 我们 refactor 了 TLS 然后改名 xxxx secure 吧"
-    },
-    {
-     "id": 6810034022,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-11T23:49:18Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6810034022",
-     "body": "> 这本来就是v2ray发明的协议 一个字段不改就改过来叫 VLESS Multiplex 这是否\r\n\r\n这本来也是 VLESS 协议的一部分，~~照你这么说 VLESS Reverse 是否~~，都改名了肯定是要搞不同的东西，还要留些旧版兼容性不然 TLV 非用它的？已有 XUDP，很快还要加 XMUX 参数、自定义 padding、XUDP 进化成 PLUX 等一堆东西，Reverse 也能蹭到"
-    },
-    {
-     "id": 6809832694,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-11-11T23:37:08Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6809832694",
-     "body": "~~改名叫 firewall 主要是因为这名字非常直观、合理，一眼就知道干啥的~~"
-    },
-    {
-     "id": 6809814155,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-11-11T23:36:04Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6809814155",
-     "body": "- PROXY protocol 迁移到 Finalmask，包括 sockopt 那个\r\n- redirect 留外面，不放 firewall 里\r\n- reply 是 allow/block 都有，先只支持 block 吧"
-    },
-    {
-     "id": 6809778095,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-11-11T23:33:56Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6809778095",
-     "body": "这么看的话它似乎又要叫 finalrules 比较合适了，因为能 redirect reply"
-    },
-    {
-     "id": 6809768524,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-11-11T23:33:21Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6809768524",
-     "body": "那最终就是没有黑洞出站，统统到 direct 出站，然后靠 firewall 来 block、allow、redirect、reply 对吧，它有 4 个 action"
-    },
-    {
-     "id": 6809729133,
-     "issue": 7159,
-     "issue_title": "XHTTP: packet-down in stream-down with downlink keep-alive",
-     "created_at": "2026-11-11T23:31:00Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7159#issuecomment-6809729133",
-     "body": "> 真有这种必要对XHTTP unblock mux 就行了 mux自带\r\n\r\npacket-down 准备支持 multipath-down"
-    },
-    {
-     "id": 6808360533,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-11T22:15:50Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6808360533",
-     "body": "> 这个月会重点 refactor mux.cool 并改名 VLESS Multiplex\r\n\r\n这本来就是v2ray发明的协议 一个字段不改就改过来叫 VLESS Multiplex 这是否"
-    },
-    {
-     "id": 6808123040,
-     "issue": 7376,
-     "issue_title": "TLS config: Keep hot-reloading certificate after a read error",
-     "created_at": "2026-11-11T22:03:21Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7376#issuecomment-6808123040",
-     "body": "这种情况应该极少 renew应该是一次write文件才对 为什么会miss 如果是权限错误则不太像是可恢复的问题\r\n~~主要是这里整个重载确实有点脆弱 未来可能有一个预计的改动~~"
-    },
-    {
-     "id": 6808027797,
-     "issue": 7379,
-     "issue_title": "XHTTP client: Bound the TLS/REALITY handshake to 10s",
-     "created_at": "2026-11-11T21:58:21Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7379#issuecomment-6808027797",
-     "body": "tcp keep alive应该可以清理掉死掉的连接 遇到很多真实问题前在各种地方插timeout意义不大"
-    },
-    {
-     "id": 6807970937,
-     "issue": 7364,
-     "issue_title": "VLESS: run multiplexing directly on transport",
-     "created_at": "2026-11-11T21:55:22Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6807970937",
-     "body": "> @svlavr rebase main\r\n> \r\n> [#7355 (comment)](https://github.com/XTLS/Xray-core/pull/7355#issuecomment-6739539943) 的意思是把 Mux 的代码移到 `proxy/vless/multiplex` 文件夹，然后出入站、reverse 都直接调用它\r\n> \r\n> 其它出站不给开 mux.cool 了，入站的话就 VMess 留一个兼容吧，且等新 Mux 稳定后出站不需要 `common/xudp/xudp.go` 了\r\n\r\nvmess出都要删? 这是vmess的东西的东西啊甚至有mux的协议指令"
-    },
-    {
-     "id": 6806743245,
-     "issue": 7159,
-     "issue_title": "XHTTP: packet-down in stream-down with downlink keep-alive",
-     "created_at": "2026-11-11T20:48:04Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7159#issuecomment-6806743245",
-     "body": "> ？\r\n\r\n真有这种必要对XHTTP unblock mux 就行了 mux自带"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3466,
+     "title": "[Android][XRay/REALITY] ClientHello is sent without SNI when address and serverName are the same domain; literal IP in address works",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T22:44:40Z",
+     "updated_at": "2026-11-13T22:44:40Z",
+     "user": "evgenyuleykin",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3466",
+     "body": "**Describe the bug**\nOn Android, an XRay (VLESS + REALITY + xtls-rprx-vision) connection whose `address` and `realitySettings.serverName` are the same domain sends a TLS ClientHello without the SNI extension. The server rejects every connection with `server name mismatch:` (empty name). The app shows \"Connected\", but no traffic passes. With a literal IP in `address` (and the domain kept in `serverName`) the same profile works. The same vless:// link works in Hiddify and Happ on the same phone.\n\n**To Reproduce**\nSteps to reproduce the behavior:\n1. Set up a server with XRay installed via Amnezia (container `amnezia-xray`), with a domain pointing to the server, e.g. example.duckdns.org, and `serverNames: [\"example.duckdns.org\"]` on the server.\n2. Use a client config where `address` = \"example.duckdns.org\" and `serverName` = \"example.duckdns.org\" (fingerprint: chrome, flow: xtls-rprx-vision).\n3. Import it into AmneziaVPN on Android and connect.\n4. See error: the status is \"Connected\", but no site opens (pages load forever).\n\n**Expected behavior**\nThe ClientHello carries SNI \"example.duckdns.org\", the REALITY handshake succeeds and traffic passes, the same as with a literal IP in `address` or with other Xray clients (Hiddify, Happ).\n\n**Log files**\nServer, Xray loglevel debug, one line per connection attempt (hundreds per minute):\n2026/11/13 20:51:39 [Info] transport/internet/tcp: REALITY: processed invalid connection from <ip>: server name mismatch:\n\nServer-side pcap (tcp dst port 443), ClientHellos parsed:\n- AmneziaVPN Android: 3779 ClientHellos, none has the server_name extension (17 extensions);\n- AmneziaVPN macOS, same server and network: ClientHellos carry SNI \"example.duckdns.org\" (18 extensions).\n[Attach the app logs from Android: Settings → Logging]\n\n**Screenshots**\nN/A\n\n**Desktop (please complete the following information):**\n - N/A (macOS with a domain endpoint has a different symptom, already reported in #3132)\n\n**Smartphone (please complete the following information):**\n - Device: Samsung S25 Ultra (SM-S938B/DS)\n - OS: Android version 17\n - Version: AmneziaVPN version 5.1.0.6\n\n**Server (please complete the following information):**\n - OS: \n\n[AmneziaVPN-logs-20261114-014321.zip](https://github.com/user-attachments/files/34828125/AmneziaVPN-logs-20261114-014321.zip)\n\nUbuntu 24.04.4 LTS\n\n**Additional context**\n- Workaround: literal IP in `address`, domain in `serverName`.\n- Suspected cause: the client resolves the hostname to an IP and substitutes it into `realitySettings.serverName` as well. Per Xray docs, when serverName is an IP the SNI extension is not sent.\n- Related: #3132 (macOS, domain endpoint), #2377 (Windows, domain endpoint)."
+    },
+    {
+     "number": 3132,
+     "title": "[macOS][XRay] Domain endpoint: utun is configured but nothing traverses the tunnel until teardown; literal IP works; iOS works",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-09-06T18:57:34Z",
+     "updated_at": "2026-11-13T22:30:29Z",
+     "user": "konst643",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3132",
+     "body": "### Describe the bug\n\nOn macOS, an XRay (VLESS + Reality) profile whose server address is a **domain name** never establishes: the app reaches \"Connected\", the `utun` interface is created but **never receives an IP address**, no traffic flows, and networking stays broken until disconnect. On disconnect the log shows `Failed to stop xray`.\n\nReplacing only the server address with the server's **literal IPv4** (same key, same Reality parameters, same SNI) makes the very same profile work: `utun` gets its address and traffic flows.\n\n### To Reproduce\n\n1. Self-host xray-core (26.3.x), VLESS + Reality on TCP 443, with a DNS A record pointing at the server.\n2. On macOS, import a `vpn://` key (or `vless://` link) where the outbound `vnext.address` is the **domain name**.\n3. Connect. The app shows \"Connected\", but `ifconfig` shows the new `utun` interface without an inet address; nothing loads, the machine effectively loses networking until disconnect.\n4. Re-import the same profile with `vnext.address` set to the server's literal IPv4 — it works: the `utun` gets its address (e.g. `10.x.x.x`) and traffic flows through the server.\n\n### Expected behavior\n\nA domain endpoint should work: resolve the name **before** the tunnel takes over the default route (or add a bypass route for the resolved IP once known). Otherwise the resolver query is routed into the tunnel that is still being established — a chicken-and-egg loop that can never complete.\n\n### Evidence that it is the resolution order\n\n- The same domain-based profile works in AmneziaVPN on **iOS**: the Network Extension excludes the provider's own traffic, so the name resolves outside the tunnel.\n- The same domain-based `vless://` link works on the same Mac in a third-party client (V2Box), which resolves the name before route setup and adds a host bypass route for the resolved address.\n- The \"Use AmneziaDNS\" toggle has no effect on this (tested both ways).\n- Not a duplicate of #2722: there the tunnel comes up and passes IP traffic while in-tunnel DNS fails; here the tunnel never comes up at all when the address is a domain.\n\n### Environment information\n\n- **OS:** macOS 26 (Darwin 25.6)\n- **AmneziaVPN Client Version:** 4.8.15.4 and 5.0.2.0 (both reproduce)\n- **Protocol:** XRay, VLESS + Reality over TCP 443, self-hosted xray-core 26.3.x\n- **Import method:** `vpn://` key with XRay JSON config (also reproduces with `vless://` link import)\n"
+    },
     {
      "number": 3465,
      "title": "feat: ci release ios",
@@ -1232,31 +1091,18 @@
      "user": "NickVs2015",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3442",
      "body": "FIX importat IOS network extension break down.\r\nOn iOS the network extension was jetsam-killed at the 50 MB limit a few minutes\r\nafter connecting to an xhttp + REALITY server (`The VPN plugin died unexpectedly`).\r\n\r\nWith `mode` unset xray picks `stream-one` for xhttp + REALITY: one endless POST\r\nper session, and Go's HTTP/2 client holds a 512 KiB scratch buffer per such\r\nstream for its whole lifetime. A heap profile from the extension showed\r\n`http2.(*clientStream).writeRequestBody` at 34.5 MB (74 % of the Go heap) with\r\n~70 sessions, which Instagram/Facebook open within a minute.\r\n\r\nThe extension now sets `xhttpSettings.mode = \"packet-up\"` when the mode is empty\r\nor `auto`: each POST has a `Content-Length`, so the buffer is payload-sized and\r\ntransient. An explicit mode is left as is; the server accepts both modes.\r\niOS extension only."
-    },
-    {
-     "number": 3110,
-     "title": "Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-09-01T09:26:30Z",
-     "updated_at": "2026-11-11T22:46:36Z",
-     "user": "smollgreymouse",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3110",
-     "body": "# Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect and recreates tun2\n\n## Describe the bug\n\nOn Linux, AmneziaVPN performs a full VPN reconnect whenever NetworkManager emits:\n\n```text\nStateChanged(NM_STATE_CONNECTED_GLOBAL = 70)\n```\n\neven when the physical network, Wi-Fi access point, interface, and gateway have not actually changed.\n\nA normal NetworkManager connectivity transition:\n\n```text\nCONNECTED_GLOBAL -> CONNECTED_SITE -> CONNECTED_GLOBAL\n```\n\nis interpreted by AmneziaVPN as a network change.\n\nWhen NetworkManager returns to `CONNECTED_GLOBAL`, AmneziaVPN calls `VpnConnection::reconnectToVpn()`. With Xray this stops Xray/tun2socks, destroys `tun2`, and creates a new tunnel.\n\nIn my case the event is triggered periodically by NetworkManager connectivity checks. The Wi-Fi access point does not change.\n\nThe unnecessary reconnect is disruptive by itself, but the reconnect cleanup also sometimes fails, leaving DNS/routes in a broken state until a manual VPN reconnect.\n\n## Environment\n\n* OS: Ubuntu 25.10\n* Kernel: Linux 6.17.0-41-generic\n* Network manager: NetworkManager\n* VPN protocol: Xray\n* Xray data path: `tun2` + `tun2socks`\n* TUN address: `10.33.0.2/24`\n* Physical connection remains active during the reproduced event\n\n## Reproduced timeline\n\nIncident captured on 2026-08-31.\n\n### NetworkManager changes connectivity classification\n\n```text\n16:30:05.947  DNS query: connectivity-check.ubuntu.com A\n16:30:06.312  DNS reply: NOERROR\n16:30:06.628  NetworkManager state is now CONNECTED_SITE\n16:30:06.xxx  Amnezia LinuxNetworkWatcherWorker: NMStateChanged 60\n```\n\nNetworkManager then retries connectivity checks.\n\nApproximately 31 seconds later:\n\n```text\n16:30:37.338  DNS reply: NOERROR\n16:30:37.657  NetworkManager state is now CONNECTED_GLOBAL\n16:30:37.658  Amnezia LinuxNetworkWatcherWorker:\n               Properties changed for interface org.freedesktop.NetworkManager.Device\n16:30:37.658  Amnezia LinuxNetworkWatcherWorker:\n               Access point did not changed. Ignoring the changes\n16:30:37.658  Amnezia LinuxNetworkWatcherWorker:\n               NMStateChanged 70\n```\n\nThe important part is that AmneziaVPN itself reports that the access point did not change.\n\n### AmneziaVPN immediately reconnects\n\nImmediately after `NMStateChanged 70`:\n\n```text\nAmneziaVPN.desktop:\nReconnect triggered. Reconnecting to the server\n\nAmneziaVPN.desktop:\nXrayProtocol::stop()\n```\n\nThe existing TUN is then removed:\n\n```text\nNetworkManager:\ndevice (tun2): state change: activated -> unmanaged\n(reason 'unmanaged', managed-type: 'removed')\n\nAmneziaVPN-service:\ndeleteTun ret 0\n```\n\nThe diagnostic bundle independently confirms that the TUN FD was owned by Amnezia's `tun2socks` process.\n\n### Cleanup errors\n\nDuring this automatic reconnect the logs also contain:\n\n```text\nFailed to delete tun\nNo suitable DNS manager found.\nVpnConnection::onConnectionStateChanged: Failed to flush DNS\nFailed to clear saved routes\n```\n\nand several route deletion failures.\n\nA `pkill` invocation also reports:\n\n```text\npkill: pattern that searches for process name longer than 15 characters\nwill result in zero matches\nTry `pkill -f' ...\n```\n\n### Tunnel is recreated\n\nAmneziaVPN then starts Xray/tun2socks again and creates a new TUN:\n\n```text\nXrayProtocol::start()\nXray::startXray()\n\ntun2socks -device tun://tun2 -proxy socks5://127.0.0.1:...\n\nip tuntap add mode tun dev tun2\nip addr add 10.33.0.2/24 dev tun2\nip link set dev tun2 up\n```\n\nTherefore the `tun2` deletion is not caused by NetworkManager. NetworkManager observes the externally managed interface disappearing.\n\nThe tunnel is deliberately torn down by AmneziaVPN as part of `reconnectToVpn()`.\n\n## Source-code cause\n\nCurrent Linux code in:\n\n```text\nclient/platforms/linux/linuxnetworkwatcherworker.cpp\n```\n\ncontains:\n\n```cpp\nvoid LinuxNetworkWatcherWorker::NMStateChanged(quint32 state)\n{\n    logger.debug() << \"NMStateChanged \" << state;\n\n    if (state == NM_STATE_ASLEEP || state == NM_STATE_DISABLED"
-    },
-    {
-     "number": 3456,
-     "title": "[BUG] [macOS] 5.1.0.6: imported AWG profile loses a single DNS address",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-11T19:56:38Z",
-     "updated_at": "2026-11-11T19:56:52Z",
-     "user": "mkhoussid",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3456",
-     "body": "On macOS with AmneziaVPN 5.1.0.6, importing an AmneziaWG `.conf` containing one private DNS address leaves macOS using the application defaults, `1.1.1.1` and `1.0.0.1`. The tunnel and private HTTPS work, but private names do not resolve.\n\nRe-importing the same profile with the private DNS address listed twice fixes resolution. No keys, routes or other settings were changed.\n\nIn `client/core/controllers/selfhosted/importController.cpp`, `ImportController::extractWireGuardConfig()` still requires two IPv4 DNS captures. A single address therefore leaves dns1/dns2 unset, and `NativeServerConfig::getDnsPair()` falls back to application DNS.\n\nExpected: preserve a valid single DNS address without silently substituting public resolvers."
     }
    ],
    "comments": [
+    {
+     "id": 6866534438,
+     "issue": 3132,
+     "issue_title": "[macOS][XRay] Domain endpoint: utun is configured but nothing traverses the tunnel until teardown; literal IP works; iOS works",
+     "created_at": "2026-11-13T22:30:29Z",
+     "user": "evgenyuleykin",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3132#issuecomment-6866534438",
+     "body": "+1, reproduced on macOS 27.2 (26B123), AmneziaVPN 5.1.0.6 (Nov  2 2026, ac175c8), VLESS+REALITY+vision.\nWith a domain in `address` the server-side Xray log shows only a short burst of accepted connections (DoH to Cloudflare), then no traffic. Literal IP in `address` works. Hiddify on the same Mac works with the domain endpoint."
+    },
     {
      "id": 6857013367,
      "issue": 3382,
@@ -1400,69 +1246,6 @@
      "user": "aarpro",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2794#issuecomment-6816267423",
      "body": "AmneziaVPN 4.8.21.0 the same problem\nThe solution is the same, but one line is enough.\n\n`remap-usr1 SIGTERM`"
-    },
-    {
-     "id": 6808922415,
-     "issue": 3110,
-     "issue_title": "Linux: NetworkManager CONNECTED_GLOBAL transition causes unnecessary full VPN reconnect",
-     "created_at": "2026-11-11T22:46:36Z",
-     "user": "MAnitosik",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3110#issuecomment-6808922415",
-     "body": "The issue still exists on the latest version."
-    },
-    {
-     "id": 6808433591,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-11T22:19:45Z",
-     "user": "Guban1990",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6808433591",
-     "body": "Коллеги,  тоже пришлось менять ip у сервера спустя 3 дня использования Amnezia Vpn с Amnezia self-hosted сервером в Нидерландах.\nПодскажите, а есть хостинги, где динамический ip и оператор сам его меняет по мере бана?. \nИли как еще избежать блокировку ? \nНадеюсь,  команда Amnezia ищет решение. \nСама Amnezia советует использовать XRay (VLESS) как основной протокол,  чтобы избежать блокировок,  а мне казалось по умолчанию протокол Amnezia WG безопаснее,  хотя на нем и произошла блокировка. \nЧто скажете?  Маякните,  как будет инфа! "
-    },
-    {
-     "id": 6807153337,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-11T21:12:47Z",
-     "user": "EternalBlueInfinity",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6807153337",
-     "body": "Внешний IP может быть любым, если его забанят - вы этого не заметите. Он же используется уже на этапе подключения от сервера к конечному сайту, куда вы ходите через VPN.\nА на сервер вы будете попадать через входной, который не будет раскрыт и слит приложениями.\n\nВо всяком случае, слит он не будет именно этим способом, потому что возможно есть еще #3429 - но тут я не ручаюсь за достоверность статьи, и не факт что этот метод сейчас уже применяется."
-    },
-    {
-     "id": 6806872481,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-11T20:57:29Z",
-     "user": "CriticalHit148",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6806872481",
-     "body": "@EternalBlueInfinity \n> Если вы на сервере можете сделать так, чтобы входной IP отличался от внешнего \n\nВнешний IP должен быть чужим? В том плане, что его будут банить так же как сейчас входной?"
-    },
-    {
-     "id": 6806584197,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-11T20:36:37Z",
-     "user": "EternalBlueInfinity",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6806584197",
-     "body": "Если вы на сервере можете сделать так, чтобы входной IP отличался от внешнего - возможно, это поможет.\nМне кажется, уже все платные VPN так делают. О том, что это необходимость, писали больше чем полгода назад, когда с телеграмом только началось.\n\nКак сделать это на self-hosted - не подскажу, сам не знаю.\nЗнаю, что некоторые вместо того, чтобы выходить напрямую, выводят трафик с сервера на WARP."
-    },
-    {
-     "id": 6806484347,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-11T20:29:35Z",
-     "user": "KuDeSnik33ra",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6806484347",
-     "body": "IPhone тоже подвержен? Max не установлен. Госуслуги установлены. Яндекс установлен. Как решить эту проблему?"
-    },
-    {
-     "id": 6806391004,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-11T20:23:06Z",
-     "user": "EternalBlueInfinity",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6806391004",
-     "body": "У всех, кто столкнулся с этой проблемой, был установлен мобильный VPN клиент?\nVPN подключается на тот же IP, который при использовании VPN определяется как внешний?\nЕсли на оба вопроса ответ положительный - вероятнее всего, приложения палят IP, от этого не помогает даже Split tunneling.\n\nПопробуйте запустить RKNHardering, не добавляя это приложения в туннель, и после окончания проверки в самом низу увидите внешний IP, с которого выходите из-под VPN.\nНекоторые приложения делают то же самое, только этот IP отправляют в список на блокировку."
     }
    ]
   },

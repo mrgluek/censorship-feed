@@ -1,9 +1,20 @@
 {
- "generated_at": "2026-11-14T01:26:51Z",
- "since": "2026-11-12T01:26:51Z",
+ "generated_at": "2026-11-14T10:24:32Z",
+ "since": "2026-11-12T10:24:32Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 683,
+     "title": "Nakis: a TLS tunnel proxy built around connection reuse and write coalescing (efficiency first, circumvention effect unverified)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-14T05:44:12Z",
+     "updated_at": "2026-11-14T05:44:12Z",
+     "user": "n-yarvex",
+     "url": "https://github.com/net4people/bbs/issues/683",
+     "body": "Hello all,\n\nI would like to share a small project and ask for feedback from people who know this area better than I do. Nakis is a SOCKS5-in, TLS-tunnel-out proxy written in Go. Its main goal is transfer efficiency: get a ready tunnel to the application with as little waiting as possible, and keep per-write overhead low. Resistance to DPI was a secondary concern. I have not tested it against any real censor, so please read the DPI-related parts as hypotheses.\n\nRepo: https://github.com/n-yarvex/nakis (MIT). The wire format and notes on the reference implementation are in doc/SPEC.md.\n\n## Where the waiting goes\n\nMost browser sessions are short, so the cost is dominated by setting up a tunnel: TCP, TLS, then whatever authentication the protocol adds. Nakis tries to take that off the critical path.\n\n**Pre-connected pool.** The client keeps tunnels that have already finished the TLS handshake and authentication. A new session takes one from the pool and starts sending right away. This is always on, because turning it off could only make things slower.\n\n**Reuse.** When a session ends, each side sends a zero-length frame (called NAP in the spec) for its own direction. Once both have been seen, no error occurred, and the tunnel has not used up its lifespan, it goes back to the pool and the next session reuses it without a new handshake. Each tunnel draws its own lifespan: a number of sessions (by default between 4 and 8) and a byte budget (log-uniform between 8 and 256 MiB), so there is no fixed \"Nth session\" or \"Nth byte\" boundary.\n\n**Racing when the pool is empty.** The client dials several candidate addresses: the first two immediately, the rest staggered by 50 ms. The first to finish the handshake serves the session. The others are not thrown away; they go into the pool. The idea is mostly for lossy links and servers with several addresses, where one slow path should not stall everything.\n\n## Write coalescing\n\nMany proxies write each application read as its own frame. Nakis puts a queue (a \"Box\") in front of the tunnel and decides when to flush (\"Gate\"). One frame is one Write, which under TLS ends up in one record.\n\n- If the queue is empty and the last data arrived at least 40 µs ago, the chunk is sent immediately. This is meant to keep interactive small writes from being delayed.\n- Otherwise chunks queue up and are packed greedily into one frame, up to `send_pack`. A chunk is never split; what does not fit waits for the next frame.\n- The queue is flushed when it reaches `send_pack`, or comes within `send_tail` bytes (default 512) of it.\n- If it is not full, a 250 µs timer runs. If more data arrived in the meantime, it waits another tick, up to `send_quiet` x 4 ticks. With `send_quiet=4` that means at most about 4 ms of merging while data keeps arriving, and at most 250 µs once it stops.\n- Large reads (32766 bytes or more) bypass the queue after flushing what is already queued, to keep ordering.\n- The server has a second layer: small upstream frames are merged into writes of up to `merge_pack` (default 20 KiB) towards the target. When the queue reaches `max_queue`, the server stops reading the tunnel and TCP backpressure slows the client.\n\nThe trade-off is plain: under sustained small writes, latency can rise by up to `send_quiet` milliseconds in exchange for fewer, larger records.\n\n## Shaping the first packets\n\nThe first few packets of a session (up to eight per direction) get a randomly drawn target size, per tunnel, per session, per direction. The target is reached by coalescing application data first. Padding (a frame with length 0xFFFF) is only used if the data has not filled the target after 2 ms, so this does not work like a conventional padding scheme. For the first packet only, that wait is an added latency of up to 2 ms. The plan also looks at the destination port: for ports that usually carry TLS (443 and similar), it covers more packets and draws larger ones more often, on the guess that a TLS handshake is nested insi"
+    },
     {
      "number": 158,
      "title": "在中国Google自动跳转 / Google Auto Jump in China",
@@ -65,6 +76,61 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7399,
+     "title": "Packet down",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-14T09:14:25Z",
+     "updated_at": "2026-11-14T09:36:23Z",
+     "user": "Shm1ks",
+     "url": "https://github.com/XTLS/Xray-core/pull/7399",
+     "body": "Изменения"
+    },
+    {
+     "number": 7394,
+     "title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T13:53:08Z",
+     "updated_at": "2026-11-14T05:59:00Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394",
+     "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
+    },
+    {
+     "number": 7398,
+     "title": "TLS: data race between certificate reload / OCSP refresh and handshakes",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-14T04:36:45Z",
+     "updated_at": "2026-11-14T04:36:45Z",
+     "user": "AlenHay",
+     "url": "https://github.com/XTLS/Xray-core/issues/7398",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nFor every certificate that is loaded from files, `BuildCertificates` starts a goroutine (`setupOcspTicker`) that runs once at start and then every hour, or every `ocspStapling` seconds. It is not synchronised with TLS handshakes:\n\n- it writes `certs[index]` (`transport/internet/tls/config.go:91`) while handshakes read the same slice in `getNewGetCertificateFunc` (`config.go:254`);\n- with `ocspStapling` set, it assigns `cert.OCSPStaple` on a certificate that handshakes may be using (`config.go:88`).\n\nThe race detector reports both. Handshakes still complete, so this is a detector finding and I have not seen a failure caused by it. The second one writes a slice header that another goroutine reads, which is why I am reporting it.\n\nReproduced on v26.11.9. The official binaries are not built with the race detector, so the server below is `go build -race ./main` from the v26.11.9 tag (go1.27.4); the client is the official v26.11.9 binary.\n\nA possible fix is to keep each certificate in an `atomic.Pointer` and replace it instead of changing it. With this change on main at c4561418, the test below and the tests of `transport/internet/tls` pass under the race detector (`TestECHDial` excluded, it needs network access):\n\n```diff\n--- a/transport/internet/tls/config.go\n+++ b/transport/internet/tls/config.go\n@@ -11,6 +11,7 @@\n \t\"slices\"\n \t\"strings\"\n \t\"sync\"\n+\t\"sync/atomic\"\n \t\"time\"\n \n \t\"github.com/xtls/xray-core/common/errors\"\n@@ -47,8 +48,8 @@\n }\n \n // BuildCertificates builds a list of TLS certificates from proto definition.\n-func (c *Config) BuildCertificates() []*tls.Certificate {\n-\tcerts := make([]*tls.Certificate, 0, len(c.Certificate))\n+func (c *Config) BuildCertificates() []*atomic.Pointer[tls.Certificate] {\n+\tcerts := make([]*atomic.Pointer[tls.Certificate], 0, len(c.Certificate))\n \tfor _, entry := range c.Certificate {\n \t\tif entry.Usage != Certificate_ENCIPHERMENT {\n \t\t\tcontinue\n@@ -66,14 +67,15 @@\n \t\t\t}\n \t\t\treturn &keyPair\n \t\t}\n+\t\tslot := new(atomic.Pointer[tls.Certificate])\n \t\tif keyPair := getX509KeyPair(); keyPair != nil {\n-\t\t\tcerts = append(certs, keyPair)\n+\t\t\tslot.Store(keyPair)\n+\t\t\tcerts = append(certs, slot)\n \t\t} else {\n \t\t\tcontinue\n \t\t}\n-\t\tindex := len(certs) - 1\n \t\tsetupOcspTicker(entry, func(isReloaded, isOcspstapling bool) {\n-\t\t\tcert := certs[index]\n+\t\t\tcert := slot.Load()\n \t\t\tif isReloaded {\n \t\t\t\tif newKeyPair := getX509KeyPair(); newKeyPair != nil {\n \t\t\t\t\tcert = newKeyPair\n@@ -85,10 +87,13 @@\n \t\t\t\tif newOCSPData, err := ocsp.GetOCSPForCert(cert.Certificate); err != nil {\n \t\t\t\t\terrors.LogWarningInner(context.Background(), err, \"ignoring invalid OCSP\")\n \t\t\t\t} else if string(newOCSPData) != string(cert.OCSPStaple) {\n-\t\t\t\t\tcert.OCSPStaple = newOCSPData\n+\t\t\t\t\t// handshakes may be reading the published certificate, so replace it instead of changing it\n+\t\t\t\t\tupdated := *cert\n+\t\t\t\t\tupdated.OCSPStaple = newOCSPData\n+\t\t\t\t\tcert = &updated\n \t\t\t\t}\n \t\t\t}\n-\t\t\tcerts[index] = cert\n+\t\t\tslot.Store(cert)\n \t\t})\n \t}\n \treturn certs\n@@ -244,11 +249,15 @@\n \t}\n }\n \n-func getNewGetCertificateFunc(certs []*tls.Certificate, rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {\n+func getNewGetCertificateFunc(slots []*atomic.Pointer[tls.Certificate], rejectUnknownSNI bool) func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {\n \treturn func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {\n-\t\tif len(certs) == 0 {\n+\t\tif len(slots) == "
+    },
+    {
+     "number": 7397,
+     "title": "XHTTP/3 inbound: the default of 100 QUIC streams per connection stalls packet-up uploads",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-14T04:36:44Z",
+     "updated_at": "2026-11-14T04:36:44Z",
+     "user": "AlenHay",
+     "url": "https://github.com/XTLS/Xray-core/issues/7397",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nAn XHTTP/3 inbound passes `quicParams.maxIncomingStreams` to quic-go unchanged (`transport/internet/splithttp/hub.go:494` on main). When it is not set, quic-go's default applies: 100 bidirectional streams per connection.\n\nEvery XHTTP session keeps one stream open for its whole life, and in packet-up each upload request needs one more. Once a QUIC connection carries 100 sessions, no session on it can upload any more, including the ones that had been working. In stream-one the existing sessions keep working and only new ones wait.\n\nResults with the official v26.11.9 binary, loopback, using the configs below. The client is limited to one connection (`xmux.maxConnections: 1`) only to keep the test small:\n\n| Case | Result |\n|---|---|\n| packet-up over h3 | session 100 gets no reply; sessions 1, 2 and 50, opened earlier, get no reply when they send again |\n| stream-one over h3 (same configs, `mode` changed) | session 101 gets no reply; sessions 1, 2 and 50 still get replies |\n| packet-up over h2 (same configs, ALPN changed) | all 110 sessions get replies |\n| packet-up over h3, server with `finalmask.quicParams.maxIncomingStreams: 4096` | all 110 sessions get replies |\n\nWith the client's default XMUX settings (no `xmux` in the config, so 3 connections), tested on main at c4561418: sessions that send one request and then stay open reached the first failure at session 254, 259 and 289 in three runs, and 99 sessions that had been working could no longer upload. Sessions that each sent 12 requests before going idle did not reach it within 700 sessions, because the client retires a connection after 600 to 900 requests.\n\nHTTP/2 inbounds are not affected: at the server's stream limit the client opens another TCP connection.\n\nA possible fix is a large default when the value is not set. With this change on main, 400 sessions with default client settings all kept working:\n\n```diff\n--- a/transport/internet/splithttp/hub.go\n+++ b/transport/internet/splithttp/hub.go\n@@ -495,6 +495,12 @@\n \t\t\tDisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != \"linux\" && runtime.GOOS != \"windows\" && runtime.GOOS != \"darwin\"),\n \t\t}\n \n+\t\tif quicConfig.MaxIncomingStreams == 0 {\n+\t\t\t// quic-go's default of 100 is per connection, and every session holds one stream for its\n+\t\t\t// whole lifetime, while packet-up needs one more stream for each upload request.\n+\t\t\tquicConfig.MaxIncomingStreams = 1 << 16\n+\t\t}\n+\n \t\tvar k *quic.StatelessResetKey\n \t\tif !quicParams.DisableStatelessReset {\n \t\t\tk = &quic.StatelessResetKey{}\n```\n\nPrepared with the assistance of Claude (Anthropic). Every result above comes from a run described here.\n\n### Reproduction Method\n\n1. Start the server and the client with the configs below (official v26.11.9 `Xray-linux-64`).\n2. Run this script. It starts an echo server on 127.0.0.1:9002, opens connections one by one through the client's dokodemo-door inbound, sends `ping` on each and keeps them all open.\n\n```python\nimport socket, threading\n\ndef echo_server():\n    s = socket.create_server((\"127.0.0.1\", 9002))\n    while True:\n        c, _ = s.accept()\n        threading.Thread(target=lambda c=c: [c.sendall(d) for d in iter(lambda: c.recv(65536), b\"\")], daemon=True).start()\n\ndef ping(c, timeout):\n    c.settimeout(timeout)\n    c.sendall(b\"ping\")\n    try:\n        return c.recv(4) == b\"ping\"\n    except socket.timeout:\n        return False\n\nthreading.Thread"
+    },
+    {
+     "number": 7350,
+     "title": "tun: end UDP flows and cancel dispatches when the inbound closes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T19:35:04Z",
+     "updated_at": "2026-11-14T02:45:55Z",
+     "user": "RoyHP",
+     "url": "https://github.com/XTLS/Xray-core/pull/7350",
+     "body": "## Problem\n\nClosing a core instance that has a `tun` inbound leaves its UDP flows alive, and everything they hold with them.\n\n- `Handler.Init` detaches the handler's context from the instance (`core.ToBackgroundDetachedContext`), and nothing cancels it on `Close`.\n- `stack.Close` resets the TCP connections and closes the sockets opened by `DialUDP`, but never touches the UDP flow table (`udpConnectionHandler.udpConns`).\n\nSo each UDP flow's reader keeps waiting on its packet queue after `Close`, which pins its XUDP mux session, the mux `ClientWorker` and that worker's connection to the server.\n\nMeasured in a client that embeds the tun inbound and restarts the instance per session (goroutine origins from `runtime.Stack`): about 80 goroutines, 0.8 MB of live heap and stacks, and one established outbound connection leaked per instance, with no decay over 8+ minutes. After 25 instances: 1600 goroutines, all created by `tun.(*udpConnectionHandler).HandlePacket`, `mux.(*ClientWorker).Dispatch`, `mux.NewClientWorker` and `mux.(*DialingWorkerFactory).Create`, and 17 established connections to the server.\n\n## Fix\n\n- `Handler` owns a `cancel` for its detached context and calls it in `Close` before closing the stack, so in-flight dispatches unwind (also the ones not blocked on the reader).\n- `stack.Close` ends every UDP flow (`udpConnectionHandler.closeAll`): their readers get EOF, the dispatches return and release their outbounds. The flow table also refuses new flows from then on, mirroring `handleTCP`'s `closed` check: a packet already in flight between the stack closing and the tun closing used to open a fresh flow (and, with a mux outbound, dial a worker) during shutdown.\n\nThe remaining XUDP mux workers then close on the mux client's idle check (two 16 s monitor ticks after their last session), after which goroutines and heap are back at the baseline and no server connections remain.\n\n## Verification\n\n- New tests: `TestUDPHandlerCloseAllEndsFlows` (flows end on close, a late packet opens none) and `TestHandlerCloseCancelsDispatches` (a dispatch that is not reading returns when the handler closes). `go test -race ./proxy/tun/` passes.\n- With the patch, 20 instance start/stop cycles end with 0 established connections to the server and the baseline goroutine count; without it, 17 connections and 1600 goroutines that never go away."
+    },
     {
      "number": 6802,
      "title": "HTTPUpgrade client: Close connection to server on early returns",
@@ -130,17 +196,6 @@
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364",
      "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
-    },
-    {
-     "number": 7394,
-     "title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-13T13:53:08Z",
-     "updated_at": "2026-11-13T14:11:12Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7394",
-     "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
     },
     {
      "number": 7378,
@@ -251,86 +306,27 @@
      "user": "n1ret",
      "url": "https://github.com/XTLS/Xray-core/pull/7388",
      "body": "Just a simple IP limiter for VLESS. I do REALLY need this feature. I know that some odd ways to do similar functional exist, but they can't do the same thing. What should I add to get you to merge the PR? I'm newbie to Golang unfortunately..."
-    },
-    {
-     "number": 7386,
-     "title": "Tunnel inbound: Close idle fake UDP sockets in TPROXY mode",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-12T08:53:58Z",
-     "updated_at": "2026-11-12T08:53:58Z",
-     "user": "vakame7058",
-     "url": "https://github.com/XTLS/Xray-core/pull/7386",
-     "body": "Fixes #5263 (closed as not planned).\n\n### Problem\n\nWith `tproxy` on a Tunnel (dokodemo-door) inbound, replies go through `PacketWriter`. It opens a fake UDP socket bound to each remote address that sends a reply ([dokodemo.go:231-245](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L231-L245)). The sockets are closed only in `Close()` ([:266-273](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L266-L273)), when the UDP session ends ([:189](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L189)).\n\nA cone session ends after its client port has been silent for 2 minutes ([worker.go:397](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/app/proxyman/inbound/worker.go#L397)). Only client packets count as activity ([worker.go:200](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/app/proxyman/inbound/worker.go#L200)). A P2P application sends from one port to many peers and is never silent for 2 minutes. Its session keeps one fake socket for every peer that ever replied.\n\nOn a router with transparent proxy (TPROXY → dokodemo-door) xray grew by about 1450 sockets and 7 MB of RSS per hour: 6524 open fds 4.5 hours after a restart that followed an OOM kill. #5263 shows the same growth.\n\n### Reproduction\n\n`05-xray-fakeudp-repro.sh` (below) runs as a normal user in network namespaces: `unshare -Urn sh 05-xray-fakeudp-repro.sh ./xray 10 300`. The client sends from one UDP port to 10 new peers per second. Every 10th datagram goes to a peer first contacted more than 180 s ago. Peers echo from the address they were sent to. Inbound:\n\n```json\n{\"listen\": \"0.0.0.0\", \"port\": 1100, \"protocol\": \"tunnel\",\n \"settings\": {\"allowedNetwork\": \"udp\", \"followRedirect\": true},\n \"streamSettings\": {\"sockopt\": {\"tproxy\": \"tproxy\"}}}\n```\n\n```sh\niptables -t mangle -A PREROUTING -i <client-if> -p udp -j TPROXY --on-port 1100 --tproxy-mark 1\nip rule add fwmark 1 lookup 100\nip route add local 0.0.0.0/0 dev lo table 100\n```\n\n### Results\n\n`main` at c456141, linux/amd64, 10 new peers/s, open fds of the xray process:\n\n| time, s | main | with this PR |\n|---|---|---|\n| 60 | 609 | 609 |\n| 120 | 1209 | 1209 |\n| 180 | 1809 | 1508 |\n| 240 | 2349 | 1501 |\n| 300 | 2888 | 1495 |\n\nBoth builds: 3000/3000 replies, 120/120 replies from old peers, none from a wrong address.\n\nRouter, arm64, v26.7.28 with the same change: 6524 fds and growing before; about 880 without a trend 15 hours later, 575 five days later.\n\n### Change\n\n- `PacketWriter` records when each remote last sent a reply.\n- `WriteMultiBuffer`, at most every 30 s, closes and forgets the fake sockets of remotes silent for 2 minutes. The next reply from such a remote opens a new socket through the existing path.\n- The socket of the original destination (`w.conn`) is never closed early. Datagrams without a `UDP` address are written to it too ([:255](https://github.com/XTLS/Xray-core/blob/c456141815359e1d2c00dfc673f5f26adf22fae2/proxy/dokodemo/dokodemo.go#L255)). Before, one write error on it closed it for the rest of the session.\n- On a write error the map entry is deleted instead of set to `nil`.\n\nThe sweep runs on the writer goroutine: no new goroutine, no lock. 2 minutes matches the session timeout in `worker.go`. If replies stop completely, the sweep waits for the next write, which is the old behavior.\n\n### Tests\n\n- `TestSweepIdleClosesOnlyIdleFakeSockets` in `proxy/dokodemo/fakeudp_sweep_test.go`.\n- `go build ./...`, `go test ./proxy/dokodemo/...` (also `-race`), `go vet ./proxy/dokodemo/`, `go run ./infra/vformat/main.go -mode check` pass with go1.27.0.\n\n<details><summary>05-xray-fakeudp-repro.sh</summary>\n\n```sh\n#!/bin/sh\n# Fake UDP socket growth in Tunnel inbound (TPROXY), reproduction.\n# Run as a normal user:  unshare -Urn sh 05-xray-fakeudp-repro.sh /path/to/xray [RATE] [SECONDS]\n# Need"
-    },
-    {
-     "number": 4231,
-     "title": "mux cool: Add maxReuseTimes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2024-12-31T11:23:13Z",
-     "updated_at": "2026-11-12T08:46:39Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231",
-     "body": "字面意思\r\n现 mux cool 逻辑:\r\nMaxConcurrency 为一个连接里的最大活动子连接数\r\n还有一个神秘的 MaxConnections 参数 硬编码为128 实际上就是最大复用次数 我不知道为什么叫这个 这个PR将其重命名了\r\n我修改了一下 允许手动指定 maxReuseTimes 并把默认值变成了65535(mux.cool两位流ID允许的最大上限)\r\n\r\n这些限制仅存在于客户端 服务端没有限制 旧的可以正常工作"
-    },
-    {
-     "number": 7368,
-     "title": "FinalMask: Report TCP test write errors instead of hanging",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-10T20:55:19Z",
-     "updated_at": "2026-11-12T07:22:08Z",
-     "user": "anonymousmeower",
-     "url": "https://github.com/XTLS/Xray-core/pull/7368",
-     "body": "### Problem\n\n`mustSendRecvTcp` in `transport/internet/finalmask/tcp_test.go` calls `t.Fatal` from the writer goroutine, which `go vet` flags:\n\n```\ntcp_test.go:30: call to (*T).Fatal from a non-test goroutine\n```\n\n`t.Fatal` ends that goroutine via `runtime.Goexit`, so `close(waitCh)` never runs and the helper's final `<-waitCh` blocks until the package test timeout, losing the write error with it. The helper is also called with a zero-length message, where `io.ReadFull(to, buf[:0])` returns immediately, so nothing on the read side masks a failing write.\n\n### Fix\n\nSend the error over `waitCh`, which is already declared `chan error`, and check it on the test goroutine. The channel is buffered so the writer still cannot block, matching the previous `close`. This is the pattern already used by `TestTCPcustomClientRejectsMismatchedServerSequence` and `TestTCPWrapListenerRejectsImmediateWrapErrors` in this file.\n\n`mustSendRecv` in `udp_test.go` and `mustSendRecvUDP` in `header/custom/state_test.go` use `t.Error`, which is safe from a goroutine, so they are unchanged.\n\n### Verification\n\nForcing a write failure in the helper hangs the package for the full timeout before this change, and fails in 0.00s with the error after it. `go vet ./...` no longer reports the finding, and the package passes under `-race` and at `-count=30`.\n"
-    },
-    {
-     "number": 7357,
-     "title": "chore(finalmask): code clean",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-09T09:52:21Z",
-     "updated_at": "2026-11-12T07:09:05Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7357",
-     "body": ""
-    },
-    {
-     "number": 7385,
-     "title": "Keep the started gRPC server in the API goroutine",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-12T06:45:49Z",
-     "updated_at": "2026-11-12T06:45:49Z",
-     "user": "Eljees",
-     "url": "https://github.com/XTLS/Xray-core/pull/7385",
-     "body": "Stopping an API-enabled Xray instance immediately after `Start` can panic in `grpc.Server.Serve`. The serving goroutine reads `c.server` after `Close` has stopped the server and cleared the field. Both direct `api.listen` and tagged API listeners use this goroutine.\n\nCapture the server created by that `Start` call and use it for service registration and serving. Treat `grpc.ErrServerStopped` as an expected shutdown result when `Close` wins the startup race. Listener cleanup follows gRPC's existing `Stop` and `Serve` behavior.\n\nThe regression uses real `core.New`, `Start`, and `Close` calls for both API configurations. It runs immediate start/stop cycles on one logical processor and yields to the API goroutine after shutdown. Each mode separately reproduces the nil receiver panic on the previous implementation.\n\nBoth regression cases pass on Windows and on Linux with `-race`. `go vet ./app/commander` passes on both platforms. The existing `TestCommanderListenConfigurationItem` and `TestCommanderRemoveHandler` integration tests also pass on Windows, exercising service registration and RPC calls for both listener modes.\n\nAI-assisted implementation and tests.\n"
-    },
-    {
-     "number": 7384,
-     "title": "dup",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-12T05:11:32Z",
-     "updated_at": "2026-11-12T06:07:21Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384",
-     "body": "dup"
-    },
-    {
-     "number": 7383,
-     "title": "Observatory: fix data race in observation results",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-12T04:15:18Z",
-     "updated_at": "2026-11-12T04:15:18Z",
-     "user": "G74v3Dw31137",
-     "url": "https://github.com/XTLS/Xray-core/pull/7383",
-     "body": "## Summary\n\nFix a data race in ordinary Observatory's `GetObservation` by returning an independent snapshot of the observation results.\n\n## Problem\n\n`GetObservation` currently returns a new `ObservationResult` containing references to the observer's internal status slice and messages.\n\nBackground probes update these statuses under `statusLock`, while consumers may read or serialize them after `GetObservation` returns.\n\nThis can cause concurrent reads and writes in routing strategies, metrics, and gRPC protobuf serialization.\n\nThe issue was reproduced on the current upstream `main` with Go's race detector, including a protobuf serialization error:\n\n```text\nWARNING: DATA RACE\nsize mismatch: calculated=22, measured=31\n```\n\n## Solution\n\nDeep-clone the observation result while holding the existing `statusLock`:\n\n```go\no.statusLock.Lock()\ndefer o.statusLock.Unlock()\n\nreturn proto.Clone(&ObservationResult{Status: o.status}), nil\n```\n\nThis ensures that callers receive an independent snapshot, including nested protobuf messages and unknown fields.\n\nThe existing synchronization mechanism, protobuf API, health checks, and routing behavior remain unchanged.\n\n## Testing\n\nAdded two regression tests:\n\n- **Snapshot isolation:** verifies that returned results do not share mutable state with the observer or other snapshots, including nested messages and unknown fields.\n- **Concurrent access:** exercises status updates, additions, removals, and concurrent reads with protobuf serialization.\n\nBoth tests reproduce the original issue. The snapshot test also fails when using a mutex without deep copying.\n\nValidation completed successfully:\n\n- `go test -race ./app/observatory/...`\n- `go test ./app/observatory/... ./app/router/... ./app/metrics/...`\n- Xray build\n- Formatting and diff checks\n\n## Performance\n\nDeep cloning introduces O(n) copying under the existing mutex. Benchmarks covering 2, 20, and 200 outbound statuses confirm the expected linear cost.\n\nThe fix intentionally favors correctness and minimal changes over additional synchronization complexity."
     }
    ],
    "comments": [
+    {
+     "id": 6872749132,
+     "issue": 7394,
+     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "created_at": "2026-11-14T05:59:00Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6872749132",
+     "body": "> > 我可以先把上一个 PR 合并了然后你先开个 PR 完成 [#6769 (comment)](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421) ，没有问题吧？\n> \n> 我这边研究一下看看吧\n\n@RPRX 改了  \n目前在https://github.com/yandujun363/Xray-core/commit/bc39c4762dd180ec53a96301a52a8beb618f4ed9\n你看看有没有什么问题，没问题我再开接手，顺带目前这个PR还有一些问题\n\n>1. **延迟不可取消，且没有实际上限** `runPaddingSchedule` 用 `time.Sleep`，不响应连接 Close、handshake deadline 或 context。现在 delay 可由配置决定，最坏可到 `time.Duration` 上限附近（约 292 年）；连接关闭后 handshake goroutine 仍会睡到延迟结束才退出。建议后续改成可被 close/deadline 打断的 timer，或加一个合理上限。\n>2. **自定义 `paddings` 是整体替换，不是只调“启动段”** 省略 `paddings` 用 40 轮 preset；一旦配置，4 个 turn 就替代了全部 40 轮，包括后面 33 轮 join 尾段和 preset 的 chunk/write boundary。README 已写 “replaces”，但 PR 描述容易让人以为只是改启动长度；需要确认这是否是维护者本意。\n>3. **交替方向上，delay 的 max 不一定体现在线上** receiver 只等 `min`；下一条 turn 若是对方发送，对方在 `min` 后即可发出。sender 随机到的 `>min` 只推迟它自己的下一步（读或发），不会让对端等到那个随机值。若期望线上间隔在 `[min,max]` 内抖动，这种两端无同步的随机是不可实现的；需要确认维护者只是要“至少 min”。\n>4. **没有 turn 数量 / 总 padding 字节上限** 每轮最大 8 MiB，但数组长度不限；误配可以产生数 GB 的握手数据或极长握手。配置是本地可信的，风险较低，但可考虑加总字节或轮数上限。\n>5. **`paddings: []` 无法关闭 padding** `len(paddings)==0` 会回落到 preset（原 README 也这么写）；如果用户想“完全不 padding”，目前做不到。是否提供显式关闭选项需要确认。\n>6. **没有“早到”检测** 当前实现是“等 min 后再读/发”，不是“如果对端在 min 之前到达就失败”。若维护者说的“检查下一个 padding 是否到达”包含早到即报错，需要额外的 deadline/探测机制，目前没有。\n>7. **PR 正文/示例已过时** 正文仍写 `padding`（单数）、没有 `delay`；开新 PR 时需要同步更新为 `paddings` + delay string 的示例。\n>8. **原 int delay 的溢出隐患**（已在我们这次修改中消掉） 原代码只检查 `Delay < 0`，然后 `int(turn.Delay)` 和 `time.Duration(...) * time.Millisecond`；在 32 位平台会截断，在 64 位大值会溢出，可能变成负 sleep 或错误时长。现在改为 `delay_min/delay_max` 并做上限校验。\n>9. **原实现 receiver 完全不等待**（已按维护者要求修掉） 交替方向上，下一条 padding 可能立即被发出，delay 实际只影响发送方自己的读时间。\n>10. **原实现最后一个 turn 也会 sleep**（已修掉） 最后一轮若由本端发送，会额外拖慢进入 proxy 的时间；现在两端都忽略最后一轮的 delay。\n>11. **原 PR 没有 delay 时序测试**（已补） 新增 `TestPaddingScheduleDelayUsesSenderRangeAndReceiverMinimum`，覆盖 sender 随机区间、receiver 等 min、最后一轮不等待。\n\n这边修改由deepseek-harness+deepseek-v4.1-flash处理\n\n\n"
+    },
+    {
+     "id": 6871698979,
+     "issue": 7394,
+     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "created_at": "2026-11-14T04:28:04Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6871698979",
+     "body": "> 我可以先把上一个 PR 合并了然后你先开个 PR 完成 [#6769 (comment)](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421) ，没有问题吧？\n\n我这边研究一下看看吧"
+    },
     {
      "id": 6869031071,
      "issue": 6802,
@@ -708,137 +704,22 @@
      "user": "FDeghy",
      "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6822912200",
      "body": "> It's really a bit strange to have so many first-time contributors.\r\n> \r\n> You can choose to pass a custom dialer to UDPHop in your custom fork; modifying UDPHop's code is absolute shit 💩\r\n\r\nThe correct approach is to apply the noise to every new connection so that the new connection can send data just like the previous ones. A new connection can either be a genuinely new connection or one created as a result of `udphop`, which simply changes the previous connection's port or IP address.\r\n"
-    },
-    {
-     "id": 6819195843,
-     "issue": 7378,
-     "issue_title": "DNS outbound: End UDP sessions once their queries are answered",
-     "created_at": "2026-11-12T08:54:57Z",
-     "user": "borderlessboy",
-     "url": "https://github.com/XTLS/Xray-core/pull/7378#issuecomment-6819195843",
-     "body": "Ran this branch against a hand-rolled upstream on Windows to check the counter. The teardown itself checks out: copying the PR's `TestUDPDNSSessionsEnd` onto `main` reproduces the leak exactly (`sessions are still open: 604 goroutines above the baseline`), and it passes on the branch in 2.03s. A 2.5s lookup is also not cut (answered in 2.501s), so the linger doesn't trade away slow answers.\n\nOne finding though: the pending count isn't correlated with query identity, and that costs an answer when the upstream emits a second datagram for a single query. One client socket, A answered immediately, AAAA answered after 3s:\n\n| upstream behaviour | main | this branch |\n|---|---|---|\n| one datagram per query | AAAA at 3.001s | AAAA at 3.002s |\n| A answer repeated 300ms later | AAAA at 3.002s | AAAA never arrives (8s timeout) |\n\nMechanism: `add()` runs once per parsed query, `done()` once per message read from `connReader`. The duplicate takes the count 2 -> 1 -> 0 while the AAAA query is still outstanding, the session drops to the 1s linger, and the answer that lands at 3s has nowhere to go. On main there is no count, so the 300s idle window absorbed the extra datagram.\n\nTriggers are anything that emits a second datagram for one query — a forwarder racing two upstreams and relaying both, a server resending on its own timeout, a reflected copy — and the exposure is exactly the A+AAAA pair from one stub socket, which is the case the linger exists to allow.\n\nKeying pending queries by ID (a `map[uint16]` or a set, ignoring an `add()` for an ID already pending) and decrementing on the response's parsed ID would remove the class rather than this instance; it costs a header parse in `response()`. If it helps, the probe is a self-contained `proxy/dns` test that fails on the branch and passes on main — I can send it as a patch for the regression case.\n"
-    },
-    {
-     "id": 6819023781,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-12T08:46:39Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6819023781",
-     "body": "> 我对 [#7364](https://github.com/XTLS/Xray-core/pull/7364) 疯狂 vibe 比较担心 另一个是别的协议能吃到 mux 消除 tit 继续苟，或者降低 rtt，又或者没有 uot 的协议套 mux 后可以套 reality/tls 非常灵活\n\nI've already spent over 5,000 purchased credits (not subscription credits) exploring different solutions. It's hard to work without AI these days, but I come up with all the ideas and design the architecture myself. AI is just a tool.\n\nIf you think this work is pointless, let me know. I won't keep wasting credits on it."
-    },
-    {
-     "id": 6817425004,
-     "issue": 7368,
-     "issue_title": "FinalMask: Report TCP test write errors instead of hanging",
-     "created_at": "2026-11-12T07:22:07Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7368#issuecomment-6817425004",
-     "body": "处理 socket 层的错误不是这个 test 的主要目的"
-    },
-    {
-     "id": 6817329200,
-     "issue": 7372,
-     "issue_title": "Fix noise after udphop",
-     "created_at": "2026-11-12T07:16:26Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6817329200",
-     "body": "这么多 First-time contributor 真的有点诡异了\n\n你可以选择在你的自定义 fork 传自定义 dialer 给 udphop，更改 udphop 的代码是绝对的 shit 💩"
-    },
-    {
-     "id": 6817199862,
-     "issue": 7357,
-     "issue_title": "chore(finalmask): code clean",
-     "created_at": "2026-11-12T07:08:43Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/pull/7357#issuecomment-6817199862",
-     "body": "之前能穿透的也就 fragment\r\n\r\nvision 能提速的地方也不在这两者（ReadV/Splice ），或者不要使用 finalmask"
-    },
-    {
-     "id": 6816121733,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-11-12T06:08:05Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6816121733",
-     "body": "~~事实上分支被删了无所谓，只要分支回来且有新的 commit 就能 reopen~~"
-    },
-    {
-     "id": 6816058991,
-     "issue": 7384,
-     "issue_title": "dup",
-     "created_at": "2026-11-12T06:04:03Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384#issuecomment-6816058991",
-     "body": "6"
-    },
-    {
-     "id": 6816056297,
-     "issue": 7384,
-     "issue_title": "dup",
-     "created_at": "2026-11-12T06:03:53Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384#issuecomment-6816056297",
-     "body": "https://github.com/XTLS/Xray-core/pull/7281"
-    },
-    {
-     "id": 6816038327,
-     "issue": 7384,
-     "issue_title": "dup",
-     "created_at": "2026-11-12T06:02:44Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384#issuecomment-6816038327",
-     "body": "~~等下，我试试~~"
-    },
-    {
-     "id": 6815923333,
-     "issue": 7384,
-     "issue_title": "dup",
-     "created_at": "2026-11-12T05:55:00Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384#issuecomment-6815923333",
-     "body": "rebase + fp 误删远程分支导致 PR 被关且无法恢复"
-    },
-    {
-     "id": 6815895700,
-     "issue": 7384,
-     "issue_title": "dup",
-     "created_at": "2026-11-12T05:53:08Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384#issuecomment-6815895700",
-     "body": "~~为啥开个新 PR~~"
-    },
-    {
-     "id": 6815304972,
-     "issue": 7384,
-     "issue_title": "dup",
-     "created_at": "2026-11-12T05:13:25Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7384#issuecomment-6815304972",
-     "body": "好不容易理顺的 freedom 又混乱了\r\n\r\n我个人还是完全反对这个 PR\r\n虽然反对无效"
-    },
-    {
-     "id": 6812285253,
-     "issue": 7364,
-     "issue_title": "VLESS: run multiplexing directly on transport",
-     "created_at": "2026-11-12T02:08:16Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6812285253",
-     "body": "协议迁移的进程是服务端先支持，一年左右后客户端再彻底 breaking 默认甚至只留新的，~~不是像你说的必须炸上天~~\r\n\r\nhttps://github.com/XTLS/Xray-core/pull/4231#issuecomment-6812007409 其实光是 VMess 就已经没人搭了，你看现在有几个脚本/机场还是 VMess？这次只是砍掉 Mux 已经很保守了\r\n\r\nXray 今年 hard code 的一是禁 allowInsecure，二是禁公网明文出站，三是 REALITY 要求 CH 必须有后量子，全是安全相关的，这些都是客观上正确的事只是除了我之外没人敢推动，会掉用户是原因之一，但我无所谓，反正只要用 Xray 就必须默认更安全\r\n\r\n~~还有 FinalRules/Firewall 等非 hard code 的就不提了，毕竟真有人要访问服务器内网，上面的三项都有更好的替代品，这个没有~~"
-    },
-    {
-     "id": 6812007409,
-     "issue": 4231,
-     "issue_title": "mux cool: Add maxReuseTimes",
-     "created_at": "2026-11-12T01:50:21Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/4231#issuecomment-6812007409",
-     "body": "在我看来非要留着本来就已经没什么人用的东西才是问题，如果是单纯 VMess 的话还不能砍，然而 VMess+Mux 组合在 Xray-core 真的还有人用吗？只为了留着这组合导致 dup code 到底图啥？况且现在连机场都几乎没 VMess 了，自建更前沿更没人搭\r\n\r\n就像当年不合 smux 的理由之一，Mux 有一套功能完备的万能的就够了，加法都加给它，顶多再有个客观上的 h2/h3 XMUX，甚至这次还不是加新 mux 而是清理 legacy code，明明已有更好的替代品，我没有兴趣像其它软件一样啥协议都加且永远不删\r\n\r\n协议过时后被删掉是迟早的事，尽早删掉还能加速这一进程，当年旧的 XTLS 我也是直接删，加速用户迁移到了更完善的新协议"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3448,
+     "title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-10T19:57:47Z",
+     "updated_at": "2026-11-14T02:37:59Z",
+     "user": "KuDeSnik33ra",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448",
+     "body": "Примерно месяц как началась полная блокировка IP Amnezia self-hoster раз в неделю в России - сервер неделю доступен, а потом полностью отрубают - доступ остается только из Европы. Кто-нибудь подскажет - что изменилось в детекте и что с этим делать кроме пересоздания раз в неделю?"
+    },
     {
      "number": 3466,
      "title": "[Android][XRay/REALITY] ClientHello is sent without SNI when address and serverName are the same domain; literal IP in address works",
@@ -983,17 +864,6 @@
      "body": "**Describe the bug**\n\nImporting a valid WireGuard `.conf` file with exactly one IPv4 DNS server silently discards that DNS setting. On Android, the resulting VPN network receives the application's DNS values instead of the server specified in the file.\n\nThe connection itself succeeds, so this is easy to miss when public names still resolve. It breaks resolution of private names available only through the configured resolver.\n\n**Environment**\n\n- AmneziaVPN: 5.0.3.0\n- Client OS: Android 16\n- Protocol tested: ordinary WireGuard, without AmneziaWG obfuscation\n- Profile imported from a `.conf` file\n\n**To Reproduce**\n\n1. Take a working WireGuard configuration and specify a single reachable IPv4 DNS server in `[Interface]`, for example:\n   ```ini\n   DNS = 10.23.0.53\n   ```\n   This is an illustrative private address, not an address from the tested setup.\n2. Leave the application DNS settings at their defaults (`1.1.1.1` and `1.0.0.1`).\n3. Import the file as a new profile and connect.\n4. Inspect the active VPN network's `DnsAddresses` in `adb shell dumpsys connectivity`.\n\n**Actual behavior**\n\nThe configured private resolver is absent. The captured VPN network state contained:\n\n```text\nInterfaceName: tun0\nDnsAddresses: [ /1.1.1.1,/1.0.0.1 ]\n```\n\nThe intended private DNS server was independently tested from the phone: a direct UDP/53 DNS query returned a successful response. This is a DNS configuration/import problem, rather than evidence that the intended resolver is unreachable.\n\nAndroid Private DNS was in automatic (`opportunistic`) mode during the captured baseline. The incorrect addresses were already present in the VPN's `DnsAddresses`; this report concerns which servers the VPN registers with Android, not a DNS leak-test website's result.\n\n**Expected behavior**\n\nA valid single DNS address in an imported WireGuard configuration should be retained and applied to the VPN network. It should not silently disappear because no second DNS address is provided.\n\n**Source-level cause**\n\nIn tag `5.0.3.0`, `ImportController::extractWireGuardConfig()` uses a DNS regular expression with two mandatory IPv4 capture groups. It only populates the profile's `dns1` and `dns2` when that entire expression matches:\n\nhttps://github.com/amnezia-vpn/amnezia-client/blob/5.0.3.0/client/core/controllers/selfhosted/importController.cpp#L645-L652\n\nConsequently:\n\n- `DNS = 10.23.0.53` does not match.\n- `DNS = 10.23.0.53, 10.23.0.54` matches.\n\nWhen profile DNS fields are absent, `NativeServerConfig::getDnsPair()` falls back to the application settings:\n\nhttps://github.com/amnezia-vpn/amnezia-client/blob/5.0.3.0/client/core/models/selfhosted/nativeServerConfig.cpp#L38-L49\n\nThe application defaults are `1.1.1.1` and `1.0.0.1`:\n\nhttps://github.com/amnezia-vpn/amnezia-client/blob/5.0.3.0/client/core/repositories/secureAppSettingsRepository.cpp#L74-L88\n\nThe same import function handles both WireGuard and AmneziaWG profiles. The device-level reproduction above used ordinary WireGuard.\n\n**Workaround**\n\nAdd a second reachable private DNS server to the same line and import the modified file as a new profile:\n\n```ini\nDNS = 10.23.0.53, 10.23.0.54\n```\n\nAfter this change, the previously failing name resolution in Chrome started working in the tested setup.\n\n**Suggested fix**\n\nParse the DNS field as a list and preserve a valid single entry. Add regression coverage for a single IPv4 DNS address and two comma-separated IPv4 addresses, including verification that the single-entry case does not silently fall back to the application primary DNS.\n\n**Related issues**\n\n- #2957 concerns imported profile DNS taking precedence over application settings. This report concerns a valid single DNS entry being lost during import.\n- #3059 reports ignored DNS settings on Android, without identifying this single-entry parsing failure.\n"
     },
     {
-     "number": 3448,
-     "title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-10T19:57:47Z",
-     "updated_at": "2026-11-13T07:49:55Z",
-     "user": "KuDeSnik33ra",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448",
-     "body": "Примерно месяц как началась полная блокировка IP Amnezia self-hoster раз в неделю в России - сервер неделю доступен, а потом полностью отрубают - доступ остается только из Европы. Кто-нибудь подскажет - что изменилось в детекте и что с этим делать кроме пересоздания раз в неделю?"
-    },
-    {
      "number": 3417,
      "title": "MacOS Arm native builds seem missing",
      "is_pr": false,
@@ -1047,53 +917,18 @@
      "user": "IILLUMINATION",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2810",
      "body": "Please fix it"
-    },
-    {
-     "number": 1475,
-     "title": "Connection problem",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2025-03-14T11:12:45Z",
-     "updated_at": "2026-11-12T08:34:06Z",
-     "user": "JWick90",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1475",
-     "body": "Hi. I got error 305 Timeout connecting to server but JUST in Windows 11 ! It's configured for myself server and it's ok on android,iOS and mac ! It's strange i think! I red the amnezia docs for this error code but nothing solved ! Can anyone please help me ? Thank you"
-    },
-    {
-     "number": 2794,
-     "title": "Stuck in infinite \"Reconnecting...\" loop when disconnecting OpenVPN over Cloak on Windows 11",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-07-02T08:52:05Z",
-     "updated_at": "2026-11-12T06:16:56Z",
-     "user": "Hamronov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2794",
-     "body": "Describe the bug\nWhen using AmneziaVPN (version 4.8.19.0) on Windows 11 with the OpenVPN over Cloak protocol, the application fails to terminate the connection properly. Clicking the \"Disconnect\" button triggers an infinite \"Reconnecting...\" state in the UI. The only way to stop it is to kill the process via Task Manager.\n\nTo Reproduce\n\nSelect a server with OpenVPN over Cloak protocol.\nClick Connect and wait for a successful connection.\nClick Disconnect.\nThe status changes to \"Reconnecting...\" and stays in this state indefinitely.\nExpected behavior\nThe connection should terminate immediately, and the UI should return to the \"Disconnected\" state.\n\nLogs & Technical Details\nBased on preliminary observation, the issue seems to be a race condition/state conflict between the Cloak transport and the OpenVPN client:\n\nUpon manual disconnection, the OpenVPN instance appears to receive a connection-reset or similar signal from the Cloak layer.\nInstead of interpreting the disconnect as a \"Stop\" command, the OpenVPN client treats it as an accidental drop and triggers a SIGUSR1 (soft restart).\nThe Amnezia GUI becomes stuck waiting for the process to exit, while the process is trying to re-establish the tunnel.\nEnvironment:\n\nAmneziaVPN Version: 4.8.19.0\nOS: Windows 11\nProtocol: OpenVPN over Cloak\nInstallation method: Standard Windows Installer (installed via Amnezia client).\nPossible Workarounds/Fixes suggested:\n\nAdding remap-usr1 SIGTERM to the OpenVPN client configuration to force exit on resets.\nImplementing explicit-exit-notify 1 (for UDP) or adjusting keepalive / ping-restart timers to be less aggressive during the shutdown phase.\nEnsuring the GUI sends a hard SIGTERM or taskkill equivalent to the OpenVPN process when the user clicks \"Disconnect\"."
-    },
-    {
-     "number": 3454,
-     "title": "fix: update awg-apple to 3.1.5",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-11T17:17:08Z",
-     "updated_at": "2026-11-12T03:27:01Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3454",
-     "body": ""
-    },
-    {
-     "number": 3442,
-     "title": "fix: use packet-up xhttp mode in the network extension",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-09T20:00:43Z",
-     "updated_at": "2026-11-12T03:26:25Z",
-     "user": "NickVs2015",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3442",
-     "body": "FIX importat IOS network extension break down.\r\nOn iOS the network extension was jetsam-killed at the 50 MB limit a few minutes\r\nafter connecting to an xhttp + REALITY server (`The VPN plugin died unexpectedly`).\r\n\r\nWith `mode` unset xray picks `stream-one` for xhttp + REALITY: one endless POST\r\nper session, and Go's HTTP/2 client holds a 512 KiB scratch buffer per such\r\nstream for its whole lifetime. A heap profile from the extension showed\r\n`http2.(*clientStream).writeRequestBody` at 34.5 MB (74 % of the Go heap) with\r\n~70 sessions, which Instagram/Facebook open within a minute.\r\n\r\nThe extension now sets `xhttpSettings.mode = \"packet-up\"` when the mode is empty\r\nor `auto`: each POST has a `Content-Length`, so the buffer is payload-sized and\r\ntransient. An explicit mode is left as is; the server accepts both modes.\r\niOS extension only."
     }
    ],
    "comments": [
+    {
+     "id": 6870331836,
+     "issue": 3448,
+     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
+     "created_at": "2026-11-14T02:37:59Z",
+     "user": "stufently",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6870331836",
+     "body": "Почти Все крупные провайдеры где можно так делать уже в целом забанеены всеми своими подсетями а не по каждому айпи.\nА у мелких там обычно на месяц надо брать, так что разоришься\nну всем выдал персональные впны , пока все работает не банит , все сидят и с компа и с мобилы , видимо тут важно не превышать какие то лимиты , а в одного сложно их превысить\nда через что угодно в целом мне кажется это безразницы\n"
+    },
     {
      "id": 6866534438,
      "issue": 3132,
@@ -1219,33 +1054,6 @@
      "user": "16bc",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2810#issuecomment-6822462268",
      "body": "> any news ??? “OpenVPN over Cloak” protocol be restored?\n\nI guess not. According to reports on Telegram, it was allegedly blocked a long time ago.\nIt remains a mystery why didn’t removed the other protocols, such as OpenVPN or OpenVPN over SS, which are really blocked.\nThoughts on conspiracy theory..."
-    },
-    {
-     "id": 6818779200,
-     "issue": 1475,
-     "issue_title": "Connection problem",
-     "created_at": "2026-11-12T08:34:05Z",
-     "user": "IvanKolesnikov94",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1475#issuecomment-6818779200",
-     "body": "# [SOLVED] AmneziaVPN Error 305/302 on Ubuntu 24.04 VPS — SSH socket listening on IPv6 only\n\nI'd like to share a solution to an issue that prevented me from adding my self-hosted VPN server to AmneziaVPN on Windows.\n\n**Environment:**\n- VPS provider: Fornex\n- OS: Ubuntu 24.04.4 LTS\n- VPN client: AmneziaVPN for Windows\n- VPN protocol: AmneziaWG 2.0\n- ISP: Dom.ru (Russia)\n- A MacBook on the same office network could still connect to the existing VPN, while the Windows client could not add the server.\n\n**Symptoms:**\n\nWhen adding the VPS to AmneziaVPN via SSH, the Windows client returned:\n\n`ErrorCode: 305 — Timeout connecting to server`\n\nWhen I routed the connection through another working VPN, the error changed to:\n\n`ErrorCode: 302 — SSH Internal Error`\n\nDiagnostics showed:\n- The VPS responded to ping and traceroute completed successfully.\n- The SSH service was running.\n- SSH appeared to listen on TCP ports 22 and 443.\n- UFW was inactive, the iptables INPUT policy was ACCEPT, and the hosting provider's firewall was disabled.\n- Direct TCP connections to ports 22 and 443 failed from Windows.\n- Through another VPN, TCP/22 became reachable, but OpenSSH failed before authentication:\n\n```text\nssh_exchange_identification: Connection closed by remote host\n```\n\n- A local IPv4 connection test from the VPS to `127.0.0.1:22` returned `Connection refused`.\n\n**Root cause identified:**\n\nThe Ubuntu `ssh.socket` configuration included:\n\n```ini\nBindIPv6Only=ipv6-only\n```\n\nMeanwhile, `/etc/systemd/system/ssh.socket.d/override.conf` contained:\n\n```ini\n[Socket]\nListenStream=\nListenStream=22\nListenStream=443\n```\n\nAs a result, SSH was listening on IPv6 sockets (`[::]:22` and `[::]:443`), while IPv4 connections were not being accepted.\n\n**Fix:**\n\nI updated `/etc/systemd/system/ssh.socket.d/override.conf` to explicitly bind both IPv4 and IPv6:\n\n```ini\n[Socket]\nListenStream=\nListenStream=0.0.0.0:22\nListenStream=[::]:22\nListenStream=0.0.0.0:443\nListenStream=[::]:443\n```\n\nThen applied the configuration:\n\n```bash\nsystemctl daemon-reload\nsystemctl restart ssh.socket\n```\n\nVerification:\n\n```bash\nss -4 -tlnp\n```\n\nThe output now showed `0.0.0.0:22` and `0.0.0.0:443` listening.\n\n**Result:**\n\nWith a temporary VPN connection (Happ), I was able to add the VPS to AmneziaVPN successfully.\n\nI then completely disabled Happ and connected through AmneziaWG directly over my office ISP connection.\n\nIPinfo showed the VPS public IP, and internet access worked normally.\n\nThe existing AmneziaWG 2.0 installation was left untouched, and the previously configured MacBook connection continued working.\n\n**Important notes:**\n\n- A working VPN tunnel on one device does not necessarily imply that SSH access is available for adding the same server on another device.\n- `sshd` being active and showing `[::]:22` does not guarantee IPv4 connectivity.\n- The fix applies to this particular `ssh.socket` configuration. Check your actual socket settings before changing them.\n- The initial direct TCP connectivity failures were not independently attributed to the ISP. Therefore, I cannot conclusively claim that IPv4 socket configuration was the sole cause of every observed connection failure.\n\n**References:**\n\n- Ubuntu Launchpad Bug #2080216: https://bugs.launchpad.net/ubuntu/+source/openssh/+bug/2080216\n- Related AmneziaVPN Error 305 discussion: https://github.com/amnezia-vpn/amnezia-client/issues/1624\n\nHopefully this helps others experiencing AmneziaVPN SSH errors 305/302 on Ubuntu 24.04. #"
-    },
-    {
-     "id": 6817644413,
-     "issue": 2810,
-     "issue_title": "The AmneziaWG protocol has stopped working, only OpenVPN over Cloak works",
-     "created_at": "2026-11-12T07:34:56Z",
-     "user": "aarpro",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2810#issuecomment-6817644413",
-     "body": "any news ??? “OpenVPN over Cloak” protocol be restored?"
-    },
-    {
-     "id": 6816267423,
-     "issue": 2794,
-     "issue_title": "Stuck in infinite \"Reconnecting...\" loop when disconnecting OpenVPN over Cloak on Windows 11",
-     "created_at": "2026-11-12T06:15:44Z",
-     "user": "aarpro",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2794#issuecomment-6816267423",
-     "body": "AmneziaVPN 4.8.21.0 the same problem\nThe solution is the same, but one line is enough.\n\n`remap-usr1 SIGTERM`"
     }
    ]
   },
@@ -1257,7 +1065,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-13T01:00:52Z",
-     "updated_at": "2026-11-13T01:00:52Z",
+     "updated_at": "2026-11-14T07:46:42Z",
      "user": "CrimsonBerry",
      "url": "https://github.com/HyNetworks/hysteria/issues/1722",
      "body": "**你的功能请求是否与某个问题有关？**\n无\n\n**描述你希望的解决方案**\n可以作为一个可选特性，当验证信息与用户名一一对应时启用\n原\n```\n{\n  \"addr\": \"123.123.123.123:44556\", \n  \"auth\": \"something_something\", \n  \"tx\": 123456 \n}\n```\n新 \n```\n{\n  \"addr\": \"123.123.123.123:44556\", \n  \"auth\": \"something_something\", \n  \"tx\": 123456,\n  \"online\": 5\n}\n```\n\n**有没有其他替代方案**\n无\n\n**额外信息**\n无"
@@ -1268,32 +1076,39 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-12T04:12:31Z",
-     "updated_at": "2026-11-12T04:12:31Z",
+     "updated_at": "2026-11-14T07:20:35Z",
      "user": "vimagick",
      "url": "https://github.com/HyNetworks/hysteria/issues/1721",
      "body": "**你的功能请求是否与某个问题有关？**\n\n否\n\n**描述你希望的解决方案**\n\n目前，所支持的[环境变量](https://v2.hysteria.network/zh/docs/advanced/Environment-Variables/)非常有限，希望支持所有CONFIG相关的环境变量\n环境变量命名规则: 使用 `HYSTERIA_` 前缀\n\n```bash\nexport HYSTERIA_LISTEN=:8443\nexport HYSTERIA_ACL_FILE=/path/to/acl.txt\n\n# 若config.yaml中未定义listen，则取环境变量中的 HYSTERIA_LISTEN\nhysteria server -c config.yaml\n```\n\n**有没有其他替代方案**\n\n无\n\n**额外信息**\n\n无\n"
-    },
-    {
-     "number": 843,
-     "title": "A Command Line Switch for Enabling or Disabling Colored Output",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2023-11-27T00:54:12Z",
-     "updated_at": "2026-11-12T02:44:33Z",
-     "user": "feenn",
-     "url": "https://github.com/HyNetworks/hysteria/issues/843",
-     "body": "**Is your feature request related to a problem? Please describe.**\r\nNo\r\n\r\n**Describe the solution you'd like**\r\nTo integrate Hysteria2 into other programs and capture its output using controls such as Textarea, a command-line option is needed to disable Hysteria2's colored output.\r\n"
     }
    ],
    "comments": [
     {
-     "id": 6812835692,
-     "issue": 843,
-     "issue_title": "A Command Line Switch for Enabling or Disabling Colored Output",
-     "created_at": "2026-11-12T02:44:33Z",
-     "user": "vimagick",
-     "url": "https://github.com/HyNetworks/hysteria/issues/843#issuecomment-6812835692",
-     "body": "When tty is not detected, can we disable color output?\n\n```bash\n2026-11-12T04:33:22+02:00\t\u001b[34mINFO\u001b[0m\tserver mode\n2026-11-12T04:33:22+02:00\t\u001b[34mINFO\u001b[0m\ttraffic stats server up and running\t{\"listen\": \":9999\"}\n2026-11-12T04:33:22+02:00\t\u001b[34mINFO\u001b[0m\tserver up and running\t{\"listen\": \":443\"}\n```"
+     "id": 6874048344,
+     "issue": 1722,
+     "issue_title": "能否在HTTP 验证的 JSON 载荷中添加用户在线数量",
+     "created_at": "2026-11-14T07:46:42Z",
+     "user": "CrimsonBerry",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1722#issuecomment-6874048344",
+     "body": "回调 GET /online 时由于监听的端口不同，需要额外配置 tls，否则会泄漏鉴权密钥\n\n并发的登录请求可以针对每个验证信息简单加锁处理，如果靠前的登录请求失败，显然后续的请求也没有意义\n\n可以作为配置文件中的可选项以外验证信息与id一一对应时启用"
+    },
+    {
+     "id": 6873723396,
+     "issue": 1721,
+     "issue_title": "支持所有CONFIG相关的环境变量 （例如：HYSTERIA_LISTEN）",
+     "created_at": "2026-11-14T07:20:34Z",
+     "user": "krotname",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1721#issuecomment-6873723396",
+     "body": "这里有个实现时容易反过来的优先级：示例要求的是「配置文件 > 环境变量 > 默认值」，而 Viper 默认是「环境变量 > 配置文件」。当前 `initConfig()` 使用 Viper，因此直接加 `AutomaticEnv()` 会覆盖文件里已经显式设置的值，和示例的 fallback 语义不同。\n\n如果保持这个需求，回填应按配置键是否存在判断，而不能按 Go 的零值判断，否则显式的 `false`、`0` 或空字符串也可能被当作“未配置”。回归用例可以先覆盖三种情况：文件有 `listen` 时保持文件值；缺少 `listen` 时使用 `HYSTERIA_LISTEN`；嵌套键 `acl.file` 能正确对应 `HYSTERIA_ACL_FILE`。"
+    },
+    {
+     "id": 6873719659,
+     "issue": 1722,
+     "issue_title": "能否在HTTP 验证的 JSON 载荷中添加用户在线数量",
+     "created_at": "2026-11-14T07:20:19Z",
+     "user": "krotname",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1722#issuecomment-6873719659",
+     "body": "如果是想让鉴权后端获取当前连接数，现有的 [Traffic Stats API `GET /online`](https://v2.hysteria.network/docs/advanced/Traffic-Stats-API/#get-online) 已能返回按用户 ID 统计的连接数；HTTP 鉴权成功时返回的 `id` 可以用于对应同一账号。这里统计的是连接，不一定是独立设备。\n\n不过这个查询只是快照，新增 `online` 字段本身也不能保证并发限额：例如上限为 5，两个同时到达的鉴权请求都看到 4，就可能都被放行。若这个字段用于限制同时在线数，建议明确是否包含当前待鉴权连接，以及并发请求如何预留、释放名额。"
     }
    ]
   }

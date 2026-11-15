@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-14T22:23:15Z",
- "since": "2026-11-12T22:23:15Z",
+ "generated_at": "2026-11-15T06:30:13Z",
+ "since": "2026-11-13T06:30:13Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -75,6 +75,116 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7402,
+     "title": "XMC: accept padding delay as a range string and wait on both ends",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-14T11:59:03Z",
+     "updated_at": "2026-11-15T06:26:08Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402",
+     "body": "Follow-up to #6769 (merged in `5d17b872`), completing the remaining `delay` requirement from [that comment](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421).\n\n#6769 already made `paddings` configurable (`length` and `direction`); this PR only changes `delay`.\n\n## Changes\n\n- `delay` is now a **string**: `\"100\"` or `\"50-150\"` (milliseconds).\n- The sender waits a uniformly sampled value in `[min, max]` after its turn.\n- The receiver waits at least `min` before reading or sending the next turn, so both ends apply the pause.\n- The last turn's delay is applied too, so it also delays the first proxy packet.\n- `config.proto`: `delay` becomes `delay_min` / `delay_max`; negative, reversed and duration-overflowing ranges are rejected at config load and connection setup.\n- `infra/conf`: parses the string delay; tests cover fixed values, ranges and invalid forms.\n- No wire-format change; `paddings` length/direction behavior is unchanged.\n\nExample:\n\n```json\n\"paddings\": [\n  {\"length\": \"44\", \"direction\": \"c2s\", \"delay\": \"0\"},\n  {\"length\": \"64-128\", \"direction\": \"s2c\", \"delay\": \"100\"},\n  {\"length\": \"25\", \"direction\": \"c2s\", \"delay\": \"50-150\"},\n  {\"length\": \"32768-49152\", \"direction\": \"s2c\"}\n]\n```\n\nBoth endpoints need the same array and the same `delay` ranges. There is no configuration-fingerprint handshake; length mismatches fail a check, while direction/count/delay mismatches can stall until the handshake deadline.\n\n## Scope\n\nPer the cleanup in #6769, this PR does **not** restore the XMC `README.md` / `*_test.go` files deleted in that squash commit, and does not add new XMC tests. Only the existing `infra/conf` config tests are updated. If XMC test coverage is wanted, it should be a separate PR/discussion.\n\n## Tests\n\n```text\ngo test -count=1 ./infra/conf\ngo test -count=1 ./transport/internet/finalmask/xmc   # no test files\ngo build -o /tmp/xray-core-build ./main\ngo run ./infra/vformat/main.go -mode check -pwd ./\ngo run ./infra/vprotogen/main.go -mode check -pwd ./\n```\n\nAll pass.\n\nGitHub workflows on this PR are `action_required` because this is a first-time contributor PR; a maintainer needs to approve them before CI runs.\n\n## Known follow-ups (separate PRs)\n\n1. **Cancellable delay / practical cap.** `runPaddingSchedule` uses `time.Sleep`, which ignores close and handshake deadlines; a very large configured delay can keep the handshake goroutine alive after close. Follow-up: close/deadline-aware timer and/or a documented maximum.\n2. **Delay range semantics.** The receiver only enforces the minimum; the sender's sampled value above the minimum affects its own next action, not the peer's send time. If strict wire jitter in `[min, max]` is expected, that needs a separate design.\n3. **Custom `paddings` replace the whole preset**, including the 33-turn post-login tail. Confirm whether that is intended; if not, follow-up.\n4. **No total turn/byte cap.** Per-turn length is bounded, but the array length is not.\n5. **No early-arrival timing check.** The receiver waits the minimum but does not fail if the peer sends earlier.\n6. **`paddings: []` still selects the preset**; no explicit \"no padding\" mode.\n7. **XMC documentation/tests decision** after the #6769 cleanup, and any docs-site PR.\n\n"
+    },
+    {
+     "number": 7416,
+     "title": "XMC finalmask: Yggdrasil third-party login and texture verification",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-15T03:24:17Z",
+     "updated_at": "2026-11-15T03:24:17Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7416",
+     "body": "Refs #7394 (proposal). **Draft for review, not ready to merge.**\n\n## What this adds\n\n- **Yggdrasil third-party login.** The XMC client can authenticate against a third-party Yggdrasil API (Blessing Skin / authlib-injector compatible), join the Minecraft session with the standard vanilla login hash and reuse the API's signed textures. The XMC server verifies players through `sessionserver/session/minecraft/hasJoined` instead of a hand-copied profile list.\n- **Texture verification and key handling.** In Yggdrasil mode the RSA key pair is no longer derived from the password: each side generates its own key pair, the client accepts the key sent in Encryption Request and binds it through the session hash, and the server verifies with its own actual public key through `/hasJoined`. The client verifies the signed `textures` property with the API's `signaturePublickey` (SHA1withRSA), refreshing the key once if a rotation is detected.\n- **Chore:** `config.pb.go` regenerated with `infra/vprotogen`, because the checked-in file carried `protoc v7.36.1` while the tool records `(unknown)`, which made `-mode check` fail.\n\nFiles: `yggdrasil.go` (new), `client.go`, `server.go`, `profile.go`, `config.go`, `config.proto` (`Config.yggdrasil = 13`), `infra/conf/transport_finalmask.go`, plus tests.\n\n## Compatibility\n\n- No `yggdrasil` section: the legacy pre-shared password + `profiles` path is unchanged.\n- With `yggdrasil`: `password` is ignored (a console warning is printed) and `profiles` is not required.\n- `Config.yggdrasil = 13` keeps existing configs that already use `paddings = 12` working unchanged.\n\n## What this waits on\n\n- #7394 is still a proposal, so this PR is for review only.\n- Merge order: based on current `main` (`5d17b872`). #7402 (padding `delay` takeover of #6769) is the PR to land first; it touches `config.proto` in a different field, so the two should merge in either order.\n- The server-side target — a Fabric mod on a real Minecraft 26.1 server that only bridges `xmc:data` — still depends on the padding wire-format question raised in #7402: padding frames are not valid Minecraft frames today (their length field includes its own varint), so a real server has to tear down vanilla's splitter at Login Ack. Once padding can ride on valid packets, the mod needs no login takeover and no client/host marker.\n- End-to-end verification against a real `26.1` (protocol `775`) server is pending that mod.\n- CI: first-time contributor PR, workflows need maintainer approval.\n\n## Tests\n\n```text\ngo build -o /tmp/xray-core-build ./main\ngo test -count=1 ./transport/internet/finalmask/xmc ./infra/conf\ngo run ./infra/vformat/main.go -mode check -pwd ./\ngo run ./infra/vprotogen/main.go -mode check -pwd ./\n```\n\nAll pass.\n\nCommits are AI-generated, as declared in the commit trailers.\n"
+    },
+    {
+     "number": 7388,
+     "title": "Simultaneous IPs limit",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-12T15:53:37Z",
+     "updated_at": "2026-11-15T03:15:25Z",
+     "user": "n1ret",
+     "url": "https://github.com/XTLS/Xray-core/pull/7388",
+     "body": "Just a simple IP limiter for VLESS. I do REALLY need this feature. I know that some odd ways to do similar functional exist, but they can't do the same thing. What should I add to get you to merge the PR? I'm newbie to Golang unfortunately..."
+    },
+    {
+     "number": 7405,
+     "title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-14T20:20:10Z",
+     "updated_at": "2026-11-15T02:20:56Z",
+     "user": "wywywywycloud",
+     "url": "https://github.com/XTLS/Xray-core/issues/7405",
+     "body": "As one of many VPN services using Xray, we’d find it useful to configure multiple TLS fingerprints, assign each a percentage (chance of choosing specific fingerprint on connection, analogous to `random`), and explicitly exclude fingerprints that do not work in our target networks. The core would select a fingerprint once per new connection according to those weights.\n\nFor example: **Firefox 9%, Chrome 70%, Edge 12%, Safari 9%**, with `ios`, `android`, and `chrome-133` excluded.\n\nIn our experience, Russian DPI blocks connections using those three fingerprints in some cases. Unrestricted random selection is therefore risky: individual connections may fail simply because an incompatible fingerprint was selected.\n\nWe previously used Firefox because it worked well in our environment. However, what works today may change, and having 100% of connections share the same normalized TLS fingerprint could itself help TSPU identify VPN traffic.\n\nWeighted selection would reduce this uniformity, while explicit control over the allowed fingerprints would help preserve reliability. This would not make VPN traffic indistinguishable from browsers, but it would give operators a practical way to manage that tradeoff.\n"
+    },
+    {
+     "number": 7364,
+     "title": "VLESS: run multiplexing directly on transport",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T12:20:09Z",
+     "updated_at": "2026-11-15T01:44:21Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364",
+     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
+    },
+    {
+     "number": 7394,
+     "title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-13T13:53:08Z",
+     "updated_at": "2026-11-15T01:24:51Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394",
+     "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
+    },
+    {
+     "number": 7415,
+     "title": "XDRIVE: Prevent ring-slot reuse before the previous upload completes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-14T23:23:22Z",
+     "updated_at": "2026-11-15T00:14:37Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7415",
+     "body": "## Problem\n\nThe peer can acknowledge segment 0 from the inline session announcement while its upload to the ring is still in flight. With a ring of depth 2, that acknowledgement can admit the upload for segment 2 to the same slot. If the original upload finishes last, it overwrites segment 2 and leaves a gap in the stream.\n\nThis ordering reproduces the intermittent `TestSlotFirstAnnouncement` failure seen in two Ubuntu jobs. [November 13 job](https://github.com/XTLS/Xray-core/actions/runs/43400976127/job/131803491599) and [November 14 job](https://github.com/XTLS/Xray-core/actions/runs/43647865009/job/132609573715).\n\n## Fix\n\n- Require a successful previous write to the same slot and an acknowledgement from the existing cumulative watermark before reusing it.\n- Keep checking the watermark while the local upload is pending. The reader-stall timeout applies while the acknowledgement is missing, so an acknowledged upload can finish retrying during `Close`.\n- Propagate a terminal write error to queued reuse of the slot and retain the best-effort error frame for peers still waiting for that sequence.\n\nThe change uses the existing announcement, frame format, and acknowledgement protocol.\n\n## Validation\n\n- Extended `TestSlotFirstAnnouncement` to hold the first upload after the inline acknowledgement. The slow-write case verifies the complete byte stream through EOF. The failure case verifies that `Close` promptly returns the original write error and that the slot contains the error frame.\n- Verified that the regression test detects premature reuse on upstream `main`. Both cases passed 100 times with the race detector on this branch.\n- Passed the full `transport/internet/xdrive` suite on Windows with and without `-race`. Live cloud tests were skipped.\r\n"
+    },
+    {
+     "number": 7391,
+     "title": "XHTTP: Synchronize QUIC test shutdown",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-12T23:26:49Z",
+     "updated_at": "2026-11-14T23:24:58Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7391",
+     "body": "## Why\n\n`Test_ListenXHAndDial_QUIC` writes `serverClosed` from its server goroutine and reads it from the test goroutine. Sleeping for 100 ms after closing the client leaves those accesses unsynchronized. The Go race detector reports the read and write on clean `main` (`c4561418`).\n\n## Change\n\nSignal completion through a channel after the server handler closes its connection. Wait for the signal within the existing five-second test deadline. The patch changes only the test.\n\n## Verification\n\n- The standalone QUIC test passed 10 consecutive runs on Windows amd64 with Go 1.27.0.\n- With #7348 applied locally to address the independent TLS certificate race, `go test -race -timeout=90s -count=5 ./transport/internet/splithttp ./transport/internet/httpupgrade` passed. The draft targets `main` directly.\r\n"
+    },
+    {
+     "number": 7414,
+     "title": "Routing: Fix Linux `process` for IPv4-mapped sockets",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-14T22:23:43Z",
+     "updated_at": "2026-11-14T22:23:43Z",
+     "user": "Shilmoon",
+     "url": "https://github.com/XTLS/Xray-core/pull/7414",
+     "body": "On Linux, a `process` rule misses IPv4 connections made from IPv6 (dual-stack) sockets, which Java and .NET open by default. Such a socket is listed in `/proc/net/tcp6` or `udp6` with an IPv4-mapped address, but for an IPv4 source the lookup reads only `/proc/net/tcp` and compares the IPv4 form. It is #6533 on Linux.\n\nFix: for an IPv4 source, also look for its IPv4-mapped address in the IPv6 file.\n\nTest: `TestFindProcessIPv4Mapped` fails on main for TCP and UDP. With a real Java program through a SOCKS inbound, `\"process\": [\"java\"]` is skipped on main and matches with the fix.\n"
+    },
+    {
+     "number": 7413,
+     "title": "XHTTP/3 client: Close the UDP socket when the QUIC dial fails",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-14T22:23:38Z",
+     "updated_at": "2026-11-14T22:23:38Z",
+     "user": "Shilmoon",
+     "url": "https://github.com/XTLS/Xray-core/pull/7413",
+     "body": "When an XHTTP/3 dial fails, e.g. where QUIC is blocked, the `quic.Transport` made for it and its UDP socket are never closed. Each failed dial leaves one socket and two goroutines, so a client that keeps retrying runs out of file descriptors.\n\nFix: close both when `DialEarly` fails, as the MASQUE and XDRIVE dialers do. The socket goes first: `tr.Close()` waits for its read to return, which over `dialerProxy` would block the dial.\n\nTest: `Test_DialQUICFailureClosesSocket` fails on main. 100 dials to a peer that never answers leave 100 sockets and 200 goroutines on main, none with the fix.\n"
+    },
+    {
      "number": 7412,
      "title": "Observatory: return independent snapshots under the status lock",
      "is_pr": true,
@@ -139,17 +249,6 @@
      "user": "wywywywycloud",
      "url": "https://github.com/XTLS/Xray-core/pull/7406",
      "body": "Adds a shared configuration-layer resolver for explicit, weighted browser fingerprint policies. Each normalized policy selects once per process and reuses that result across subsequent resolutions. This is groundwork for TLS and REALITY configuration support; it does not expose a new JSON setting in those configurations yet.\n\nRelated to #7405. This implements the revised selection lifetime: **once per process per distinct policy**, rather than once per connection as originally described in the issue.\n\nEquivalent policies share a cached result regardless of key order, name casing, or proportional scaling of weights. Distinct policies select independently. Positive uint64 weights are checked for overflow; unknown names, duplicate normalized names, and special random/randomized/Go TLS/unsafe modes are rejected. Browser aliases and explicit registered browser versions are accepted. Aliases retain their existing uTLS version semantics.\n\nValidation is separate from selection. Selection uses crypto/rand without modulo bias, serializes concurrent initialization, and does not cache entropy failures or fall back to a default profile. The process-lifetime cache intentionally retains each resolved policy until process exit. Existing GetFingerprint and the startup-selected random preset are unchanged.\n\nFuture TLS/REALITY integrations can validate their transport-specific constraints, resolve the policy, and write the selected name into the existing protobuf Fingerprint field. Those integrations, transport compatibility checks, user-facing documentation, and protobuf policy support are outside this PR.\n\nValidation (Go 1.27.4, Windows amd64):\n\n- `go test ./infra/conf -run TestFingerprintWeights -count=1`\n- `go test ./infra/conf ./transport/internet/tls`\n- `git diff --check`\n\nTests exhaust the example's weighted intervals and cover invalid input, JSON numeric types, equivalent policies, concurrent resolution, independent policies, a fresh resolver lifetime, entropy failure/retry, single-candidate selection, and preservation of the legacy random preset. The race detector was not run locally (no C compiler installed).\n"
-    },
-    {
-     "number": 7364,
-     "title": "VLESS: run multiplexing directly on transport",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-10T12:20:09Z",
-     "updated_at": "2026-11-14T21:58:34Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364",
-     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
     },
     {
      "number": 7410,
@@ -218,17 +317,6 @@
      "body": "A UDP session of the DNS outbound never reads EOF, so it lasts until the inbound drops it or its idle timer fires. The timer looks for activity once per connIdle, so a session answered right away ends after two periods, ten minutes by default. The dokodemo-door inbound drops idle UDP after two to three minutes; the TUN inbound never does. Stub resolvers and dnsmasq usually send each query from a new source port, so every query holds a session with three goroutines that long.\n\nOn my test bench (linux/arm64, FakeDNS, 5000 queries at 50 per second, a new port per query) RSS grew from 40 MB to 187 MB through dokodemo-door and to 180 MB through TUN, where the goroutines were gone only ten minutes after the last query.\n\nI track the queries a UDP session still owes an answer, hijacked or sent upstream, by ID and question, so a repeated answer settles nothing. While any is open the session keeps connIdle, so a slow lookup is not cut; one second after the last answer it ends, which still leaves room for AAAA sent after A from the same socket. TCP, the session of Xray's own DNS client, a session with more than 256 open queries and a connIdle below one second work as before.\n\nWith this change the same load ends at 62 MB through dokodemo-door and 64 MB through TUN. TestUDPDNSSessionsEnd sends 200 A and MX queries, MX forwarded upstream, each from its own socket: on main they leave 600 goroutines behind; with this change they are gone a second after the last answer.\n"
     },
     {
-     "number": 7391,
-     "title": "XHTTP: Synchronize QUIC test shutdown",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-12T23:26:49Z",
-     "updated_at": "2026-11-14T21:30:37Z",
-     "user": "eliotcougar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7391",
-     "body": "## Why\n\n`Test_ListenXHAndDial_QUIC` writes `serverClosed` from its server goroutine and reads it from the test goroutine. Sleeping for 100 ms after closing the client leaves those accesses unsynchronized. The Go race detector reports the read and write on clean `main` (`c4561418`).\n\n## Change\n\nSignal completion through a channel after the server handler closes its connection. Wait for the signal within the existing five-second test deadline. The patch changes only the test.\n\n## Verification\n\n- The standalone QUIC test passed 10 consecutive runs on Windows amd64 with Go 1.27.0.\n- With #7348 applied locally to address the independent TLS certificate race, `go test -race -timeout=90s -count=5 ./transport/internet/splithttp ./transport/internet/httpupgrade` passed. The draft targets `main` directly.\r\n"
-    },
-    {
      "number": 7348,
      "title": "TLS: Fix data race between certificate hot reload and handshakes",
      "is_pr": true,
@@ -262,17 +350,6 @@
      "body": "## Why\n\npacket-up is there for CDNs and proxies that don't pass a streaming upload, so every packet goes through them as its own POST. Today the first POST that fails closes the whole connection, with everything that runs inside it. Behind a CDN a single 502 or 504 is not rare even when the server is fine, the CDN may time out waiting for the origin or lose its connection to it. An ordinary HTTP client would just send such a request again. Here it is safe to, since every packet carries its seq and with #7370 the server drops duplicates. It can't be done higher up, VLESS and mux don't see the packets.\n\nOne example we measured. With Yandex Cloud CDN about 2% of requests got a 504 after the CDN waited 5 seconds for the origin, and some got a 502. 3 of 10 uploads up to 3 MB broke with the current client and all 10 went through with resending. On a CDN emulator that checks integrity it was 12 of 12 against 4 of 12.\n\n## What changed\n\n- New client option `scMaxPostRetries`, 0 by default. Above 0, a packet that is not answered with 200 is sent again up to `scMaxPostRetries` times before the connection is closed as it is today.\n- A 504 from a CDN comes only after several seconds. So one more copy is sent when the last copy was fully written but got no answer in 2 seconds. The first 200 wins and the other copies are cancelled. A packet with no 200 in 30 seconds fails the connection.\n- The server gives up once it holds more than `scMaxBufferedPosts` packets after a missing seq. So with resending on, seq N is sent only after seq N minus `scMaxBufferedPosts`/2 is answered.\n- `PostPacket` now uses the context it is given. The normal path detaches it from the connection as before, and the resend path uses it to cancel copies that are no longer needed. A cancelled copy no longer marks the HTTP/2 client as closed, otherwise each resend would open a new connection.\n- With `scMaxPostRetries` at 0 the upload loop works as before.\n\n## Why it is off by default\n\nA resent packet may reach the server twice, for example when the CDN delivered it and then timed out waiting for the answer. A server without #7370 may read that copy again and corrupt the stream, and the client cannot tell which server it talks to. So resending stays off unless the server is known to drop duplicates. It could become the default some releases later.\n\n## Testing and limits\n\n- New `Test_PacketUpRetriesFailedPost` puts an HTTP/2 proxy in front of the server that answers 502 to the first upload of seq 1. The echo goes through with `scMaxPostRetries` 2 and times out with 0.\n- `go test ./transport/internet/splithttp/... ./infra/conf/...` passes, also with `-race`.\n- Together with #7370 I also ran a proxy that forwards every third upload to the server and still answers 504, so duplicates do reach the server. The stream stays intact.\n- Only packet-up. A stream-up or stream-one upload is one long request, and the client cannot know how much of it the server got.\n- It does not help when the CDN fails the download GET.\n- HTTP/1.1 `PostPacket` does not read the answer status, so there only failed writes are resent. The browser dialer has no write callback, so it only resends on errors.\n- The extra copy after 2 seconds assumes the server answers soon after the body is written. On a slow uplink with large `scMaxEachPostBytes` the body may still sit in the socket buffer, and a copy is sent for nothing. Behind a CDN small posts are the norm, so this should be rare. 2 and 30 seconds are constants.\n\n"
     },
     {
-     "number": 7388,
-     "title": "Simultaneous IPs limit",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-12T15:53:37Z",
-     "updated_at": "2026-11-14T21:11:56Z",
-     "user": "n1ret",
-     "url": "https://github.com/XTLS/Xray-core/pull/7388",
-     "body": "Just a simple IP limiter for VLESS. I do REALLY need this feature. I know that some odd ways to do similar functional exist, but they can't do the same thing. What should I add to get you to merge the PR? I'm newbie to Golang unfortunately..."
-    },
-    {
      "number": 7393,
      "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
      "is_pr": true,
@@ -293,17 +370,6 @@
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/4231",
      "body": "字面意思\r\n现 mux cool 逻辑:\r\nMaxConcurrency 为一个连接里的最大活动子连接数\r\n还有一个神秘的 MaxConnections 参数 硬编码为128 实际上就是最大复用次数 我不知道为什么叫这个 这个PR将其重命名了\r\n我修改了一下 允许手动指定 maxReuseTimes 并把默认值变成了65535(mux.cool两位流ID允许的最大上限)\r\n\r\n这些限制仅存在于客户端 服务端没有限制 旧的可以正常工作"
-    },
-    {
-     "number": 7405,
-     "title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-14T20:20:10Z",
-     "updated_at": "2026-11-14T20:34:08Z",
-     "user": "wywywywycloud",
-     "url": "https://github.com/XTLS/Xray-core/issues/7405",
-     "body": "As one of many VPN services using Xray, we’d find it useful to configure multiple TLS fingerprints, assign each a percentage (chance of choosing specific fingerprint on connection, analogous to `random`), and explicitly exclude fingerprints that do not work in our target networks. The core would select a fingerprint once per new connection according to those weights.\n\nFor example: **Firefox 9%, Chrome 70%, Edge 12%, Safari 9%**, with `ios`, `android`, and `chrome-133` excluded.\n\nIn our experience, Russian DPI blocks connections using those three fingerprints in some cases. Unrestricted random selection is therefore risky: individual connections may fail simply because an incompatible fingerprint was selected.\n\nWe previously used Firefox because it worked well in our environment. However, what works today may change, and having 100% of connections share the same normalized TLS fingerprint could itself help TSPU identify VPN traffic.\n\nWeighted selection would reduce this uniformity, while explicit control over the allowed fingerprints would help preserve reliability. This would not make VPN traffic indistinguishable from browsers, but it would give operators a practical way to manage that tradeoff.\n"
     },
     {
      "number": 7398,
@@ -768,17 +834,6 @@
      "body": ""
     },
     {
-     "number": 7402,
-     "title": "XMC: make startup padding configurable with per-turn delay ranges",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-14T11:59:03Z",
-     "updated_at": "2026-11-14T17:51:12Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/pull/7402",
-     "body": "Supersedes #6769. Takeover of the XMC startup-padding work requested in #7394, following up on #6487 / #6732.\n\n## What this changes\n\nThe four original commits by @spr334-a are kept as-is:\n\n- `b7c1f0d8` XMC: make startup padding lengths configurable\n- `7eaa1dd0` Allow configurable padding direction per turn\n- `50d8ed43` Fix XMC padding config format\n- `a44b32c8` Rename padding to paddings and add delay field\n\nOn top of them:\n\n1. Merged current `main` into the branch instead of rebasing, to preserve the original commits/hashes. This also resolves the merge fallout that currently makes #6769 fail CI:\n   - `WrapConnClient` now takes `(conn, dest, dialer)`; updated `packet_stream_test.go`.\n   - Ran `gofmt` on `infra/conf/transport_finalmask.go`.\n   - Regenerated `config.pb.go` with `infra/vprotogen`.\n2. Completed the remaining request from [the delay comment](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421): `delay` is now a **string** with an optional range.\n   - JSON: `\"delay\": \"100\"` or `\"delay\": \"50-150\"`, in milliseconds.\n   - The sender waits a uniformly sampled value in `[min, max]` after its turn.\n   - The receiver waits at least `min` before reading or sending the next turn, so both endpoints apply the pause.\n   - The last turn's delay is ignored (no extra latency before the proxy stream starts).\n   - `delay_min` / `delay_max` in the protobuf; negative, reversed and duration-overflowing ranges are rejected at config load and connection setup.\n3. Updated the README/example and added timing coverage. Omitting `paddings` still keeps the 26.1.2 preset unchanged.\n\n## Config example\n\n```json\n\"paddings\": [\n  {\"length\": \"44\", \"direction\": \"c2s\", \"delay\": \"0\"},\n  {\"length\": \"64-128\", \"direction\": \"s2c\", \"delay\": \"100\"},\n  {\"length\": \"25\", \"direction\": \"c2s\", \"delay\": \"50-150\"},\n  {\"length\": \"32768-49152\", \"direction\": \"s2c\"}\n]\n```\n\nBoth endpoints need the same array and the same `delay` ranges. There is no configuration-fingerprint handshake; length mismatches fail a check, while direction/count/delay mismatches can stall until the handshake deadline.\n\n## Tests\n\nRun locally on this branch:\n\n```text\ngo test -count=20 ./transport/internet/finalmask/xmc\ngo test -race -count=1 ./transport/internet/finalmask/xmc\ngo test -count=1 ./infra/conf\ngo test -count=1 ./transport/internet/finalmask/...\ngo vet ./transport/internet/finalmask/xmc\ngo build -o /tmp/xray-core-build ./main\ngo run ./infra/vformat/main.go -mode check -pwd ./\ngo run ./infra/vprotogen/main.go -mode check -pwd ./\n```\n\nAll pass. The fork CI `Tests and Checkings` run also passed on Windows/Linux/macOS: https://github.com/yandujun363/Xray-core/actions/runs/43562333199\n\nPre-existing on `main`, not caused by this PR: `go vet ./transport/internet/finalmask/...` reports `tcp_test.go:30` and `go vet ./infra/conf` reports unreachable code in `infra/conf/xray.go`.\n\n## Merge method\n\nPlease use **Create a merge commit**, not squash or rebase, so the original commits by @spr334-a stay in history. Then #6769 can be closed.\n\n## Known issues intentionally left for follow-ups\n\nKept out of this PR so it stays one feature (configurable startup padding + delay range):\n\n1. **Delay is not cancellable and has no practical cap.** `runPaddingSchedule` uses `time.Sleep`, which ignores connection close and handshake deadlines; a very large configured delay can keep the handshake goroutine alive after close. Follow-up: close/deadline-aware timer and/or a documented maximum.\n2. **Custom `paddings` replace the whole 40-turn preset**, including the 33-turn post-login tail and its chunk/write boundaries. This is documented, but whether it should instead keep the preset tail needs confirmation; if so, follow-up.\n3. **No total turn/byte cap.** Per-turn length is bounded, but the array length is not; a misconfiguration can produce a very large handshake. Follow-up hardening.\n4. **No early-arrival timing check.** The receiver enforces the minimum wait, but does not fail if the peer sends ea"
-    },
-    {
      "number": 6732,
      "title": "Proposal: user-configurable traffic shaping profiles for XMC / FinalMask (follow-up to #6487)",
      "is_pr": false,
@@ -799,17 +854,6 @@
      "user": "xJohnDoe15",
      "url": "https://github.com/XTLS/Xray-core/issues/7396",
      "body": "# Draft: issue в XTLS/Xray-core — tproxy-вход роняет UDP (принимается, туннелируется, не выходит)\n\n## Title\n\ndokodemo-door with tproxy accepts UDP and logs \"tunneling request\", but UDP never egresses on the VLESS+XHTTP peer (TCP via same inbound works)\n\n## Environment\n\n- Xray-core: 26.11.9 (also reproduced on 26.10.31)\n- Server A (RU node): inbound `dokodemo-door` with `followRedirect: true`, `sockopt.tproxy: \"tproxy\"`, nftables TPROXY (`meta l4proto udp tproxy to :12345 meta mark set 1` + `ip rule fwmark 1 lookup 100`), outbound `vless` + `xhttp` (mode `stream-one`) + `reality` to Server B.\n- Server B (EU node): inbound `vless` + `xhttp` + `reality`, outbound `freedom`.\n- Clients reach Server A via WireGuard tunnel (AWG); UDP and TCP both hit the same TPROXY rule.\n\n## Symptom\n\n- TCP through the same tproxy inbound → egresses on Server B fine (full internet via B's IP).\n- UDP: packet arrives at Server A (tcpdump on WG ingress), xray log shows the correct original destination and `tunneling request to udp:... via <B>:443`, but **nothing egresses on Server B** (tcpdump on egress interface: 0 packets).\n- Browser QUIC from clients silently falls back to TCP — the breakage was invisible until a UDP-only application (Xbox Teredo) failed.\n\n## Isolation experiment\n\nSame Server A host, second xray instance, **identical outbound** (vless+xhttp stream-one+reality to B), inbound changed to plain `dokodemo-door` (fixed `address`/`port`, **no tproxy**) on 127.0.0.1. UDP sent to it **egresses on Server B correctly**. So the transit path and version are fine; the tproxy ingress path drops UDP.\n\nAlso tried `xhttpSettings.mode: \"auto\"` for the outbound — log shows xray still dials `mode stream-one` for UDP; same behavior.\n\n## Minimal repro sketch\n\nServer A:\n```json\n{\n  \"inbounds\": [{\n    \"port\": 12345, \"protocol\": \"dokodemo-door\",\n    \"settings\": { \"network\": \"tcp,udp\", \"followRedirect\": true },\n    \"streamSettings\": { \"sockopt\": { \"tproxy\": \"tproxy\" } }\n  }],\n  \"outbounds\": [{\n    \"protocol\": \"vless\",\n    \"settings\": { \"vnext\": [{ \"address\": \"<B>\", \"port\": 443, \"users\": [{ \"id\": \"<uuid>\", \"encryption\": \"none\" }] }] },\n    \"streamSettings\": {\n      \"network\": \"xhttp\", \"security\": \"reality\",\n      \"realitySettings\": { \"serverName\": \"<sni>\", \"publicKey\": \"<key>\", \"shortId\": \"<id>\" },\n      \"xhttpSettings\": { \"mode\": \"stream-one\" }\n    }\n  }]\n}\n```\nnftables on A: `... udp dport <test> tproxy to :12345 meta mark set 1` (+ `ip rule fwmark 1 lookup 100` → `local default dev lo`... note: our table 100 is `default dev lo` for tproxy delivery — standard setup).\n\nSend any UDP datagram into the TPROXY rule → observe: accepted (log), tunneled (log), zero egress on B.\n\n## Ask\n\nIs UDP via dokodemo-tproxy ingress expected to work in 26.x? If yes — this looks like a regression/bug in the tproxy UDP path (or its interaction with XHTTP UDP carrying); happy to collect any specific diagnostics (pcap, debug logs).\n\n## Notes\n\n- Possibly related area: PR #7386 (fake UDP sockets in TPROXY mode) — symptom there was resource leak, not silent drop.\n- Our workaround (separate non-xray UDP tunnel) is in place; reporting upstream so the tproxy path can be fixed for everyone.\n"
-    },
-    {
-     "number": 7394,
-     "title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-13T13:53:08Z",
-     "updated_at": "2026-11-14T11:52:01Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7394",
-     "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
     },
     {
      "number": 7401,
@@ -865,42 +909,180 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/5101",
      "body": "先前讨论：https://github.com/XTLS/Xray-core/issues/5088#issuecomment-3263093341\r\n\r\n**反向代理（内网穿透）**，第一版先复用现有 reverse 的代码，未来肯定会 break，不保证跨版本兼容性，~~大白鼠们小白鼠们来试试吧~~\r\n\r\n> **这个 PR 的目的就是为了让 Xray 更适合做反向代理 / 内网穿透，独特的优势是你可以直接复用拿来翻墙的那台 VPS、复用 REALITY 的抗量子加密且防封，因为 REALITY 不仅可以稳定地穿透 GFW，也可以穿透公司网络那些奇奇怪怪的审计**\r\n\r\n### 极简配置示例\r\n\r\n公网端配置一个 VLESS 入站，与 UUID 同级配置 `\"reverse\": { \"tag\": \"xxx\" }`，此 tag 视为出站，把流量路由至此即可使用\r\n\r\n**所以公网端一定要有一个默认出站比如 direct，不然会有某一个 reverse 成为默认出站、谁都能访问**\r\n\r\n方便演示这里用 [VLESS Encryption](https://github.com/XTLS/Xray-core/pull/5067)，实际上你直接过墙的话会用 [REALITY](https://github.com/XTLS/Xray-core/pull/4915)，当然你也可以用 [tunnel](https://github.com/XTLS/Xray-core/pull/4968) 直接暴露内网端口到公网\r\n\r\n```jsonc\r\n{\r\n\t\"inbounds\": [\r\n\t\t{\r\n\t\t\t\"listen\": \"0.0.0.0\",\r\n\t\t\t\"port\": 443,\r\n\t\t\t\"protocol\": \"vless\",\r\n\t\t\t\"settings\": {\r\n\t\t\t\t\"decryption\": \"mlkem768x25519plus.native.600s.aCF82eKiK6g0DIbv0_nsjbHC4RyKCc9NRjl-X9lyi0k\",\r\n\t\t\t\t\"clients\": [\r\n\t\t\t\t\t{\r\n\t\t\t\t\t\t\"id\": \"ac04551d-6ebf-4685-86e2-17c12491f7f4\", // for establishing reverse connection\r\n\t\t\t\t\t\t\"flow\": \"xtls-rprx-vision\",\r\n\t\t\t\t\t\t\"reverse\": {\r\n\t\t\t\t\t\t\t\"tag\": \"r-outbound\"\r\n\t\t\t\t\t\t}\r\n\t\t\t\t\t},\r\n\t\t\t\t\t{\r\n\t\t\t\t\t\t\"id\": \"e8758aff-d830-4d08-a59e-271df65b995a\", // for user\r\n\t\t\t\t\t\t\"flow\": \"xtls-rprx-vision\",\r\n\t\t\t\t\t\t\"email\": \"user@example.com\"\r\n\t\t\t\t\t}\r\n\t\t\t\t]\r\n\t\t\t}\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"listen\": \"0.0.0.0\",\r\n\t\t\t\"port\": 80,\r\n\t\t\t\"protocol\": \"tunnel\",\r\n\t\t\t\"tag\": \"t-inbound\"\r\n\t\t}\r\n\t],\r\n\t\"routing\": {\r\n\t\t\"rules\": [\r\n\t\t\t{\r\n\t\t\t\t\"user\": [\r\n\t\t\t\t\t\"user@example.com\"\r\n\t\t\t\t],\r\n\t\t\t\t\"outboundTag\": \"r-outbound\"\r\n\t\t\t},\r\n\t\t\t{\r\n\t\t\t\t\"inboundTag\": [\r\n\t\t\t\t\t\"t-inbound\"\r\n\t\t\t\t],\r\n\t\t\t\t\"outboundTag\": \"r-outbound\"\r\n\t\t\t}\r\n\t\t]\r\n\t},\r\n\t\"outbounds\": [\r\n\t\t{\r\n\t\t\t\"protocol\": \"direct\" // essential\r\n\t\t}\r\n\t]\r\n}\r\n```\r\n\r\n**内网端默认出站 direct 否则回环**，另开一个 VLESS 出站配置  `\"reverse\": { \"tag\": \"yyy\" }` 就会自动连接公网端，无需配置路由\r\n\r\n此 tag 视为入站，可以在内网端的路由等处作为入站 tag 使用，并且它与公网端 reverse 的 tag 没有任何关系，可以不同\r\n\r\n这个 PR 顺便删除了 VLESS outbound 的 vnext 和 users 的 json 嵌套以简化配置，因为上一版 Xray 中已限制它们只能有一个成员\r\n\r\n```jsonc\r\n{\r\n\t\"outbounds\": [\r\n\t\t{\r\n\t\t\t\"protocol\": \"direct\" // essential\r\n\t\t},\r\n\t\t{\r\n\t\t\t\"protocol\": \"vless\",\r\n\t\t\t\"settings\": {\r\n\t\t\t\t\"address\": \"server.com\",\r\n\t\t\t\t\"port\": 443,\r\n\t\t\t\t\"encryption\": \"mlkem768x25519plus.native.0rtt.2PcBa3Yz0zBdt4p8-PkJMzx9hIj2Ve-UmrnmZRPnpRk\",\r\n\t\t\t\t\"id\": \"ac04551d-6ebf-4685-86e2-17c12491f7f4\",\r\n\t\t\t\t\"flow\": \"xtls-rprx-vision\",\r\n\t\t\t\t\"reverse\": {\r\n\t\t\t\t\t\"tag\": \"r-inbound\"\r\n\t\t\t\t}\r\n\t\t\t}\r\n\t\t}\r\n\t]\r\n}\r\n```\r\n\r\n**内网端可以设 CDN 等多条冗余线路均为 `\"reverse\": { \"tag\": \"yyy\" }` 对应公网端多个相同的 `\"reverse\": { \"tag\": \"xxx\" }`**\r\n\r\n这也是 Xray-core / VLESS 做反向代理 / 内网穿透的优势之一，至于哪条线路更优先等设置，先看看用的人多不多吧\r\n\r\n（不会有路由问题，公网端多个入站 reverse tag 相同也只会产生一个出站，目前是多条线路同时存在、每次使用随机选择）\r\n\r\n（现在有的功能是，假如某个线路不通了，比如说内网端没连上来，可用池中就不会有这条线路，流量会自动走其它线路）\r\n\r\n### 安全注意事项\r\n\r\n公网端可以给不同 id 设不同 reverse 穿透至不同的内网设备，**客户端应当用新的 id，不然拿到客户端配置就能劫持你的反向代理**\r\n\r\n用于内网穿透的连接即使开了 XTLS Vision，也只是吃到了 padding，并没有裸奔，是否给用于使用的连接开 XTLS 裸奔自行分析\r\n\r\n内网端 direct 出站可以设置 redirect 以限制访问范围，或者你把默认出站设为 block，只路由允许访问的范围至 direct\r\n\r\n**如果你在用别人提供的内网穿透服务或不信任 VPS，内网应开一个 VLESS Encryption 服务端承接流量，确保身份认证及数据安全**\r\n\r\n## NFTs\r\n\r\n~~这功能不值得支持一下 NFT 吗~~\r\n\r\n**VLESS NFT：https://opensea.io/collection/vless**\r\n\r\n**Project X NFT：https://opensea.io/item/ethereum/0x5ee362866001613093361eb8569d59c4141b76d1/1**"
-    },
-    {
-     "number": 7208,
-     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-20T14:40:01Z",
-     "updated_at": "2026-11-13T02:53:31Z",
-     "user": "4erdenko",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
-    },
-    {
-     "number": 7387,
-     "title": "proxy/tun: TUN fails to start on Windows 11 24H2 when DisabledComponents=0x28 (\"unable to set DNS > Access is denied\")",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-11-12T10:47:34Z",
-     "updated_at": "2026-11-13T02:32:10Z",
-     "user": "YOIMIYA66",
-     "url": "https://github.com/XTLS/Xray-core/issues/7387",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release (v26.11.9)\n\n### Description\n\nWindows 11 24H2 (build 26100.0), IPv6 partially disabled system-wide with `HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters\\DisabledComponents = 0x28`. The TUN inbound cannot start in v26.11.9 (676eaf6):\n\n```\nFailed to start: app/proxyman/inbound: failed to start proxy > proxy/tun: unable to set DNS > Access is denied.\n```\n\nThe TUN settings contain no IPv6 at all: `gateway` and `autoSystemRoutingTable` are IPv4-only, `dns` is IPv4-only. The same machine and the same config start fine with a locally patched v26.10.31 that skips the IPv6 `SetDNS` call when the config does not ask for IPv6, so the fatal step is exactly the IPv6 DNS setup.\n\nWhy v26.11.9 fails, from the code:\n\n- `Start()` calls `t.luid.SetDNS(family, dns, nil)` for both `AF_INET` and `AF_INET6` (proxy/tun/tun_windows.go:234), regardless of what the config asks for.\n- An IPv6 failure is only tolerated when `ignored()` returns true (proxy/tun/tun_windows.go:158-165), which requires `ipv6Off()`.\n- `ipv6Off()` only accepts bit `0x10` (proxy/tun/tun_windows.go:105-113):\n\n  ```go\n  value, _, err := key.GetIntegerValue(\"DisabledComponents\")\n  return err == nil && value&0x10 != 0\n  ```\n\n- `0x28 = 0x20 | 0x08` therefore counts as \"IPv6 is not off\": `ignored()` returns false, and the `Access is denied` from `SetDNS(AF_INET6)` aborts `Start()`.\n\nThis tolerance used to be config-based: #7325 / #7332 skipped the IPv6 DNS failure when `!address6 && !route6 && !dns6`, with `dns6 := slices.ContainsFunc(dns, netip.Addr.Is6)`. #7341 (commit 2d287bbd) replaced it with the registry-only check and also removed `dns6`. That covers `0x10` / `0xFF`, but not the very common partial values such as `0x28`, where Windows 11 24H2 still refuses to apply IPv6 DNS servers to the Wintun adapter while nothing IPv6 was requested. This is not a regression against a release: the #7332 behaviour never shipped, because #7341 replaced it two days before v26.11.9.\n\nQuestion: should a config that requests no IPv6 start with `DisabledComponents = 0x28`? Possible directions:\n\n1. Restore the #7332 escape hatch for `SetDNS` in addition to `ignored()`:\n   `if family == windows.AF_INET6 && !address6 && !route6 && !dns6 { continue }`\n2. Treat an IPv6 `SetDNS` failure as non-fatal when `!dns6` (there is nothing to apply; clearing is best-effort).\n3. Broaden `ipv6Off()` to also cover values like `0x28`.\n\n### Reproduction Method\n\n1. On Windows 11 24H2 x64, set `DisabledComponents = 0x28` under `HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters` and reboot.\n2. Run the config below as administrator: `xray.exe run -c config.json`.\n3. The TUN inbound fails to start with `unable to set DNS > Access is denied`.\n\nNo server is needed: the failure happens in the TUN inbound's `Start()`, before any outbound is used, so the config only contains a TUN inbound and a `freedom` outbound.\n\nFor reference, the environment:\n\n- OS: Microsoft Windows NT 10.0.26100.0 (Windows 11 24H2), x64\n- Xray: v26.11.9 (676eaf6); v26.10.31 (a4a3dff) with the same config also fails\n- Driver: wintun 0.14 (bundled `wintun.dll`)\n- `DisabledComponents = 0x28`\n- Started with administrator privileges (the adapter is created successfully; only the DNS step fails)\n\n### Client config\n\n<details><pre><code>\n{\n  \"log\": {\n    \"loglevel\": \"debug\",\n    \"dnsLog\": true\n  },\n  \"inbounds\": [\n    {\n      \"tag\": \"xray_tun\",\n      \"protocol\": \"tun\",\n      \"settings\": {\n    "
-    },
-    {
-     "number": 5599,
-     "title": "TUN: Windows 下高负载时连接不稳定",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-01-23T19:44:26Z",
-     "updated_at": "2026-11-13T01:24:18Z",
-     "user": "KiGamji",
-     "url": "https://github.com/XTLS/Xray-core/issues/5599",
-     "body": "在 Windows 上使用 TUN 模式时，高带宽场景下（如 Speedtest）连接会在达到 10-15 Mbps 后卡住或断开。系统代理模式下一切正常。\n\n据我理解，gVisor 的 TCP Recovery 机制在 Windows 上会导致问题。禁用它后，之前无法加载的网站和应用完全恢复正常，Speedtest 时的卡顿和断连问题也解决了：\n\n```go\nif runtime.GOOS == \"windows\" {\n    rOpt := tcpip.TCPRecovery(0)\n    gStack.SetTransportProtocolOption(tcp.ProtocolNumber, &rOpt)\n}\n```\n\n**测试情况：**\n- Windows 11：已测试，修复后稳定运行\n- Linux：暂未测试\n- Android：v2rayNG 正常工作（可能 Android 不受此问题影响）\n\n请问我的方向对吗？"
     }
    ],
    "comments": [
+    {
+     "id": 6890345279,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T06:26:08Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6890345279",
+     "body": "选更像的就行，可以 breaking"
+    },
+    {
+     "id": 6888797972,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T03:51:48Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6888797972",
+     "body": "这边还是看PRRX怎么选择"
+    },
+    {
+     "id": 6888793116,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T03:51:19Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6888793116",
+     "body": "我的担心是特征问题，具体看\r\n\r\n\r\n>普通客户端：Login Ack 后立刻发第一个 Configuration 包（完整帧）→ 立即同步调用 vanilla 的 handleLoginAcknowledgement 并转发缓冲字节，零延迟、零改动；\r\nXMC 客户端：不发 Configuration 包，改跑 padding；而 padding 记录把长度字段算进自身（Xray padding.go），永远比合法 MC 帧少 header 字节，解码器不可能产出帧 → probeTimeoutMillis(默认 800ms) 后接管，把解码器里缓冲的首段 padding 作为流开头；\r\n兜底：超时但解码器里一个字节都没有（对端 Ack 后什么都没发）→ 仍然交回 vanilla，不误伤慢客户端。\r\n判定纯协议形状：不加字节、不看地址、不看用户名。\r\n"
+    },
+    {
+     "id": 6888725136,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T03:44:36Z",
+     "user": "spr334-a",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6888725136",
+     "body": "要不这样，原来的xmc保留现在的模式，不要求兼容真实 MC\n配置和交互能简化就简化下，保留UUID和必要认证材质等字段\n之后的模拟交互，可以继续用padding\n\n然后你再单独做个兼容真实mc的模式，需要真实mc服务端，fabric等，这样有需要的人就能自己选择🤔"
+    },
+    {
+     "id": 6888512629,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T03:23:41Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6888512629",
+     "body": "@RPRX 借这个 padding PR 问一个关于 padding **线格式**的问题（和 delay 语义相关但独立）：**能否把 padding 做成完全原生的 MC 帧？**\n\n背景：我在写 XMC 的服务端 Fabric 模组（真实 26.1 服务端、同端口），目标是不接管 MC 的登录/认证，只注册 `xmc:data` 通道做转发。现在卡在 Login Ack 之后的第一轮 padding：\n\n- 第一轮是 c2s，`targetLength` 包含 Login Ack 的 2 字节，`recordLength = targetLength - prefixLength`；\n- 写出的长度字段值是 `recordLength`，而它**包含自身 varint**（`writePaddingTurnWithBuffer` 里 `written != recordLength` 校验的就是\"含长度头的记录总字节数\"，读侧 `readPaddingTurn` 也是 `recordLength - headerLength`）；\n- MC 原生语义是\"长度 = 长度字段**之后**的字节数\"。所以真实服务端的 splitter 读第一帧就会少 header 长度（1–4 字节），之后整条流错位。\n\n结果就是：真服务端必须在 Login Ack 处拆掉 vanilla 的 splitter/decoder 才能跑 padding —— 这正是想避免的接管（也因此不得不搞\"密码/专用端口\"之类的区分手段）。\n\n想确认的是，padding 能否改成合法 MC 帧，例如承载在配置状态的 `ServerboundCustomPayloadPacket` 里（26.1 的 `ServerCommonPacketListenerImpl#handleCustomPayload` 是空实现，未知 channel 会被静默丢弃，vanilla 不报错），长度字段按原生语义。这样真实服务端可以完全保持 vanilla 的配置状态：vanilla 会停在 registry 同步等 known packs，`keepConnectionAlive` 只在 keep-alive 未回应时断开（`0x04` 由客户端照常回），不会踢人；模组于是只需要处理 `xmc:data`，不需要区分\"Xray / 真人\"，也不需要任何额外标记。\n\n另外两个相关问题：\n\n1. 连**真实** MC 服务端时，s2c 方向的 padding 还有必要吗？真实服务端自己就会发 brand / registry data 等配置流量，比合成字节更接近真实。\n2. 如果 padding 保持现状（非 MC 帧），服务端就只能在\"专用端口\"或\"预共享密码\"里二选一，两者都会引入本来可以没有的部署/流量特征。\n\n如果这个方向可行，我可以单独出一个只改 padding 承载方式的 PR（不碰现有 length/direction/delay 语义），模组那边配合改。\n"
+    },
+    {
+     "id": 6888429575,
+     "issue": 7388,
+     "issue_title": "Simultaneous IPs limit",
+     "created_at": "2026-11-15T03:15:25Z",
+     "user": "n1ret",
+     "url": "https://github.com/XTLS/Xray-core/pull/7388#issuecomment-6888429575",
+     "body": "I don't want to block a user cause IP limit exceeded. I only want to block further connections... I don't see a way to do this using API. I agree, changing protoc isn't really a simple thing. So what can I do? Please, don't tell me that nothing"
+    },
+    {
+     "id": 6888266867,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T02:59:45Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6888266867",
+     "body": "Done in `76e53309`: the special case that ignored the last turn's delay is removed. The sender now samples the delay and the receiver waits at least the minimum after the final padding turn, before the proxy stream starts."
+    },
+    {
+     "id": 6887815152,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T02:15:59Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6887815152",
+     "body": "> 因为目前还有一些问题没修，按要求一个PR一个功能，这些问题后续修复PR再说\r\n> \r\n> > 1. **delay 不可取消、没有实际上限**（优先级最高）\r\n> >    `time.Sleep` 不响应 close/deadline，配置很大的 delay 会让 handshake goroutine 在连接关闭后继续睡。需要 close/deadline-aware timer 或合理上限。\r\n> > 2. **delay 的 range 语义需要确认**\r\n> >    目前 receiver 只保证等待 `min`；sender 随机到的 `>min` 只影响它自己的下一步，不会让对端等到那个值。如果 RPRX 期望线上间隔在 `[min,max]` 内抖动，需要重新设计。\r\n> > 3. **自定义 `paddings` 整体替换 40 轮 preset**\r\n> >    包括后 33 轮 join 尾段；是否要保留 tail 需要确认。\r\n> > 4. **没有 turn 数量 / 总 padding 字节上限**\r\n> >    单轮有 8MiB 上限，数组长度不限。\r\n> > 5. **没有“早到”检测**\r\n> >    receiver 等 `min` 后再读，但不会因为对端提前发送而失败。\r\n> > 6. **`paddings: []` 仍回落到 preset**\r\n> >    没有显式“不 padding”模式。\r\n\r\n然后这里有哪些先开PR修，说明一下。因为目前还在折腾其它处理，如果不给顺序，我一个人忙不过来"
+    },
+    {
+     "id": 6887740299,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T02:09:02Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6887740299",
+     "body": "> > The last turn's delay is ignored (no extra latency before the proxy stream starts).\r\n> \r\n> 这个去掉\r\n\r\nOK，这边我处理下，可能要点时间"
+    },
+    {
+     "id": 6887668584,
+     "issue": 7405,
+     "issue_title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
+     "created_at": "2026-11-15T02:02:20Z",
+     "user": "wywywywycloud",
+     "url": "https://github.com/XTLS/Xray-core/issues/7405#issuecomment-6887668584",
+     "body": "@Fangliding I only said that the test is set up\n> We will see\n\nI'll report later on its results\n\n> We already have observed that clean ip's get banned with regular TCP+REALITY after couple of days of VPN traffic on them with fragmentation off and clienthello = firefox.\n\nIn the past. Outside the test"
+    },
+    {
+     "id": 6887480247,
+     "issue": 7364,
+     "issue_title": "VLESS: run multiplexing directly on transport",
+     "created_at": "2026-11-15T01:44:21Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6887480247",
+     "body": "Done.\nGoing to get some sleep."
+    },
+    {
+     "id": 6887468010,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T01:43:10Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6887468010",
+     "body": "> The last turn's delay is ignored (no extra latency before the proxy stream starts).\r\n\r\n这个去掉"
+    },
+    {
+     "id": 6887265694,
+     "issue": 7394,
+     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "created_at": "2026-11-15T01:24:51Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6887265694",
+     "body": "留个记录，记下后续要干嘛：\n\n- [ ] 等待 #7402 合并\n- [ ] 等待 #7402 遗留问题的后续PR合并\n- [ ] 等待XMC服务端功能Fabric模组实现 or 先处理握手兼容后写模组（先处理775 (26.1)实现）\n\n灵感来源是 https://github.com/XTLS/Xray-core/pull/6210#issuecomment-4573751159 （人家都说要不整个模组了，但这边只是服务端在MC，客户端还是Xray）\n\n但这边如果要做就得让xray的xmc实现多版本兼容，并且兼容Fabric握手。\n如果不做多版本兼容目前只能在775实现\n\n仓库名称暂且叫`xmc-server-lib`和`xmc-mcserver-core`还有`xmc-server-config` ~~目前还没建，等这边的兼容~~  \nlib负责和麻将的屎山代码交互，做出封装api  \ncore负责核心功能，依赖lib和config\nconfig负责配置加载"
+    },
+    {
+     "id": 6887025935,
+     "issue": 7405,
+     "issue_title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
+     "created_at": "2026-11-15T01:03:34Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7405#issuecomment-6887025935",
+     "body": "在 After 某个 **3 hours ago** 发的消息后\n进行 We set up a test\n然后 after **couple of days** of VPN traffic 得出一个 **already** 结论\n三个小时能做完几天的实验 也去你应该去找奇异博士"
+    },
+    {
+     "id": 6886944064,
+     "issue": 7405,
+     "issue_title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
+     "created_at": "2026-11-15T00:56:15Z",
+     "user": "wywywywycloud",
+     "url": "https://github.com/XTLS/Xray-core/issues/7405#issuecomment-6886944064",
+     "body": "After a conversation with @Fangliding in https://github.com/XTLS/Xray-core/pull/7406\n\nWe set up a test:\n2 hosts on a single VPS using different IPs in different subnets:\n- Clienthello fragmentation is off on both\n- No mux\n- VLESS TCP Reality on both\n- Basic stuff like closed ports except 443 etc\n- First host: firefox-fingerprints only\n- Second: firefox + chrome + safari + edge (uneven distribution based on HWID sent by client)\n\nWe will see if one of ips will get temporary or permament ban by russian network filtration\n\nWe already have observed that clean ip's get banned with regular TCP+REALITY after couple of days of VPN traffic on them with fragmentation off and clienthello = firefox. \n\nThis test might proove the idea that creating diversity within fingerprints lowers TSPUs attention"
+    },
+    {
+     "id": 6886742322,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T00:39:46Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6886742322",
+     "body": "因为目前还有一些问题没修，按要求一个PR一个功能，这些问题后续修复PR再说\r\n\r\n>1. **delay 不可取消、没有实际上限**（优先级最高）  \r\n`time.Sleep` 不响应 close/deadline，配置很大的 delay 会让 handshake goroutine 在连接关闭后继续睡。需要 close/deadline-aware timer 或合理上限。\r\n>2. **delay 的 range 语义需要确认**  \r\n目前 receiver 只保证等待 `min`；sender 随机到的 `>min` 只影响它自己的下一步，不会让对端等到那个值。如果 RPRX 期望线上间隔在 `[min,max]` 内抖动，需要重新设计。\r\n>3. **自定义 `paddings` 整体替换 40 轮 preset**  \r\n包括后 33 轮 join 尾段；是否要保留 tail 需要确认。\r\n>4. **没有 turn 数量 / 总 padding 字节上限**  \r\n单轮有 8MiB 上限，数组长度不限。\r\n>5. **没有“早到”检测**  \r\nreceiver 等 `min` 后再读，但不会因为对端提前发送而失败。\r\n>6. **`paddings: []` 仍回落到 preset**  \r\n没有显式“不 padding”模式。"
+    },
+    {
+     "id": 6886696563,
+     "issue": 7402,
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
+     "created_at": "2026-11-15T00:35:51Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6886696563",
+     "body": "> [#6769 (comment)](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6880324101) rebase main\r\n\r\n下一步动作是什么，还需要处理什么吗"
+    },
+    {
+     "id": 6886431076,
+     "issue": 7415,
+     "issue_title": "XDRIVE: Prevent ring-slot reuse before the previous upload completes",
+     "created_at": "2026-11-15T00:14:37Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7415#issuecomment-6886431076",
+     "body": "@eliotcougar Please take a look at [this comment in #7364](https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6856515200). While testing the direct Multiplex → VLESS → XDrive path, I encountered several XDrive issues and included fixes in my branch. I later reverted them to keep that work separate from the Multiplex migration.\n\nYour slot-ordering fix is more complete than mine: it tracks the result of the previous upload and checks reader acknowledgement independently. You can skip my upload-ordering changes.\n\nHowever, I suggest looking at the shutdown-related changes:\n\n- [`conn.go`](https://github.com/XTLS/Xray-core/blob/ce2399e333f156f8e96f45c647a4f73c51f8405f/transport/internet/xdrive/conn.go): the added `Conn.Interrupt()`.\n- [`slots.go`](https://github.com/XTLS/Xray-core/blob/ce2399e333f156f8e96f45c647a4f73c51f8405f/transport/internet/xdrive/slots.go) and [`wal.go`](https://github.com/XTLS/Xray-core/blob/ce2399e333f156f8e96f45c647a4f73c51f8405f/transport/internet/xdrive/wal.go): cancellation checks before accepting and uploading data.\n- [`xdrive.go`](https://github.com/XTLS/Xray-core/blob/ce2399e333f156f8e96f45c647a4f73c51f8405f/transport/internet/xdrive/xdrive.go): canceling a pending announcement together with the connection.\n\nThe issue was that `Conn.Close()` calls `writer.Close()` first, which waits for background uploads, and only then cancels the context. When canceling a blocked write, the connection did not close within my two-second observation window. A pending announcement also remained active after interruption.\n\nMy approach was to add a separate `Interrupt()` that cancels the context before waiting for uploads, add cancellation checks in the writers, and use the connection context instead of `context.Background()` for the announcement. Normal graceful closure with EOF remained a separate path.\n\nPerhaps this part could be useful for a separate XDrive shutdown fix. These links point to my earlier implementation; I have not yet rerun that scenario on top of your PR.\n"
+    },
+    {
+     "id": 6885669555,
+     "issue": 7391,
+     "issue_title": "XHTTP: Synchronize QUIC test shutdown",
+     "created_at": "2026-11-14T23:09:08Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7391#issuecomment-6885669555",
+     "body": "> 这种不影响运行的小东西就算了吧 比起纠结这个 更需要解决的是时有时无的test莫名其妙fail一个两个 我之前修过几次现在还是有 如果能看一下就最好了\r\n\r\nWhat tests fail intermittently? So far we only found TestSlotFirstAnnouncement in XDRIVE - slot reuse before it is released by the previous write.\r\nPotential fix in #7415 "
+    },
     {
      "id": 6884683631,
      "issue": 7386,
@@ -1075,7 +1257,7 @@
     {
      "id": 6881741042,
      "issue": 7402,
-     "issue_title": "XMC: make startup padding configurable with per-turn delay ranges",
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
      "created_at": "2026-11-14T17:51:11Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6881741042",
@@ -1111,7 +1293,7 @@
     {
      "id": 6876990998,
      "issue": 7402,
-     "issue_title": "XMC: make startup padding configurable with per-turn delay ranges",
+     "issue_title": "XMC: accept padding delay as a range string and wait on both ends",
      "created_at": "2026-11-14T12:04:21Z",
      "user": "yandujun363",
      "url": "https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6876990998",
@@ -1287,137 +1469,22 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/pull/5101#issuecomment-6847821762",
      "body": "@ccaapton 难说，总之这东西不好做安全设计，机场大概率会关掉，~~甚至拼车可能也会~~，且有内网穿透需求的用户顶多一成\r\n\r\n费劲实现后实际受益人寥寥，真不如直接拿机场节点开个 FullCone UDP 端口得了，内网端把拿到的端口和 IP 写到个地方就行"
-    },
-    {
-     "id": 6845781114,
-     "issue": 5101,
-     "issue_title": "VLESS protocol: Add Reverse Proxy (4) Command and extremely simple config",
-     "created_at": "2026-11-13T06:18:51Z",
-     "user": "ccaapton",
-     "url": "https://github.com/XTLS/Xray-core/pull/5101#issuecomment-6845781114",
-     "body": "> 想用机场节点当反代的话，我想了一下，首先 Reverse 里面的子连接肯定得开层 VLESS Encryption 以防被机场窥探明文数据\r\n> \r\n> 且有这样的强制要求在先，仅拿到正向代理的 UUID 也夺舍不了反代，也连不上反代（类似 vlessRoute，服务端派给相同的）\r\n> \r\n> 只是检测 Reverse 里面确实是 VLESS Encryption 这点不好做，因为得服务端检测，~要求客户端也跑 mux 然后里面是 cmd 4？~\r\n\r\n大多数反代流量会是ssh/rdp-over-tls之类的，内容安全级别比普通公网流量高很多吧。这部分选择相信用户的安全意识应该无可厚非。"
-    },
-    {
-     "id": 6844731624,
-     "issue": 7380,
-     "issue_title": "dns: add local UDP nameserver without dispatcher",
-     "created_at": "2026-11-13T05:08:56Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7380#issuecomment-6844731624",
-     "body": "修一下原有的 test，新加的那个文件删掉"
-    },
-    {
-     "id": 6844673937,
-     "issue": 5101,
-     "issue_title": "VLESS protocol: Add Reverse Proxy (4) Command and extremely simple config",
-     "created_at": "2026-11-13T05:05:01Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/5101#issuecomment-6844673937",
-     "body": "https://t.me/projectXray/5362802\r\n\r\n> [2026/11/13 12:27] Xiao: 想啥呢 这种勾八功能机场做端直接去掉了\r\n> \r\n> [2026/11/13 12:32] Project X Channel 回复 Xiao:\r\n> \r\n> 我也觉得，燃烧脑细胞设计完，结果你的机场内核/面板估计直接给关掉\r\n> \r\n> [2026/11/13 12:42] Project X Channel 回复 Xiao:\r\n> \r\n> 但其实就算机场端移除了这个且禁了回国，现在就能节点间 UDP 互连来实现利用机场线路的内网穿透，所以倒不如堵不如疏？\r\n> \r\n> [2026/11/13 12:56] Xiao 回复 Project X Channel:\r\n> \r\n> xray功能真不能太考虑机场 据我观察100%机场主和99%用户都折腾不上\r\n\r\n我觉得 VLESS Reverse 这个功能的重点还是前提是用户能控制服务端配置、写路由啥的、完全在 core 的体系里面、非常方便\r\n\r\n如果用户控制不了服务端配置，那么就像我说的，现在走 UDP 就能利用上机场线路，没差，~~也就多耗点性能~~\r\n\r\n但关键还是，绞尽脑汁入站默认允许开反代后，很多机场估计直接给你关了，就算不关，用的人也不超过一成，性价比太低"
-    },
-    {
-     "id": 6843922773,
-     "issue": 5101,
-     "issue_title": "VLESS protocol: Add Reverse Proxy (4) Command and extremely simple config",
-     "created_at": "2026-11-13T04:25:56Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/5101#issuecomment-6843922773",
-     "body": "想用机场节点当反代的话，我想了一下，首先 Reverse 里面的子连接肯定得开层 VLESS Encryption 以防被机场窥探明文数据\r\n\r\n且有这样的强制要求在先，仅拿到正向代理的 UUID 也夺舍不了反代，也连不上反代（类似 vlessRoute，服务端派给相同的）\r\n\r\n只是检测 Reverse 里面确实是 VLESS Encryption 这点不好做，因为得服务端检测，~~要求客户端也跑 mux 然后里面是 cmd 4？~~"
-    },
-    {
-     "id": 6842990941,
-     "issue": 5101,
-     "issue_title": "VLESS protocol: Add Reverse Proxy (4) Command and extremely simple config",
-     "created_at": "2026-11-13T03:33:34Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/5101#issuecomment-6842990941",
-     "body": "> 非常希望改成默认允许反向代理，且同一个UUID可以使用。\r\n\r\n不要光想着方便用机场，这东西不一定安全，在有较为安全的设计前不会搞\r\n\r\n昨天有人在群里提希望服务端开了反向代理的 UUID 能同时正向代理，记录一下：https://t.me/projectXray/5361882\r\n\r\n> [2026/11/12 19:26] Project X Channel 回复 Peel:\r\n> > ‎⁨Yes. I think that this whole restriction is artificial,...\r\n> \r\n> ~是为了服务端的安全而不是客户端~ 都有\r\n> 你的 frp 默认能正向代理吗？\r\n> \r\n> [2026/11/12 19:27] Project X Channel 回复 风扇滑翔翼:\r\n> > ‎⁨给你一个开关都不够 你要默认？⁩\r\n> \r\n> 本来就是加个 uuid 的事，相当于本来就有选项，他不满意\r\n> \r\n> [2026/11/12 19:30] Project X Channel 回复 Peel:\r\n> > ‎⁨I don't really get what you mean here....\r\n> \r\n> 内网端默认不应当通过公网端代理自己的流量，公网端的 IP 凭啥给内网端用\r\n> \r\n> [2026/11/12 19:31] Project X Channel 回复 Peel:\r\n> > ‎⁨OK, what about moving that reverse.allowForward:...\r\n> \r\n> 加个 uuid 的事为啥不区分开，同时正反、弄混淆了指不定有什么问题\r\n> \r\n> [2026/11/12 19:34] Project X Channel 回复 Peel:\r\n> > ‎⁨I've talked to panel maintainers about this,...\r\n> \r\n> ~所以你把正向代理节点分享出去后，你的反向代理有可能被夺舍~\r\n> \r\n> [2026/11/12 19:36] Project X Channel 回复 Peel:\r\n> > ‎⁨Obviously, but the security of client is the client-side...\r\n> \r\n> 可以破坏你的反向代理就不行啊，GFW 偷到你客户端配置后也能破坏\r\n> \r\n> 两个 uuid，即使你的正向代理客户端配置被偷了，也破坏不到反向代理\r\n> \r\n> [2026/11/12 19:39] Project X Channel 回复 Peel:\r\n> > ‎⁨Provided they are supplied separately to the client — yes....\r\n> \r\n> 我明确写了内网端、客户端别用同一个 JSON、同一个进程\r\n> \r\n> 否则就是增加风险，我不说了，反正你的要求不会加\r\n> \r\n> [2026/11/12 19:41] Project X Channel 回复 Peel:\r\n> > ‎⁨OK, can we at least have per-user toggle the way @Fangliding...\r\n> \r\n> 不会合并\r\n> \r\n> [2026/11/12 19:43] Project X Channel 回复 Peel:\r\n> > ‎⁨I mean, the way I see it, if GFW compromises a user config,...\r\n> \r\n> 反向代理直接改你明文流量路径了能一样吗？里面的东西估计都没加密\r\n> \r\n> 举个例子，反向代理被恶意顶替后，别人能拿到你的内部明文请求\r\n> \r\n> 然后再停止顶替，用同样的凭证去访问你的内网资源\r\n> \r\n> [2026/11/12 19:46] Project X Channel 回复 Peel:\r\n> > ‎⁨Ofc I won't be sending plaintext over reverse⁩\r\n> \r\n> 你不会不代表别人不会，内网服务有几个加密的？\r\n> \r\n> 不要为了自己方便一点就开个不安全的口子坑小白\r\n> \r\n> [2026/11/12 19:49] Project X Channel 回复 Peel:\r\n> > ‎⁨That's why a toggle should exist,...\r\n> \r\n> ~我最烦这种论调，不会改，不再回复~\r\n> \r\n> [2026/11/12 19:50] Project X Channel 回复 斜键仙:\r\n> > ‎⁨要不fork一份自己玩？⁩\r\n> \r\n> 他本来就有 fork，然后要求上游加，只是为了自己方便\r\n> \r\n> 这选项加上后面板指不定就给用户默认开了，肯定不能加\r\n> \r\n> [2026/11/12 19:52] Project X Channel 回复 Peel:\r\n> > ‎⁨I explicitly ask it to be disabled by default⁩\r\n> \r\n> 你一个面板能代表所有面板和脚本吗？别浪费我时间了\r\n> \r\n> 总是有人只是出于自己更方便就要求 core 改这改那，太自私了\r\n> \r\n> [2026/11/12 19:54] Project X Channel 回复 Peel:\r\n> > ‎⁨I don't see what panel has to do here at all....\r\n> \r\n> core 应当使所有用户更安全，不管是不是 dumb person"
-    },
-    {
-     "id": 6842747639,
-     "issue": 7364,
-     "issue_title": "VLESS: run multiplexing directly on transport",
-     "created_at": "2026-11-13T03:17:07Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6842747639",
-     "body": "RequestCommandMultiplex 仍叫 Mux，感觉代码还有简化空间，另外 reverse 的 bridge/portal 有点晦涩，改成内网端/公网端"
-    },
-    {
-     "id": 6842621317,
-     "issue": 7281,
-     "issue_title": "New Blackhole",
-     "created_at": "2026-11-13T03:08:43Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7281#issuecomment-6842621317",
-     "body": "~~简单看了下还没动 sockopt，合理，Direct/Freedom 这个 PROXY protocol 用的人很少，多一层就是好不用借道 dialerProxy 了~~\r\n\r\n下个月的版本应该会把这几个旧参数清掉"
-    },
-    {
-     "id": 6842419667,
-     "issue": 7364,
-     "issue_title": "VLESS: run multiplexing directly on transport",
-     "created_at": "2026-11-13T02:55:34Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6842419667",
-     "body": "@svlavr 确实留着 VMess inbound Dispatch() 的话会增加 Mux 的代码量，你参考 https://github.com/XTLS/Xray-core/pull/5143 改成 DispatchLink() 吧\r\n\r\n对于这项迁移，我记得之前 mux 修了一些与其它组件兼容的小问题，记得带上，然后只要新旧版本互连没问题就可以先合并"
-    },
-    {
-     "id": 6842339537,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-13T02:50:12Z",
-     "user": "anonymously-hidden",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-6842339537",
-     "body": "I'm working on it with fable 5.2; Though the actual improvement remains to be seen; Currently , I've logged some Stalls and some block (queue ) logs, I'm working to reduce them, however, it highly depends on network conditions. ( so the local simulations will be used to regenerate & model the real data )\n~~one thing for sure I've fixed is the fmt issue.~~"
-    },
-    {
-     "id": 6842306055,
-     "issue": 7372,
-     "issue_title": "Fix noise after udphop",
-     "created_at": "2026-11-13T02:47:59Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6842306055",
-     "body": "@patterniha 像我说的这样 https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6834729921 改吧"
-    },
-    {
-     "id": 6842288413,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-13T02:46:52Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-6842288413",
-     "body": "@anonymously-hidden 有新的提升吗"
-    },
-    {
-     "id": 6842066560,
-     "issue": 7387,
-     "issue_title": "proxy/tun: TUN fails to start on Windows 11 24H2 when DisabledComponents=0x28 (\"unable to set DNS > Access is denied\")",
-     "created_at": "2026-11-13T02:32:10Z",
-     "user": "YOIMIYA66",
-     "url": "https://github.com/XTLS/Xray-core/issues/7387#issuecomment-6842066560",
-     "body": "Thanks @patterniha for testing this and for the clear explanation. You were right: the problem was my Windows, not Xray.\n\n**Root cause:** the registry key `HKLM\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters` had broken permissions on my machine. It had apparently been deleted and recreated by some tool (owner `BUILTIN\\Administrators` instead of `SYSTEM`, and the `Dhcpv6DUID` value and `Winsock` subkey were gone). The recreated key no longer had its own access rules, so it inherited the read-only rules of its parent `Tcpip6` key. As a result, `NETWORK SERVICE`, `NT SERVICE\\Dhcp` and `Network Configuration Operators` had only read access there, while on `Tcpip\\Parameters` (IPv4) they can write. Setting IPv6 DNS servers on the Wintun adapter writes under `Tcpip6\\Parameters\\Interfaces\\{GUID}`, which is why `SetDNS(AF_INET6)` returned `Access is denied`. This also explains why the original v26.10.31 failed the same way.\n\n**Fix:** I backed up the key, then copied the access rules (DACL) of `Tcpip\\Parameters` onto `Tcpip6\\Parameters`:\n\n```powershell\n$k6 = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters'\n$k4 = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters'\n(Get-Acl $k6).Sddl | Out-File tcpip6-acl-backup.txt\n$acl = Get-Acl $k6\n$acl.SetSecurityDescriptorSddlForm((Get-Acl $k4).GetSecurityDescriptorSddlForm('Access'), 'Access')\nSet-Acl $k6 $acl\n```\n\nAfter that, the unmodified v26.11.9 started the TUN without errors, still with `DisabledComponents = 0x28`. Since I actually want IPv6 off, I then set `DisabledComponents = 0xFF` as you suggested and rebooted. Now IPv6 is gone from all interfaces, and v26.11.9 only logs `[tun] ignored, as DisabledComponents turns IPv6 off`, as documented.\n\nIf someone else hits `unable to set DNS > Access is denied` with a TUN config that only uses IPv4, compare the permissions of `Tcpip6\\Parameters` with those of `Tcpip\\Parameters` first.\n\nSorry for the noise, and thanks again for your time.\n"
-    },
-    {
-     "id": 6839400592,
-     "issue": 7372,
-     "issue_title": "Fix noise after udphop",
-     "created_at": "2026-11-12T23:51:11Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-6839400592",
-     "body": "> off-topic\r\n> \r\n> 我不是很了解伊朗，听说谷歌在你们那没有被封，所以很好奇你们翻墙是为了访问什么网站，是否有 geosite:gfw-iran @patterniha\r\n\r\ninstagram, X, telegram, youtube, whatsapp, ... . also for bypassing sanctions to access AI,...\r\nalso CDNs are now whitelisted (all upload packets dropped after about 20 packets for non-whitelist domains), so gfw-iran is meaningless."
-    },
-    {
-     "id": 6838977756,
-     "issue": 7348,
-     "issue_title": "TLS: Fix data race between certificate hot reload and handshakes",
-     "created_at": "2026-11-12T23:27:50Z",
-     "user": "eliotcougar",
-     "url": "https://github.com/XTLS/Xray-core/pull/7348#issuecomment-6838977756",
-     "body": "I tested `d6abd207` on top of `main` at `c4561418` with Go 1.27.0 on Windows amd64.\n\n- On clean `main`, the XHTTP TLS and QUIC tests both reported the certificate publication race. After applying this PR, that race was no longer reported in three runs of `go test -race -count=3 -run '^Test_ListenXHAndDial_(TLS|QUIC)$' ./transport/internet/splithttp`. The two certificate regression tests added here also passed five runs under `-race`.\n- The only remaining race in that XHTTP rerun was the QUIC test's shared `serverClosed` Boolean. I opened #7391 for that test-only fix. With both patches applied locally, the XHTTP and HTTP Upgrade suites passed five runs under `-race`.\n\nOne remaining issue is ownership of the protobuf certificate. [`setupOcspTicker`](https://github.com/XTLS/Xray-core/blob/d6abd20773188970f2c63a5dd2ce8a75f618ac5e/transport/internet/tls/config.go#L103-L138) still assigns the reloaded PEM to `entry.Certificate` and `entry.Key`. `entry` is the same object held in `Config.Certificate`. I reproduced the mutation by creating a TLS config with an initial key pair in memory and a different valid pair at the configured paths. After `GetCertificate` returned the replacement, the original protobuf entry contained the replacement PEM too. That leaves a potential race with another `GetTLSConfig` call on the same config, since building the root pool also reads `entry.Certificate`.\n\nCould the refresh goroutine keep its own copy of the protobuf certificate? My local prototype passes the reload check with both atomic publication and a goroutine-owned copy. In this PR, a small follow-up could clone the entry before starting the ticker and have the key-pair loader read the same copy.\r\n"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 2572,
+     "title": "Windows: site-based split tunneling with more than 500 routes causes system operations to hang, likely due to `wcmSvc` suspension workaround",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-05-05T12:05:27Z",
+     "updated_at": "2026-11-14T23:48:43Z",
+     "user": "yupic",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2572",
+     "body": "**Describe the bug**\n\nOn Windows, CIDR/site split tunneling with more than ~500 routes causes unrelated Windows operations to hang.\n\nI connect using the VLESS protocol and use split tunneling by CIDR routes, not by applications. When the route list is large, Windows starts behaving as if some system checks never complete. For example:\n\n- some applications do not start after clicking them;\n- small browser downloads may hang at the final “write to disk” stage;\n- opening/starting some media may hang before playback.\n\nAs soon as I disconnect the VPN connection, the *pending operations complete immediately*: the application starts, and the browser finishes saving the downloaded file.\n\nI investigated this locally and it appears to be caused by `AmneziaVPN-service.exe` suspending the Windows Connection Manager service (`wcmSvc`) after more than 500 routes are added.\n\nThe log shows this directly:\n\n```text\n[2026-05-05 09:54:01.191Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  2 / 2\n[2026-05-05 09:54:01.193Z] [DEBUG] Amnezia  : Router::routeDeleteList finished, success:  0 / 1\n[2026-05-05 09:54:01.194Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  1 / 1\n[2026-05-05 09:54:01.194Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  1 / 1\n[2026-05-05 09:54:01.195Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  1 / 1\n[2026-05-05 09:54:01.221Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  511 / 511\n[2026-05-05 09:54:01.222Z] [DEBUG] Amnezia  : RouterWin::routeAddList succeed to suspend wcmSvc\n```\n\nThere is code in `service/server/router_win.cpp`:\n\n```cpp\nif (m_ipForwardRows.size() > 500) suspendWcmSvc(true);\n```\n\nThe comment near `suspendWcmSvc()` says:\n\n```cpp\n// Solve Windows bug (routes > 1000)\n```\n\nThis looks like a workaround for some old Windows routing bug from 2021. It may no longer be valid or safe on current Windows 11 builds.\n\n**To Reproduce**\n\n1. Configure a VLESS connection on Windows.\n2. Enable split tunneling by CIDR/site routes.\n3. Add about 490 CIDR routes.\n4. Connect VPN.\n5. Wait 10-20 minutes.\n6. Observe that Windows works normally.\n7. Increase the CIDR route list to about 510 routes.\n8. Connect VPN again.\n9. Observe that `wcmSvc` is suspended by AmneziaVPN service.\n10. Wait 10-20 minutes.\n10. Try to open a video file from Downloads folder or download a small file in a browser.\n11. Observe that the operation may hang.\n12. Disconnect VPN.\n13. Observe that the pending operation completes immediately: the application starts, or the browser finishes saving the downloaded file.\n\nThe issue is also reproducible with my real split tunneling list of about 3000 routes.\n\nI attached two autogenerated example route lists used for testing:\n\n- [amnezia-exclude-510.json](https://github.com/user-attachments/files/27398371/amnezia-exclude-510.json): does not reproduce the issue.\n- [amnezia-exclude-490.json](https://github.com/user-attachments/files/27398370/amnezia-exclude-490.json): reproduces the issue and triggers `suspend wcmSvc`.\n\n**Expected behavior**\n\nAmneziaVPN should add CIDR routes without suspending Windows system services. Windows applications, browser downloads, and media playback should continue to work normally.\n\n**Log files**\n\nRelevant log fragment:\n```\n[2026-05-05 09:54:01.191Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  2 / 2\n[2026-05-05 09:54:01.193Z] [DEBUG] Amnezia  : Router::routeDeleteList finished, success:  0 / 1\n[2026-05-05 09:54:01.194Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  1 / 1\n[2026-05-05 09:54:01.194Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  1 / 1\n[2026-05-05 09:54:01.195Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  1 / 1\n[2026-05-05 09:54:01.221Z] [DEBUG] Amnezia  : Router::routeAddList finished, success:  511 / 511\n[2026-05-05 09:54:01.222Z] [DEBUG] Amnezia  : RouterWin::routeAddList succeed to **suspend wcmSvc**\n```\n\n**Screenshots**\n\nNot applicable.\n\n**Desktop (pl"
+    },
     {
      "number": 3469,
      "title": "fix: Linux DNS resolution with the kill switch enabled + OpenVPN container NAT",
@@ -1670,20 +1737,18 @@
      "user": "ioc2e3",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3459",
      "body": "That ...\n\nHere ( https://github.com/amnezia-vpn/amnezia-client ) ...\n\nCan provide Windows portable version ?\n\n."
-    },
-    {
-     "number": 986,
-     "title": "No local network access",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2024-08-19T02:04:22Z",
-     "updated_at": "2026-11-12T23:22:26Z",
-     "user": "alexbalkan",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/986",
-     "body": "**Describe the bug**\r\nWhen connected, access to local network resources is lost. Including I have a local secure dns\r\nToday I installed this miracle and started testing it. Out of 10 connections, the local network was not blocked once, at the moment when I started writing about the problem).\r\n\r\n**To Reproduce**\r\n\r\n**Expected behavior**\r\n\r\nAdd local networks exception\r\n\r\n**Log files**\r\n\r\n**Screenshots**\r\n\r\n\r\n**Desktop (please complete the following information):**\r\n \r\nDesktop\r\n- OS:  Windows 10\r\n - Version 22H2 Build 19045.4780\r\n\r\n**Server (please complete the following information):**\r\n - OS:  Debian 10\r\n\r\n**Additional context**\r\nPlease forgive me for my English.\r\nThere is a very big problem. Once connected, I will lose access to all my local network management services. Yes, I saw separate connections of networks. Isn’t it better to do it according \r\nto Feng Shui and add the exclusion of local network addresses? Another problem, on my network I use my own secure DNS servers, after connecting to the VPN they also became unavailable.\r\n"
     }
    ],
    "comments": [
+    {
+     "id": 6886123140,
+     "issue": 2572,
+     "issue_title": "Windows: site-based split tunneling with more than 500 routes causes system operations to hang, likely due to `wcmSvc` suspension workaround",
+     "created_at": "2026-11-14T23:48:43Z",
+     "user": "eccodolf",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2572#issuecomment-6886123140",
+     "body": "Проблема есть и на 5.1.0.6 (Nov  4 2026, ac175c8a8)\nИспользую lite-список отсюда: https://github.com/lib4u/amnezia-tunneling-ru\nПосле этого зависали запросы WinHTTP и Steam."
+    },
     {
      "id": 6883839805,
      "issue": 3401,
@@ -1845,15 +1910,6 @@
      "user": "stufently",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6846599007",
      "body": "1 айпишники v4  нынче на вес золота и никто их менять бесплатно не будет \n2 помогает сидет одно устройства на один впн сервер пока \n3 xraY лучше шифруется под https3 quik"
-    },
-    {
-     "id": 6838850239,
-     "issue": 986,
-     "issue_title": "No local network access",
-     "created_at": "2026-11-12T23:22:26Z",
-     "user": "kodidono",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/986#issuecomment-6838850239",
-     "body": "I would like to request a dedicated **\"Allow Local Network Access\"** option in the AmneziaVPN client, especially for Windows.\n\nMy use case is that I need to access devices on my local network (LAN) while staying connected to the VPN.\n\nFor example, I use YoloLiv Compose to control my YoloCam S3 camera over the local network. When AmneziaVPN is connected, the application cannot properly discover or communicate with the camera.\n\nIt would be very useful to have a simple toggle in the connection settings:\n\n**Allow Local Network Access: ON / OFF**\n\nExpected behavior:\n- Allow access to local IPv4 and IPv6 networks (192.168.x.x, 10.x.x.x, 172.16.x.x, etc.).\n- Keep all regular internet traffic routed through the VPN.\n- Preserve Kill Switch functionality while allowing local LAN communication.\n- Automatically exclude local network traffic from the VPN tunnel without requiring users to manually configure split tunneling or add individual IP ranges.\n\nThis feature would be especially useful for users who need to access network cameras, NAS devices, printers, routers, and other local network services while using a VPN.\n\nCurrently, I have to use another WireGuard client because it provides better control over local network access and Kill Switch behavior.\n\nI would really appreciate it if this functionality could be considered for a future release.\n"
     }
    ]
   },
@@ -1865,7 +1921,7 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-13T01:00:52Z",
-     "updated_at": "2026-11-14T07:46:42Z",
+     "updated_at": "2026-11-15T06:05:49Z",
      "user": "CrimsonBerry",
      "url": "https://github.com/HyNetworks/hysteria/issues/1722",
      "body": "**你的功能请求是否与某个问题有关？**\n无\n\n**描述你希望的解决方案**\n可以作为一个可选特性，当验证信息与用户名一一对应时启用\n原\n```\n{\n  \"addr\": \"123.123.123.123:44556\", \n  \"auth\": \"something_something\", \n  \"tx\": 123456 \n}\n```\n新 \n```\n{\n  \"addr\": \"123.123.123.123:44556\", \n  \"auth\": \"something_something\", \n  \"tx\": 123456,\n  \"online\": 5\n}\n```\n\n**有没有其他替代方案**\n无\n\n**额外信息**\n无"
@@ -1883,6 +1939,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 6890119004,
+     "issue": 1722,
+     "issue_title": "能否在HTTP 验证的 JSON 载荷中添加用户在线数量",
+     "created_at": "2026-11-15T06:05:49Z",
+     "user": "krotname",
+     "url": "https://github.com/HyNetworks/hysteria/issues/1722#issuecomment-6890119004",
+     "body": "For a remote backend, the extra TLS configuration is a valid concern. If the backend runs on the same host, the stats listener can stay on loopback; a remote hop still needs TLS and protection of the stats API secret.\n\nThere is one gap with a lock held only inside the auth callback: in the [current server code](https://github.com/HyNetworks/hysteria/blob/master/core/server/server.go#L179), `Authenticate()` returns before `LogOnlineState(id, true)` runs. After the backend releases its lock, the next callback can therefore still read the old `/online` count. Serializing callbacks alone does not reserve a slot. A strict limit needs an atomic reservation covering pending admissions as well as established connections, with a defined release/reconciliation path.\n\nAn optional `online` field would still be useful as a snapshot. It would help to document whether it excludes the connection being authenticated, and keep that informational use separate from a strict admission-limit guarantee."
+    },
     {
      "id": 6874048344,
      "issue": 1722,

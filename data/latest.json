@@ -1,9 +1,42 @@
 {
- "generated_at": "2026-11-15T22:47:39Z",
- "since": "2026-11-13T22:47:39Z",
+ "generated_at": "2026-11-16T06:27:35Z",
+ "since": "2026-11-14T06:27:35Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 158,
+     "title": "在中国Google自动跳转 / Google Auto Jump in China",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2022-11-21T04:58:26Z",
+     "updated_at": "2026-11-16T06:20:48Z",
+     "user": "huangshaomingS001",
+     "url": "https://github.com/net4people/bbs/issues/158",
+     "body": "Google.com强制跳转Google.cn/m\r\n\r\n*Google.com forces a jump to Google.cn/m*\r\n\r\n![Screenshot_20221121_125706](https://user-images.githubusercontent.com/76805989/202968820-5088a6a6-cb80-4c9a-8e58-21824c0f28f4.jpg)\r\n"
+    },
+    {
+     "number": 682,
+     "title": "Egypt: Investigating severe broadband throttling after monthly data caps",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-12T20:13:18Z",
+     "updated_at": "2026-11-16T06:19:27Z",
+     "user": "mostfinx",
+     "url": "https://github.com/net4people/bbs/issues/682",
+     "body": "**\n\n# Egypt: Investigating severe broadband throttling after monthly data caps\n\nHello everyone,\n\nI'm looking for technical insights into residential broadband throttling in Egypt.\n\n**ISP:** Telecom Egypt (WE)\n\n**Issue:** After the monthly data allowance is exhausted, some residential plans are reduced to approximately **256 Kbps**.\n\nWE also advertises special access arrangements for certain educational and government websites. Examples include:\n\n- https://digital.gov.eg\n- https://mcit.gov.eg\n- https://tra.gov.eg\n- https://www.ekb.eg\n- https://maharatech.gov.eg\n\nThe exact behavior of these exemptions after quota exhaustion may vary.\n\nI would appreciate technical guidance on the following questions:\n\n1. How can users distinguish an account-wide bandwidth limit from traffic-specific throttling?\n2. What privacy-preserving tests could determine whether certain services retain higher speeds?\n3. Are there legitimate VPN or network optimizations that improve usability on a 256 Kbps connection?\n4. Are there existing open-source tools or research projects that investigate comparable ISP policies?\n\nI understand that a VPN cannot necessarily remove a hard account-level speed cap.\n\nMy goal is to understand the technical restrictions and identify practical, measurable improvements.\n\nFor personal safety reasons, I prefer to remain anonymous and ask that no personally identifying information be requested publicly.\n\nThank you for any technical insights or references.\n\n**"
+    },
+    {
+     "number": 683,
+     "title": "Nakis: a TLS tunnel proxy built around connection reuse and write coalescing (efficiency first, circumvention effect unverified)",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-14T05:44:12Z",
+     "updated_at": "2026-11-16T06:02:25Z",
+     "user": "n-yarvex",
+     "url": "https://github.com/net4people/bbs/issues/683",
+     "body": "Hello all,\n\nI would like to share a small project and ask for feedback from people who know this area better than I do. Nakis is a SOCKS5-in, TLS-tunnel-out proxy written in Go. Its main goal is transfer efficiency: get a ready tunnel to the application with as little waiting as possible, and keep per-write overhead low. Resistance to DPI was a secondary concern. I have not tested it against any real censor, so please read the DPI-related parts as hypotheses.\n\nRepo: https://github.com/n-yarvex/nakis (MIT). The wire format and notes on the reference implementation are in doc/SPEC.md.\n\n## Where the waiting goes\n\nMost browser sessions are short, so the cost is dominated by setting up a tunnel: TCP, TLS, then whatever authentication the protocol adds. Nakis tries to take that off the critical path.\n\n**Pre-connected pool.** The client keeps tunnels that have already finished the TLS handshake and authentication. A new session takes one from the pool and starts sending right away. This is always on, because turning it off could only make things slower.\n\n**Reuse.** When a session ends, each side sends a zero-length frame (called NAP in the spec) for its own direction. Once both have been seen, no error occurred, and the tunnel has not used up its lifespan, it goes back to the pool and the next session reuses it without a new handshake. Each tunnel draws its own lifespan: a number of sessions (by default between 4 and 8) and a byte budget (log-uniform between 8 and 256 MiB), so there is no fixed \"Nth session\" or \"Nth byte\" boundary.\n\n**Racing when the pool is empty.** The client dials several candidate addresses: the first two immediately, the rest staggered by 50 ms. The first to finish the handshake serves the session. The others are not thrown away; they go into the pool. The idea is mostly for lossy links and servers with several addresses, where one slow path should not stall everything.\n\n## Write coalescing\n\nMany proxies write each application read as its own frame. Nakis puts a queue (a \"Box\") in front of the tunnel and decides when to flush (\"Gate\"). One frame is one Write, which under TLS ends up in one record.\n\n- If the queue is empty and the last data arrived at least 40 µs ago, the chunk is sent immediately. This is meant to keep interactive small writes from being delayed.\n- Otherwise chunks queue up and are packed greedily into one frame, up to `send_pack`. A chunk is never split; what does not fit waits for the next frame.\n- The queue is flushed when it reaches `send_pack`, or comes within `send_tail` bytes (default 512) of it.\n- If it is not full, a 250 µs timer runs. If more data arrived in the meantime, it waits another tick, up to `send_quiet` x 4 ticks. With `send_quiet=4` that means at most about 4 ms of merging while data keeps arriving, and at most 250 µs once it stops.\n- Large reads (32766 bytes or more) bypass the queue after flushing what is already queued, to keep ordering.\n- The server has a second layer: small upstream frames are merged into writes of up to `merge_pack` (default 20 KiB) towards the target. When the queue reaches `max_queue`, the server stops reading the tunnel and TCP backpressure slows the client.\n\nThe trade-off is plain: under sustained small writes, latency can rise by up to `send_quiet` milliseconds in exchange for fewer, larger records.\n\n## Shaping the first packets\n\nThe first few packets of a session (up to eight per direction) get a randomly drawn target size, per tunnel, per session, per direction. The target is reached by coalescing application data first. Padding (a frame with length 0xFFFF) is only used if the data has not filled the target after 2 ms, so this does not work like a conventional padding scheme. For the first packet only, that wait is an added latency of up to 2 ms. The plan also looks at the destination port: for ports that usually carry TLS (443 and similar), it covers more packets and draws larger ones more often, on the guess that a TLS handshake is nested insi"
+    },
     {
      "number": 671,
      "title": "[Russia] recent mass ip bans",
@@ -14,20 +47,18 @@
      "user": "its0ka",
      "url": "https://github.com/net4people/bbs/issues/671",
      "body": "on aug 4 and september 21 there were a lot of IP bans.\na lot of reality proxy servers (self-steal included) and even ips with only amneziawg (not susceptible to active probing) were banned. but it looks like it was mostly very popular vps providers.\ni've checked a few ASNs:\namnezia hosting: 131 blocked ip out of 20k [amneziahost.txt](https://github.com/user-attachments/files/32867470/amneziahost.txt)\nfirstbyte hosting: 3k blocked ip out of 29k [firstbyte.txt](https://github.com/user-attachments/files/32867500/firstbyte.txt)\nfornex hosting: 596 blocked ip out of 24k [fornex.txt](https://github.com/user-attachments/files/32867532/fornex.txt)\nplay2go DE: 2k blocked ip out of 37k [play2goDE.txt](https://github.com/user-attachments/files/32867560/play2goDE.txt)\nveesp: 5k blocked ip out of 30k [veesp.txt](https://github.com/user-attachments/files/32867596/veesp.txt)\n\ntell me if you know some vps providers that aren't popular in russia but do have a lot of proxy servers and i'll check them"
-    },
-    {
-     "number": 683,
-     "title": "Nakis: a TLS tunnel proxy built around connection reuse and write coalescing (efficiency first, circumvention effect unverified)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-14T05:44:12Z",
-     "updated_at": "2026-11-14T14:39:29Z",
-     "user": "n-yarvex",
-     "url": "https://github.com/net4people/bbs/issues/683",
-     "body": "Hello all,\n\nI would like to share a small project and ask for feedback from people who know this area better than I do. Nakis is a SOCKS5-in, TLS-tunnel-out proxy written in Go. Its main goal is transfer efficiency: get a ready tunnel to the application with as little waiting as possible, and keep per-write overhead low. Resistance to DPI was a secondary concern. I have not tested it against any real censor, so please read the DPI-related parts as hypotheses.\n\nRepo: https://github.com/n-yarvex/nakis (MIT). The wire format and notes on the reference implementation are in doc/SPEC.md.\n\n## Where the waiting goes\n\nMost browser sessions are short, so the cost is dominated by setting up a tunnel: TCP, TLS, then whatever authentication the protocol adds. Nakis tries to take that off the critical path.\n\n**Pre-connected pool.** The client keeps tunnels that have already finished the TLS handshake and authentication. A new session takes one from the pool and starts sending right away. This is always on, because turning it off could only make things slower.\n\n**Reuse.** When a session ends, each side sends a zero-length frame (called NAP in the spec) for its own direction. Once both have been seen, no error occurred, and the tunnel has not used up its lifespan, it goes back to the pool and the next session reuses it without a new handshake. Each tunnel draws its own lifespan: a number of sessions (by default between 4 and 8) and a byte budget (log-uniform between 8 and 256 MiB), so there is no fixed \"Nth session\" or \"Nth byte\" boundary.\n\n**Racing when the pool is empty.** The client dials several candidate addresses: the first two immediately, the rest staggered by 50 ms. The first to finish the handshake serves the session. The others are not thrown away; they go into the pool. The idea is mostly for lossy links and servers with several addresses, where one slow path should not stall everything.\n\n## Write coalescing\n\nMany proxies write each application read as its own frame. Nakis puts a queue (a \"Box\") in front of the tunnel and decides when to flush (\"Gate\"). One frame is one Write, which under TLS ends up in one record.\n\n- If the queue is empty and the last data arrived at least 40 µs ago, the chunk is sent immediately. This is meant to keep interactive small writes from being delayed.\n- Otherwise chunks queue up and are packed greedily into one frame, up to `send_pack`. A chunk is never split; what does not fit waits for the next frame.\n- The queue is flushed when it reaches `send_pack`, or comes within `send_tail` bytes (default 512) of it.\n- If it is not full, a 250 µs timer runs. If more data arrived in the meantime, it waits another tick, up to `send_quiet` x 4 ticks. With `send_quiet=4` that means at most about 4 ms of merging while data keeps arriving, and at most 250 µs once it stops.\n- Large reads (32766 bytes or more) bypass the queue after flushing what is already queued, to keep ordering.\n- The server has a second layer: small upstream frames are merged into writes of up to `merge_pack` (default 20 KiB) towards the target. When the queue reaches `max_queue`, the server stops reading the tunnel and TCP backpressure slows the client.\n\nThe trade-off is plain: under sustained small writes, latency can rise by up to `send_quiet` milliseconds in exchange for fewer, larger records.\n\n## Shaping the first packets\n\nThe first few packets of a session (up to eight per direction) get a randomly drawn target size, per tunnel, per session, per direction. The target is reached by coalescing application data first. Padding (a frame with length 0xFFFF) is only used if the data has not filled the target after 2 ms, so this does not work like a conventional padding scheme. For the first packet only, that wait is an added latency of up to 2 ms. The plan also looks at the destination port: for ports that usually carry TLS (443 and similar), it covers more packets and draws larger ones more often, on the guess that a TLS handshake is nested insi"
     }
    ],
    "comments": [
+    {
+     "id": 6909013050,
+     "issue": 682,
+     "issue_title": "Egypt: Investigating severe broadband throttling after monthly data caps",
+     "created_at": "2026-11-16T06:19:27Z",
+     "user": "wkrp",
+     "url": "https://github.com/net4people/bbs/issues/682#issuecomment-6909013050",
+     "body": "I'm not caught up with the state of the art, but there is some past research on measuring throttling, and some built-in capability for measuring throttling in OONI Probe. Here are some resources that may give you some help:\n\n* [\"Throttling Twitter: an emerging censorship technique in Russia\"](https://censorbib.nymity.ch/#Xue2021a) (2021)\n* OONI [Throttling measurement methodology](https://github.com/ooni/probe-cli/blob/b5a5b6f0e7868c6e617711a0cb9521afb41c7849/docs/design/dd-007-throttling.md)\n* [Throttling of news media amid Kazakhstan’s 2022 presidential election](https://ooni.org/post/2023-throttling-kz-elections/)\n* [Throttling of Social Media in Türkiye During Protests: An Analysis of OONI Data](https://ooni.org/post/2025-turkiye-throttling-social-media/)\n\nDo you know anything about the nature of how the throttling is implemented? For example, if you run an ICMP echo (ping) test at a high rate while being throttled, does it show higher packet loss, higher round-trip times, or both?\n\nIf the throttling relies on, for example, TCP congestion behavior under packet loss, then there may be possibilities such as using non-TCP protocols."
+    },
     {
      "id": 6893004368,
      "issue": 671,
@@ -45,6 +76,15 @@
      "user": "therealtunge",
      "url": "https://github.com/net4people/bbs/issues/683#issuecomment-6878985233",
      "body": "@wkrp another vibe-coded project\ndo people not read the issues"
+    },
+    {
+     "id": 6858300292,
+     "issue": 158,
+     "issue_title": "在中国Google自动跳转 / Google Auto Jump in China",
+     "created_at": "2026-11-13T16:06:41Z",
+     "user": "LeoYanlv",
+     "url": "https://github.com/net4people/bbs/issues/158#issuecomment-6858300292",
+     "body": "我今天也遇到了这个问题，只要跳转过一次，切换任何国家的ip后，都会跳转到cn/m，除非你访问一次特定的域名 hk ncr才会恢复正常\n\n*I ran into this issue today as well. Once you've been redirected even once, switching to an IP address from any country will cause you to be redirected to cn/m, unless you visit a specific domain, hk ncr, once, at which point it will return to normal.*"
     }
    ]
   },
@@ -108,17 +148,6 @@
      "user": "benerages",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2635",
      "body": "Incomplete pieces kept their full piece-size buffer after a choke, disconnect or request timeout, and piece selection didn't prefer started pieces, so abandoned buffers accumulated (~600 MB/h).\n\n- prefer pieces with data in GetNextBlockToRequest\n- release data of incomplete pieces without requests after 300 s, immediately for stopped torrents\n- clean up stopped and idle complete torrents in status timer\n- keep buffer of completed piece until all fragments are saved\n- InvalidateAllBlocks: recreate blocks of a piece marked complete, so it is downloaded again after hash mismatch or failed save"
-    },
-    {
-     "number": 2633,
-     "title": "libi2pd_client: fix overflows and crashes in i2cp, socks, and sam",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-13T22:56:11Z",
-     "updated_at": "2026-11-13T23:41:06Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2633",
-     "body": ""
     }
    ],
    "comments": [
@@ -199,10 +228,43 @@
      "is_pr": false,
      "state": "closed",
      "created_at": "2026-11-15T10:34:24Z",
-     "updated_at": "2026-11-15T20:26:16Z",
+     "updated_at": "2026-11-16T04:48:53Z",
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/issues/7419",
      "body": "Maintainer 没有权力，全是义务，不如回到 Contributor，串四面八方\n\nfinalmask 已失守（虽然就没想守），hy2 估计也快了\n\n我在这里的所有代码都是手写（部分参考过许多不错的项目 hysteria dnstt wireguard-go wireguard-windows），接连大量的 ai code 入侵下我放弃继续使用 xray，不是说 vibe 不好，是我只信任自己写的\n\n自上位以来接到的全是 feature request，个人能力有限，研究 rust 以及生活琐事都需要时间精力，也没精力实现新的 feature request，伊朗和俄罗斯需要自己的英雄\n\n上次重构给自己写进医院后脾气就有点暴躁，不好意思\n\n就这样吧，加纳"
+    },
+    {
+     "number": 7364,
+     "title": "VLESS: run multiplexing directly on transport",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T12:20:09Z",
+     "updated_at": "2026-11-16T02:52:42Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364",
+     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
+    },
+    {
+     "number": 7427,
+     "title": "TLS handshake timeout",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-16T00:44:07Z",
+     "updated_at": "2026-11-16T00:49:36Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7427",
+     "body": "https://github.com/chromium/chromium/blob/efa6ce2119f432f0eba0d27fab69298c33b3fd25/net/socket/ssl_connect_job.cc#L50\r\n\r\n仅在utls 应用chrome的30s握手超时\r\n\r\n上下文 有部分反馈说tls握手超时(见下面的ref) 感觉遇到了那么三四次那就不好再说罕见情况了（虽然还是挺罕见的）不过对齐chrome行为是没问题的"
+    },
+    {
+     "number": 7426,
+     "title": "XHTTP: bound TLS handshakes on TCP connections",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-15T23:51:21Z",
+     "updated_at": "2026-11-16T00:47:15Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7426",
+     "body": "The ChatGPT desktop app stopped loading workspace settings after an upgrade from one Wayrill version to the next. Restarting Wayrill routing, which restarted Xray, restored access. The traffic log showed the expected policy group, which includes XHTTP over TLS/HTTP/2 outbounds. The app reconnected normally as soon as the next upgrade, to Wayrill 0.37.17 with this patch, finished. The original capture begins after startup, so the evidence for the TLS stall comes from the controlled reproduction below.\n\n## Reproduction and relation to #6590\n\nThe loopback reproduction uses an Xray VLESS/XHTTP client and server with the default three XMUX clients. A TCP relay accepts the first three connections, reads each TLS ClientHello and leaves those sockets open without sending a ServerHello. The relay forwards every new connection to the healthy Xray server. HTTP/2 requests sharing a pending dial keep waiting on the old sockets, even after the original application requests time out. Fresh requests then fail despite a working server being available to fresh dials.\n\nThis is the same stalled handshake reported in #6590. The additional finding is that the failure can persist across application retries after the peer is healthy for new connections. A TCP stack can keep acknowledging probes while the application or an intermediary makes no progress on a particular TLS handshake. The reproduction uses default TCP keepalive settings and injects a transient fault in the relay. [Closing discussion](https://github.com/XTLS/Xray-core/issues/6590#issuecomment-5178980812)\n\n## Fix\n\nStart a ten-second child context once the TCP connection is established, using the same handshake budget as Go's default HTTP transport. Complete standard TLS explicitly and use the same context for uTLS and REALITY. On expiry the stalled handshake ends and releases the socket, so HTTP/2 can retire the shared pending dial and subsequent requests can dial again. The context ends at handshake completion. Established streams continue under the existing HTTP request lifetime, and HTTP/3 uses QUIC's own handshake timeout.\n\n## Validation\n\n- On upstream `main` at `5d17b872`, six fresh requests timed out over 10.5 seconds. The relay saw no new dials. Restarting the client core restored traffic.\n- With the patch, all three stalled sockets closed and a fresh request returned HTTP 200 in the same process. Verified this with Go TLS, uTLS and REALITY over HTTP/2. Also verified that the stalled sockets closed over HTTP/1.1.\n- Verified healthy streams transferred data after 12 seconds in each of those configurations. The XHTTP Go suite passed alongside a local regression covering all three TLS paths against silent peers.\n"
     },
     {
      "number": 7394,
@@ -210,10 +272,21 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-13T13:53:08Z",
-     "updated_at": "2026-11-15T20:18:36Z",
+     "updated_at": "2026-11-16T00:38:56Z",
      "user": "yandujun363",
      "url": "https://github.com/XTLS/Xray-core/issues/7394",
      "body": "> Status: proposal / ready for discussion. Branch: `feat/xmc-yggdrasil-login` (based on `c4561418`), commits `109e8d2c` + `74eb4feb`.\n> 状态：提案，欢迎讨论。分支：`feat/xmc-yggdrasil-login`（基于 `c4561418`），提交 `109e8d2c` + `74eb4feb`。\n\n---\n\n## 中文\n\n### 背景与动机\n\n当前 XMC 的登录认证是自造的：\n\n- 客户端配置里手工填写 `username` / `uuid` / `texturesValue` / `texturesSignature`（需要自己去 Mojang 或皮肤站查 UUID、拉签名材质再复制进配置）；\n- 服务端用预共享 `password`（同时作为 RSA 私钥的派生种子）加静态 `profiles` 白名单校验；\n- Verify Token 尾部追加预共享密码，和 Minecraft 协议本身没有关系。\n\n维护成本高，且无法复用 Minecraft 生态已有的标准在线模式认证（Yggdrasil / authlib-injector / Blessing Skin）。更重要的是，**如果后续要给 MC 模组实现 XMC 服务端**（让真实 MC 客户端或服务端模组走标准 Yggdrasil 登录接入 XMC），预共享密码模型无法对接，因为模组侧只会实现标准的 `authenticate` / `join` / `hasJoined` 流程。\n\n本次改动把 XMC 改成标准 Yggdrasil 登录客户端 + 标准 `hasJoined` 服务端校验，并补上材质签名验证，为后续 MC 模组实现 XMC 服务端铺路，也为 XMC 客户端将来接入真实 MC 服务端打基础。\n\n### 修改内容\n\n涉及文件：\n\n- `transport/internet/finalmask/xmc/yggdrasil.go`（新增：Yggdrasil HTTP 客户端、登录/刷新/join/hasJoined、验签）\n- `transport/internet/finalmask/xmc/client.go`（Yggdrasil 登录、标准 hash、材质验签接入）\n- `transport/internet/finalmask/xmc/server.go`（hasJoined 校验、随机密钥、断连语义）\n- `transport/internet/finalmask/xmc/profile.go`（多 properties 读写、身份/材质比较）\n- `transport/internet/finalmask/xmc/config.go`、`config.proto`、`config.pb.go`\n- `infra/conf/transport_finalmask.go`（`yggdrasil` 配置解析、随机密钥生成、警告输出）\n- 测试：`yggdrasil_test.go`、`profile_test.go`、`handshake_test.go`、`infra/conf/transport_finalmask_xmc_test.go`\n\n#### 1. 配置\n\nXMC `settings` 新增可选的 `yggdrasil` 段：\n\n```json\n{\n  \"type\": \"xmc\",\n  \"settings\": {\n    \"hostname\": \"mc.example.com\",\n    \"yggdrasil\": {\n      \"api\": \"https://skin.example.com/api/yggdrasil\",\n      \"username\": \"user@example.com\",\n      \"password\": \"<skin account password>\",\n      \"player\": \"Steve\"\n    }\n  }\n}\n```\n\n- `api`：Yggdrasil API root（例如 Blessing Skin 的 `/api/yggdrasil`）；\n- `username` / `password`：客户端登录凭据（邮箱或角色名，取决于 API 实现）；\n- `player`：可选；账号有多个角色时必须指定；\n- 服务端只需要 `api`，不需要账号密码。\n\nYggdrasil 模式下顶层 `password` 不再参与握手和密钥派生；旧配置（无 `yggdrasil` 段）行为完全不变。\n\n#### 2. 客户端（client.go / yggdrasil.go）\n\n- 通过 `authserver/authenticate` 登录，多角色时用 `authserver/refresh` 携带 `selectedProfile` 绑定 token；token/clientToken 进程内缓存，`/join` 遇到 403 自动重新登录重试一次。\n- Login Start 使用皮肤站返回的真实角色名和 UUID。\n- 加密协商完成后按原版算法计算 login hash：\n\n  `sha1(serverId + sharedSecret + serverPublicKey)`，并按 Java `BigInteger#toString(16)` 的二进制补码规则渲染（包含负号和去前导零）。\n\n- **使用 Encryption Request 中实际收到的公钥计算哈希，不再固定配置公钥**；Yggdrasil 模式客户端不需要也不应该去“确认公钥”。\n- 用 `accessToken` 真实调用 `sessionserver/session/minecraft/join`。\n- 解析 Login Success 的多个 properties，并用 API root 中的 `signaturePublickey` 校验 `textures` 属性签名：\n  - SHA1withRSA（与 Blessing Skin 的 `openssl_sign` 默认算法、Minecraft 客户端的签名校验一致）；\n  - 支持 PEM / 裸 base64 公钥；\n  - 公钥按账号缓存，验签失败时自动重新拉取一次（覆盖皮肤站轮换密钥）；\n  - `textures` 缺失、无签名、签名不匹配都会拒绝登录；\n  - 校验发生在发送 Login Acknowledged 之前，失败不会进入 play 阶段。\n- Yggdrasil 模式不再往 Verify Token 尾部追加预共享密码，保持和原版客户端一致的报文形状。\n\n#### 3. 服务端（server.go）\n\n- Yggdrasil 模式下每个进程随机生成 1024-bit RSA 密钥对（与原版服务端行为一致），**不再从 password 派生**；\n- 解密共享密钥后，用自己实际持有的公钥计算同一个 login hash，真实调用 `sessionserver/session/minecraft/hasJoined`；\n- 因为客户端 `/join` 与服务端 `/hasJoined` 存在天然竞态，服务端以 200ms 间隔轮询，最长 10s；\n- 校验返回的角色 UUID / 名称必须与 Login Start 一致；\n- Login Success 直接使用 `hasJoined` 返回的已签名 properties（含 `textures`、`uploadableTextures`）；\n- 失败时按原版语义断连：未加入 → `multiplayer.disconnect.unverified_username`，API 异常 → `multiplayer.disconnect.authservers_down`；\n- 未配置 `yggdrasil` 时保留原预共享密码 + `profiles` 白名单逻辑。\n\n#### 4. 安全模型与警告\n\nYggdrasil 模式的安全绑定发生在 Yggdrasil 查询里：中间人两侧分别握手时，客户端提交的 hash 和服务端查询的 hash 必然不同，`hasJoined` 返回空，连接失败；即使不固定服务端公钥也无法完成中间人。\n\n由于这时不再使用预共享密码、也不做密码派生，控制台会在 config 加载时输出一次警告（`errors.LogWarning`）：\n\n```text\nXMC: Yggdrasil mode is enabled. The RSA key pair is generated randomly and \"password\"\nis no longer used to derive it or to authenticate the transport; players are verified\nthrough https://skin.example.com/api/yggdrasil (client /join, server /hasJoined).\nBoth ends must be able to reach the Yggdrasil API. The configured \"password\" is ignored.\n```\n\n### 兼容性\n\n- 不配置 `yggdrasil`：完全保持旧行为（密码派生密钥 + verify to"
+    },
+    {
+     "number": 7422,
+     "title": "Fix: resolve bugs, data races and leaks found by a codebase audit",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-15T14:42:03Z",
+     "updated_at": "2026-11-15T23:53:19Z",
+     "user": "rxzsu",
+     "url": "https://github.com/XTLS/Xray-core/pull/7422",
+     "body": "## Summary\n\nA systematic audit of `proxy/`, `app/`, `transport/` and `common/` (connection lifecycles, UDP relays, protocol frame parsing, hot paths) uncovered ~40 verifiable issues. This PR fixes them in small, contained patches.\n\n## Security\n\n- **shadowsocks_2022 UDP (OOM DoS)**: NAT sessions were created *before* authentication and without any cap (`GetOrCreate` on the raw AES-ECB header). ~10k random pkt/s \\u2192 ~5M live sessions in the 500s window \\u2192 multi-GB heap. Sessions are now created only after the AEAD/EIH check succeeds (`packet.go`, `inbound_multi.go`; `RelayInbound` already validated EIH first and is unchanged).\n- **UDP truncation**: `shadowsocks.EncodeUDPPacket` silently truncated datagrams whose header+payload exceeded 8 KB (unchecked `ErrBufferFull`), and hysteria's UDP writer silently dropped messages that did not fit. Both now return an explicit error; trojan's `writePacket` pre-checks the size with a clear error.\n- **XtlsFilterTls**: the attacker-controlled session-id length could make the cipher-suite read go past the buffer end (stale pool bytes), flipping `EnableXtls` detection. Bounds-checked now.\n- **protocol/address.go**: a zero-length domain (attacker-controlled byte) made `BytesFrom(-0)` return the whole scratch buffer and panic on `domain[0]` \\u2014 and the inbound path has no `recover()`. Now rejected with an error.\n- **observatory**: `GetObservation` handed the shared, concurrently mutated `[]*OutboundStatus` to all balancers; it now returns a snapshot under `statusLock`.\n- **grpc dial**: a failed `grpc.NewClient` stored a nil conn in `globalDialerMap`; the next lookup would panic. Error is now returned before caching.\n\n## Data races (verified with `go test -race`)\n\n- `session.CanSpliceCopy`: written by the downlink task and read by the uplink task (and vice versa); now accessed via `atomic.StoreInt32/LoadInt32` everywhere (47 sites, field documented as atomic-only).\n- `tls.Config`: OCSP/hot-reload tickers replaced certificates in the slice while concurrent handshakes read them, and `isCertificateExpired` mutated the shared `Leaf`. Certificates now live in a small `certificateBundle` guarded by an RWMutex; the OCSP callback swaps in a *copy* of the certificate instead of mutating it; `isCertificateExpired` no longer writes.\n- `common/cache/lru`: `PeekKeyFromValue` read list elements without the lock (race-detector-confirmed, fakedns hot path); `Put` also left a stale `valueToElement` entry when updating an existing key.\n- mux: `x.Status = Active` written without `XUDPManager` lock; hard type assertions in `Session.Close` replaced with a checked one.\n- reverse bridge/portal: worker state fields accessed from monitor/heartbeat/picker goroutines; now atomic.\n- kcp: `rd`/`wd` deadlines written by `SetDeadline` and read by wait loops; now `atomic.Int64` nanoseconds.\n- websocket: `delayDialConn.closed` is atomic now.\n- dns outbound: `c.conn` read outside the lock; captured under the lock.\n- router webhook: `wg.Add(1)` could race with `Close`\\u2019s `wg.Wait()`; Add and the closed check are serialized by a mutex.\n- tests (splithttp, blackhole): unsynchronized test state flagged by `-race` fixed.\n\n## Leaks\n\n- splithttp: quic.Transport + UDP socket leaked on every failed H3 dial (fix mirrors masque/xdrive); pooled HTTP/1.1 upload conns were never closed (tracked and closed on `Close()` and on write/read failure).\n- mux: the picker's periodic cleanup returned an error when idle, which permanently killed the 30s cleanup task.\n- proxyman inbound: `udpWorker.Close()` never closed active UDP sessions (goroutine + pipe per session leaked on every Instance restart).\n- dns: with `serveStale` and no `serveExpiredTTL` the cache cleanup never ran \\u2014 unbounded growth; cleanup now always runs and evicts entries stale for more than 24h.\n- wireguard: device leaked if `IpcSet`/`Up` failed in `Start()`.\n- vless: `GetReverse` waited forever for outbound handlers (now bounded, 10s); `testpre` goroutines hot-looped"
     },
     {
      "number": 7425,
@@ -225,17 +298,6 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7425",
      "body": "重写 Lua 文档的时候被迫写了下面加粗的这段，觉得十分不科学，应该把它做成和 targetStrategy 一样防环，没有大的副作用。各出站的行为也比较统一。\n\n> ::: warning 循环依赖\n任意查询交给内置 DNS 模块处理时，若选中 DNS 服务器的 `address` 不含 `+local`，则到该服务器的连接会交给路由。若 `address` 是域名，路由脚本可能再次调用内置 DNS 解析它。新的查询可能按 DNS 和路由规则顺利完成，也可能经过多个 DNS 服务器和出站，重新依赖尚未完成的解析，形成死循环。\n\n> 为避免这种潜在的循环依赖，DNS 模块会将自身发起的所有连接标记为 `skipDNSResolve = true`。核心原生的路由模块不检查是否真的成环，而是据此标记简单粗暴地跳过 DNS 解析，直接杜绝成环可能；请求随后继续匹配其余规则并交给出站。Lua 脚本需要自行处理该标记，建议同样跳过解析，也可以按需扩展处理方式。\n\n> **Freedom 出站不会检查 `skipDNSResolve`。若脚本将这类连接交给它，且其 `sockopt.domainStrategy` 非 `AsIs`，就会再次调用内置 DNS 解析该域名。路由脚本无法干预出站的解析，需另行规避，不再赘述；其他出站的 `targetStrategy` 会像路由一样检查该标记跳过解析以避免成环。**\n\n> 其他出站也有另一种成环路径。若代理出站的服务器地址为域名，且 `sockopt.domainStrategy` 非 `AsIs`，出站就会调用内置 DNS 解析该地址。例如，出站 A 依赖 DNS A 的解析结果，而 DNS A 的查询又被送回出站 A，就会形成死循环；也可能先送到出站 B，再因解析 B 的服务器地址而回到 DNS A，形成更长的依赖链。这些出站与 DNS 之间的循环与路由脚本无关，需另行规避，此处不再赘述。"
-    },
-    {
-     "number": 7364,
-     "title": "VLESS: run multiplexing directly on transport",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-10T12:20:09Z",
-     "updated_at": "2026-11-15T18:43:26Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364",
-     "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
     },
     {
      "number": 7424,
@@ -302,17 +364,6 @@
      "user": "yandujun363",
      "url": "https://github.com/XTLS/Xray-core/pull/7423",
      "body": "Draft: stacked on #7402, whose padding-frame and compression commits are included in this branch. After #7402 merges I will rebase onto `main` and the diff here reduces to one commit (`0ec2360c`).\n\nFollow-up to #7402 and to [the remaining items in this comment](https://github.com/XTLS/Xray-core/pull/7402#issuecomment-6886742322).\n\n## Padding pauses are cancellable and bounded\n\nA padding turn can configure a pause, and the schedule used to `time.Sleep` through it:\na connection closed during a pause kept its handshake goroutine asleep, and a schedule whose pauses add up to more than the two-minute handshake deadline could never complete. A configuration could also declare any number of turns.\n\n- Padding pauses are now timers that also watch a per-connection `done` channel, which `Close` closes. Closing a connection stops the schedule immediately.\n- A configured schedule is rejected at build time when it has more than 256 turns, more than 64 MiB of turns in total, or more than the handshake timeout minus ten seconds of pauses in total. These bounds are far above the captured preset (39 turns, about 1.1 MiB of server-to-client turns, about 200 ms of pauses).\n- `delay` range semantics, which the comment asked to confirm: the side that sends a turn samples `[delay_min, delay_max]` and pauses that long after its own turn, so the jitter is on the sender's side; the peer only knows `delay_min` and pauses that long before its next own turn. The proto comment now says this explicitly.\n\n## Padding can be disabled explicitly\n\n`paddings: []` still meant \"use the preset\", with no way to turn padding off. Now:\n\n- an absent `paddings` keeps the built-in preset;\n- an explicit empty `paddings` array disables padding (the new `no_padding` proto field carries that across the wire, because an unset repeated field cannot express it);\n- `\"noPadding\": true` does the same in JSON, and combining it with a non-empty `paddings` is a configuration error.\n\n## Not changed here\n\n- **Custom `paddings` replace the whole preset, including the Play-state tail.** This is a policy decision: either the array is the complete schedule (today), or the tail stays and the array only replaces the startup turns. I would keep today's behavior, because a user who captured their own login is the one who should decide the tail.\n- **Early-arrival detection.** This became impossible to observe here: since #7402 the receiver does not read padding, so it has nothing to compare against the expected turn. The equivalent safeguard is the pause bound above, which keeps a stalled peer inside the handshake deadline.\n\n## Tests\n\n```text\ngo test -count=1 ./transport/internet/finalmask/xmc ./infra/conf\ngo test -count=1 ./transport/internet/finalmask/...\ngo build -o /tmp/xray ./main\ngo run ./infra/vformat -pwd . -mode check\ngo run ./infra/vprotogen -pwd . -mode check\n```\n\nNew coverage: pauses return on `Close` (both the runner and a real `clientConn`), the three schedule limits, disabled padding (absent vs empty array vs `noPadding`, plus the conflict), and an end-to-end run with `paddings: []` on both ends.\n\nThis PR was produced with AI assistance (DeepSeek Harness).\n"
-    },
-    {
-     "number": 7422,
-     "title": "Fix: resolve bugs, data races and leaks found by a codebase audit",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-15T14:42:03Z",
-     "updated_at": "2026-11-15T14:42:03Z",
-     "user": "rxzsu",
-     "url": "https://github.com/XTLS/Xray-core/pull/7422",
-     "body": "## Summary\n\nA systematic audit of `proxy/`, `app/`, `transport/` and `common/` (connection lifecycles, UDP relays, protocol frame parsing, hot paths) uncovered ~40 verifiable issues. This PR fixes them in small, contained patches.\n\n## Security\n\n- **shadowsocks_2022 UDP (OOM DoS)**: NAT sessions were created *before* authentication and without any cap (`GetOrCreate` on the raw AES-ECB header). ~10k random pkt/s \\u2192 ~5M live sessions in the 500s window \\u2192 multi-GB heap. Sessions are now created only after the AEAD/EIH check succeeds (`packet.go`, `inbound_multi.go`; `RelayInbound` already validated EIH first and is unchanged).\n- **UDP truncation**: `shadowsocks.EncodeUDPPacket` silently truncated datagrams whose header+payload exceeded 8 KB (unchecked `ErrBufferFull`), and hysteria's UDP writer silently dropped messages that did not fit. Both now return an explicit error; trojan's `writePacket` pre-checks the size with a clear error.\n- **XtlsFilterTls**: the attacker-controlled session-id length could make the cipher-suite read go past the buffer end (stale pool bytes), flipping `EnableXtls` detection. Bounds-checked now.\n- **protocol/address.go**: a zero-length domain (attacker-controlled byte) made `BytesFrom(-0)` return the whole scratch buffer and panic on `domain[0]` \\u2014 and the inbound path has no `recover()`. Now rejected with an error.\n- **observatory**: `GetObservation` handed the shared, concurrently mutated `[]*OutboundStatus` to all balancers; it now returns a snapshot under `statusLock`.\n- **grpc dial**: a failed `grpc.NewClient` stored a nil conn in `globalDialerMap`; the next lookup would panic. Error is now returned before caching.\n\n## Data races (verified with `go test -race`)\n\n- `session.CanSpliceCopy`: written by the downlink task and read by the uplink task (and vice versa); now accessed via `atomic.StoreInt32/LoadInt32` everywhere (47 sites, field documented as atomic-only).\n- `tls.Config`: OCSP/hot-reload tickers replaced certificates in the slice while concurrent handshakes read them, and `isCertificateExpired` mutated the shared `Leaf`. Certificates now live in a small `certificateBundle` guarded by an RWMutex; the OCSP callback swaps in a *copy* of the certificate instead of mutating it; `isCertificateExpired` no longer writes.\n- `common/cache/lru`: `PeekKeyFromValue` read list elements without the lock (race-detector-confirmed, fakedns hot path); `Put` also left a stale `valueToElement` entry when updating an existing key.\n- mux: `x.Status = Active` written without `XUDPManager` lock; hard type assertions in `Session.Close` replaced with a checked one.\n- reverse bridge/portal: worker state fields accessed from monitor/heartbeat/picker goroutines; now atomic.\n- kcp: `rd`/`wd` deadlines written by `SetDeadline` and read by wait loops; now `atomic.Int64` nanoseconds.\n- websocket: `delayDialConn.closed` is atomic now.\n- dns outbound: `c.conn` read outside the lock; captured under the lock.\n- router webhook: `wg.Add(1)` could race with `Close`\\u2019s `wg.Wait()`; Add and the closed check are serialized by a mutex.\n- tests (splithttp, blackhole): unsynchronized test state flagged by `-race` fixed.\n\n## Leaks\n\n- splithttp: quic.Transport + UDP socket leaked on every failed H3 dial (fix mirrors masque/xdrive); pooled HTTP/1.1 upload conns were never closed (tracked and closed on `Close()` and on write/read failure).\n- mux: the picker's periodic cleanup returned an error when idle, which permanently killed the 30s cleanup task.\n- proxyman inbound: `udpWorker.Close()` never closed active UDP sessions (goroutine + pipe per session leaked on every Instance restart).\n- dns: with `serveStale` and no `serveExpiredTTL` the cache cleanup never ran \\u2014 unbounded growth; cleanup now always runs and evicts entries stale for more than 24h.\n- wireguard: device leaked if `IpcSet`/`Up` failed in `Start()`.\n- vless: `GetReverse` waited forever for outbound handlers (now bounded, 10s); `testpre` goroutines hot-looped"
     },
     {
      "number": 7391,
@@ -1105,31 +1156,108 @@
      "user": "Shm1ks",
      "url": "https://github.com/XTLS/Xray-core/pull/7399",
      "body": "Изменения"
-    },
-    {
-     "number": 7397,
-     "title": "XHTTP/3 inbound: the default of 100 QUIC streams per connection stalls packet-up uploads",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-14T04:36:44Z",
-     "updated_at": "2026-11-14T04:36:44Z",
-     "user": "AlenHay",
-     "url": "https://github.com/XTLS/Xray-core/issues/7397",
-     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nAn XHTTP/3 inbound passes `quicParams.maxIncomingStreams` to quic-go unchanged (`transport/internet/splithttp/hub.go:494` on main). When it is not set, quic-go's default applies: 100 bidirectional streams per connection.\n\nEvery XHTTP session keeps one stream open for its whole life, and in packet-up each upload request needs one more. Once a QUIC connection carries 100 sessions, no session on it can upload any more, including the ones that had been working. In stream-one the existing sessions keep working and only new ones wait.\n\nResults with the official v26.11.9 binary, loopback, using the configs below. The client is limited to one connection (`xmux.maxConnections: 1`) only to keep the test small:\n\n| Case | Result |\n|---|---|\n| packet-up over h3 | session 100 gets no reply; sessions 1, 2 and 50, opened earlier, get no reply when they send again |\n| stream-one over h3 (same configs, `mode` changed) | session 101 gets no reply; sessions 1, 2 and 50 still get replies |\n| packet-up over h2 (same configs, ALPN changed) | all 110 sessions get replies |\n| packet-up over h3, server with `finalmask.quicParams.maxIncomingStreams: 4096` | all 110 sessions get replies |\n\nWith the client's default XMUX settings (no `xmux` in the config, so 3 connections), tested on main at c4561418: sessions that send one request and then stay open reached the first failure at session 254, 259 and 289 in three runs, and 99 sessions that had been working could no longer upload. Sessions that each sent 12 requests before going idle did not reach it within 700 sessions, because the client retires a connection after 600 to 900 requests.\n\nHTTP/2 inbounds are not affected: at the server's stream limit the client opens another TCP connection.\n\nA possible fix is a large default when the value is not set. With this change on main, 400 sessions with default client settings all kept working:\n\n```diff\n--- a/transport/internet/splithttp/hub.go\n+++ b/transport/internet/splithttp/hub.go\n@@ -495,6 +495,12 @@\n \t\t\tDisablePathMTUDiscovery:        quicParams.DisablePathMtuDiscovery || (runtime.GOOS != \"linux\" && runtime.GOOS != \"windows\" && runtime.GOOS != \"darwin\"),\n \t\t}\n \n+\t\tif quicConfig.MaxIncomingStreams == 0 {\n+\t\t\t// quic-go's default of 100 is per connection, and every session holds one stream for its\n+\t\t\t// whole lifetime, while packet-up needs one more stream for each upload request.\n+\t\t\tquicConfig.MaxIncomingStreams = 1 << 16\n+\t\t}\n+\n \t\tvar k *quic.StatelessResetKey\n \t\tif !quicParams.DisableStatelessReset {\n \t\t\tk = &quic.StatelessResetKey{}\n```\n\nPrepared with the assistance of Claude (Anthropic). Every result above comes from a run described here.\n\n### Reproduction Method\n\n1. Start the server and the client with the configs below (official v26.11.9 `Xray-linux-64`).\n2. Run this script. It starts an echo server on 127.0.0.1:9002, opens connections one by one through the client's dokodemo-door inbound, sends `ping` on each and keeps them all open.\n\n```python\nimport socket, threading\n\ndef echo_server():\n    s = socket.create_server((\"127.0.0.1\", 9002))\n    while True:\n        c, _ = s.accept()\n        threading.Thread(target=lambda c=c: [c.sendall(d) for d in iter(lambda: c.recv(65536), b\"\")], daemon=True).start()\n\ndef ping(c, timeout):\n    c.settimeout(timeout)\n    c.sendall(b\"ping\")\n    try:\n        return c.recv(4) == b\"ping\"\n    except socket.timeout:\n        return False\n\nthreading.Thread"
-    },
-    {
-     "number": 6802,
-     "title": "HTTPUpgrade client: Close connection to server on early returns",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-09-22T21:30:17Z",
-     "updated_at": "2026-11-14T01:04:59Z",
-     "user": "JorikSmith",
-     "url": "https://github.com/XTLS/Xray-core/pull/6802",
-     "body": "dialhttpUpgrade() dials server, then returns early in three places\r\nwithout closing that connection\r\n-utls handshake fails\r\n-request write fails\r\n-reply is not 101 switching protocols\r\n\r\non these paths nothing is handed to the caller, so nobody can close it\r\nand it stays open until GC finalizer runs\r\n\r\nthird case is the common one, a wrong path or a cdn error page leaks one\r\nsocket per dial attempt\r\n\r\ntested against local server answering 404, GC turned off (50 failed)\r\ndials leak 50 sockets before this patch, 0 after\r\n\r\nsetUpHTTPTunnel() in proxy/http/client.go closes raw connection on its\r\nearly returns same way"
     }
    ],
    "comments": [
+    {
+     "id": 6907616077,
+     "issue": 7419,
+     "issue_title": "Leave Team",
+     "created_at": "2026-11-16T04:48:53Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6907616077",
+     "body": "README 除了上述问题外，一是它缺乏项目介绍、安全设计介绍，~~我看过有个完全不接触 Xray 的人说这项目是干啥的，顺便有些协议缺 SPEC~~\n\n二是对于生态项目的收录和移除还没把规矩立住 https://github.com/XTLS/Xray-core/pull/6219#issuecomment-4588028052 毕竟有很多三无 AI 项目申请收录，还需要规定项目几个月不活跃会被移除\n\n三是有很多本该开 issue 的开到 Security Advisories 那边了，需要更详细地规定标准，目前绝大多数都够不上，~~另外那个 star chart 似乎该换了~~"
+    },
+    {
+     "id": 6907278358,
+     "issue": 7419,
+     "issue_title": "Leave Team",
+     "created_at": "2026-11-16T04:24:47Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6907278358",
+     "body": "~~总之现在我一天天的转战 N 个功能点确实也有点燃尽了，脑子里面同时装的事情太多，昨晚那条消息还想说点啥结果吃个饭然后又处理些[其它事情](https://github.com/XTLS/BBS/issues/52#issuecomment-6899820426)再回来接着写就不确定有没有覆盖全了，可能覆盖全了吧但心里就是不爽，[近期第二次发生这种事了](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6881728264)，没那大运存就别学 CPU 切换上下文~~\n\n关于我说的问题，总不能有人一下子开几十个 AI PR 我们也去 review 吧，那还有时间干别的吗，~~所以应该先把 AI coding 规矩立住，路才能~~：\n\n- 修复问题的 PR，需要解决了确实在生产环境中遇到的问题，尤其是需要有人先开了 issue ~~或自己开，不要搞虚空修复，[风扇刚又关了一个](https://github.com/XTLS/Xray-core/pull/7422)~~\n- 新功能的 PR，需告知 AI 先去理解的已有代码的架构、设计思路，不动基础架构和组件，且每轮对话都回头审视前面的修改是否还有必要\n- 重构的 PR，代码量肯定必须比原有的更少、新架构需要更直观、好理解，必须充分测试新旧版本互连，~~最近依旧在清理 *ray 的历史包袱~~\n\n@Meo597 你看看是否合适，可以对 README 开个 PR 说清楚规则，~~README 也该重构了，[之前 int() 想给人类立规矩](https://github.com/XTLS/Xray-core/pull/7155#issuecomment-6208455069)，这下先给 AI 立规矩了~~\n\n~~AI 应当成为建设 core 的助力而非吞噬我们的时间精力，不过我不确定要不要开 AI review，主要是 PR 本来就是 AI 文本，已经不想阅读更多了~~"
+    },
+    {
+     "id": 6905971232,
+     "issue": 7419,
+     "issue_title": "Leave Team",
+     "created_at": "2026-11-16T02:53:44Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6905971232",
+     "body": "~~动了不该动的代码就该及时纠正它了，比如 https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6882713292~~"
+    },
+    {
+     "id": 6905957024,
+     "issue": 7364,
+     "issue_title": "VLESS: run multiplexing directly on transport",
+     "created_at": "2026-11-16T02:52:42Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-6905957024",
+     "body": "app/dispatcher/default.go 的改动似乎不是必要的\r\n\r\nVMess 改复杂了，参考 https://github.com/XTLS/Xray-core/pull/5143/changes#diff-4815d3b469b7be42869dce6b936042aabb01f4501c8ca86f0483629ca9644557"
+    },
+    {
+     "id": 6904233007,
+     "issue": 7426,
+     "issue_title": "XHTTP: bound TLS handshakes on TCP connections",
+     "created_at": "2026-11-16T00:47:15Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7426#issuecomment-6904233007",
+     "body": "#7427 改成30s了\r\n我找了一下之前包括我自己设计过的方案都不太理想 chrome这里似乎默认30秒 那就30吧有理有据"
+    },
+    {
+     "id": 6904127008,
+     "issue": 7426,
+     "issue_title": "XHTTP: bound TLS handshakes on TCP connections",
+     "created_at": "2026-11-16T00:39:37Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7426#issuecomment-6904127008",
+     "body": "让我想想 也许把类似的代码插到更合适的地方"
+    },
+    {
+     "id": 6904117583,
+     "issue": 7394,
+     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
+     "created_at": "2026-11-16T00:38:56Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6904117583",
+     "body": "所以 #7402 可以合了吗\n因为我思考了一下还有处理\n - [ ] 等 #7423 合并\n - [ ] 开一个拆分客户端和服务端配置,类似header-custom的servers和clients，方便区分\n - [ ] 优化填充功能、允许自定义通道名称、添加连续填充伪装区块同步\n\n所以 #7416 再等等"
+    },
+    {
+     "id": 6903951084,
+     "issue": 7419,
+     "issue_title": "Leave Team",
+     "created_at": "2026-11-16T00:27:04Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6903951084",
+     "body": "根据我高强度 vibe 经验\n哪怕是 GPT-6 Astra Ultra 写的代码也没法看\n肯定是能编译能 work 但后面一定会成为屎山\n\n尤其是不能让 AI 动架构，这太看打字员水平了\n特别是 *ray 历史包袱较重，不经历几个小时的 battle 根本得不到正确结果\n\n放任下去最后没有人类愿意 review\n不是控制权问题，是没有人类熟悉这些代码，只能放任 AI 瞎改\n最后终将变成 AI 乐园，碰一点炸一片，一行都改不了"
+    },
+    {
+     "id": 6903817816,
+     "issue": 7426,
+     "issue_title": "XHTTP: bound TLS handshakes on TCP connections",
+     "created_at": "2026-11-16T00:17:50Z",
+     "user": "eliotcougar",
+     "url": "https://github.com/XTLS/Xray-core/pull/7426#issuecomment-6903817816",
+     "body": "> 我一直不想加这些tls timeout原因是所有传输基本都是这么写 给一个开小灶很麻烦的 底层默认的timeout比较长 不太讨好用户眼球(断几秒钟就快速自愈)但就是这么设计的 \r\n\r\nChrome works, most other apps also work, ChatGPT does not for some reason... It just acts as if there is no connectivity until I restart xray service...\r\n\r\nNow that I saw it in my own app, it probably explains strange outages on mobile where ChatGPT also stopped working intermittently (usually during network hand-over) and required either a full ChatGPT app restart, or xray service restart in v2rayNG… I'll have to check that..."
+    },
+    {
+     "id": 6903697162,
+     "issue": 7426,
+     "issue_title": "XHTTP: bound TLS handshakes on TCP connections",
+     "created_at": "2026-11-16T00:09:41Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7426#issuecomment-6903697162",
+     "body": "我一直不想加这些tls timeout原因是所有传输基本都是这么写 给一个开小灶很麻烦的 底层默认的timeout比较长 不太讨好用户眼球(断几秒钟就快速自愈)但就是这么设计的\r\n<img width=\"529\" height=\"227\" alt=\"image\" src=\"https://github.com/user-attachments/assets/84c991a9-590f-479e-b959-394d83c1395d\" />\r\n"
+    },
+    {
+     "id": 6903483861,
+     "issue": 7422,
+     "issue_title": "Fix: resolve bugs, data races and leaks found by a codebase audit",
+     "created_at": "2026-11-15T23:53:19Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7422#issuecomment-6903483861",
+     "body": "。。"
+    },
     {
      "id": 6900822011,
      "issue": 7419,
@@ -1137,7 +1265,7 @@
      "created_at": "2026-11-15T20:26:16Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6900822011",
-     "body": "Rust 转译版本主要是为了 Xray 官方客户端（通用网络管理工具，core 已经在朝着这个方向演进，比如 TUN 入站的 `autoSystemWfpBlockLeak`、Direct 出站的 `firewall` 等）在 iOS 上的性能表现，不过目前对于这两件事、以及想做的更多事我都没空（虽然有很宏大的规划，比如前文提到的 NEXT 架构，有 GUI 后还能可视化编辑，说起 GUI 更是能管理服务端等别的机器上的 Xray，都是五六年前在 Project X 群说过的，~~列不完了先打住~~），因为 AI 同时也带来了 PR 泛滥的问题，比如前几天我说 v26.11.9 版本发布后突然多了十几个 PR 真是令人绷不住，本来推进一些协议主线、core 功能支线就很占时间了，还要处理一堆目标随机、不一定对的 PR 真是离谱，~~要不以后只合解决了 issue 的~~，我也尝试过连续几天把时间都耗在 Xray 上面，~~结果就是只要我处理的速度够快就不怕没有新 PR，处理速度越快新 PR 越多，所以我说这里的事情就是个无底洞~~\n\n就很感慨，之前有个俄罗斯人还是伊朗人在 issue 中说 Xray 的这些技术/一举一动如今有多么重要什么的有点给我看沉默了，~~不知不觉间咋就责任重于泰山，简直是生命难以承受之重~~，我感觉如今这项目的体量和生态和责任大大超出预想了，~~或许我也该开始用 AI 来处理一些琐碎事情了~~"
+     "body": "Rust 转译版本主要是为了 Xray 官方客户端（通用网络管理工具，core 已经在朝着这个方向演进，比如 TUN 入站的 `autoSystemWfpBlockLeak`、Direct 出站的 `firewall` 等）在 iOS 上的性能表现，不过目前对于这两件事、以及想做的更多事我都没空（虽然有很宏大的规划，比如前文提到的 NEXT 架构，有 GUI 后还能可视化编辑，说起 GUI 更是能管理服务端等别的机器上的 Xray，都是五六年前在 Project X 群说过的，~~列不完了先打住~~），因为 AI 同时也带来了 PR 泛滥的问题，[比如前几天我说 v26.11.9 版本发布后突然多了十几个 PR 真是令人绷不住](https://github.com/XTLS/Xray-core/pull/5824#issuecomment-6793948703)，本来推进一些协议主线、core 功能支线就很占时间了，还要处理一堆目标随机、不一定对的 PR 真是离谱，~~要不以后只合解决了 issue 的~~，我也尝试过连续几天把时间都耗在 Xray 上面，~~结果就是只要我处理的速度够快就不怕没有新 PR，处理速度越快新 PR 越多，所以我说这里的事情就是个无底洞~~\n\n就很感慨，之前有个俄罗斯人还是伊朗人在 issue 中说 Xray 的这些技术/一举一动如今有多么重要什么的有点给我看沉默了，~~不知不觉间咋就责任重于泰山，简直是生命难以承受之重~~，我感觉如今这项目的体量和生态和责任大大超出预想了，~~或许我也该开始用 AI 来处理一些琐碎事情了~~"
     },
     {
      "id": 6900704281,
@@ -1903,38 +2031,33 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6876480694",
      "body": "@spr334-a 很少上线，那就由你来接手 XMC 吧，这两天我会合并那个 PR，然后你开始 PR 就行"
-    },
-    {
-     "id": 6872749132,
-     "issue": 7394,
-     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
-     "created_at": "2026-11-14T05:59:00Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6872749132",
-     "body": "> > 我可以先把上一个 PR 合并了然后你先开个 PR 完成 [#6769 (comment)](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421) ，没有问题吧？\n> \n> 我这边研究一下看看吧\n\n@RPRX 改了  \n目前在https://github.com/yandujun363/Xray-core/commit/bc39c4762dd180ec53a96301a52a8beb618f4ed9\n你看看有没有什么问题，没问题我再开接手，顺带目前这个PR还有一些问题\n\n>1. **延迟不可取消，且没有实际上限** `runPaddingSchedule` 用 `time.Sleep`，不响应连接 Close、handshake deadline 或 context。现在 delay 可由配置决定，最坏可到 `time.Duration` 上限附近（约 292 年）；连接关闭后 handshake goroutine 仍会睡到延迟结束才退出。建议后续改成可被 close/deadline 打断的 timer，或加一个合理上限。\n>2. **自定义 `paddings` 是整体替换，不是只调“启动段”** 省略 `paddings` 用 40 轮 preset；一旦配置，4 个 turn 就替代了全部 40 轮，包括后面 33 轮 join 尾段和 preset 的 chunk/write boundary。README 已写 “replaces”，但 PR 描述容易让人以为只是改启动长度；需要确认这是否是维护者本意。\n>3. **交替方向上，delay 的 max 不一定体现在线上** receiver 只等 `min`；下一条 turn 若是对方发送，对方在 `min` 后即可发出。sender 随机到的 `>min` 只推迟它自己的下一步（读或发），不会让对端等到那个随机值。若期望线上间隔在 `[min,max]` 内抖动，这种两端无同步的随机是不可实现的；需要确认维护者只是要“至少 min”。\n>4. **没有 turn 数量 / 总 padding 字节上限** 每轮最大 8 MiB，但数组长度不限；误配可以产生数 GB 的握手数据或极长握手。配置是本地可信的，风险较低，但可考虑加总字节或轮数上限。\n>5. **`paddings: []` 无法关闭 padding** `len(paddings)==0` 会回落到 preset（原 README 也这么写）；如果用户想“完全不 padding”，目前做不到。是否提供显式关闭选项需要确认。\n>6. **没有“早到”检测** 当前实现是“等 min 后再读/发”，不是“如果对端在 min 之前到达就失败”。若维护者说的“检查下一个 padding 是否到达”包含早到即报错，需要额外的 deadline/探测机制，目前没有。\n>7. **PR 正文/示例已过时** 正文仍写 `padding`（单数）、没有 `delay`；开新 PR 时需要同步更新为 `paddings` + delay string 的示例。\n>8. **原 int delay 的溢出隐患**（已在我们这次修改中消掉） 原代码只检查 `Delay < 0`，然后 `int(turn.Delay)` 和 `time.Duration(...) * time.Millisecond`；在 32 位平台会截断，在 64 位大值会溢出，可能变成负 sleep 或错误时长。现在改为 `delay_min/delay_max` 并做上限校验。\n>9. **原实现 receiver 完全不等待**（已按维护者要求修掉） 交替方向上，下一条 padding 可能立即被发出，delay 实际只影响发送方自己的读时间。\n>10. **原实现最后一个 turn 也会 sleep**（已修掉） 最后一轮若由本端发送，会额外拖慢进入 proxy 的时间；现在两端都忽略最后一轮的 delay。\n>11. **原 PR 没有 delay 时序测试**（已补） 新增 `TestPaddingScheduleDelayUsesSenderRangeAndReceiverMinimum`，覆盖 sender 随机区间、receiver 等 min、最后一轮不等待。\n\n这边修改由deepseek-harness+deepseek-v4.1-flash处理\n\n\n"
-    },
-    {
-     "id": 6871698979,
-     "issue": 7394,
-     "issue_title": "[Feature] XMC: Yggdrasil third-party login + texture signature verification / XMC 支持 Yggdrasil 第三方登录与材质签名验证",
-     "created_at": "2026-11-14T04:28:04Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7394#issuecomment-6871698979",
-     "body": "> 我可以先把上一个 PR 合并了然后你先开个 PR 完成 [#6769 (comment)](https://github.com/XTLS/Xray-core/pull/6769#issuecomment-6117945421) ，没有问题吧？\n\n我这边研究一下看看吧"
-    },
-    {
-     "id": 6869031071,
-     "issue": 6802,
-     "issue_title": "HTTPUpgrade client: Close connection to server on early returns",
-     "created_at": "2026-11-14T01:04:59Z",
-     "user": "mengyuefeitian",
-     "url": "https://github.com/XTLS/Xray-core/pull/6802#issuecomment-6869031071",
-     "body": "这个问题解决了吗，我的客户端也是无法连接服务器了啊，小火箭正常"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3078,
+     "title": "Сlient 5.0.1.5 gets cached after SLEEP or HIBERNATION",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-08-28T10:13:10Z",
+     "updated_at": "2026-11-16T04:03:08Z",
+     "user": "Henry-White",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3078",
+     "body": "After the computer enters SLEEP or HIBERNATION, the client gets cached, while the tune2socks interface remains active and has to be killed manually (otherwise the client will not restart).\n\nWindows 11\n5.0.1.5"
+    },
+    {
+     "number": 3476,
+     "title": "fix: run deploy jobs when prebuilt baking is skipped",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-16T03:30:22Z",
+     "updated_at": "2026-11-16T03:30:34Z",
+     "user": "vkamn",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3476",
+     "body": ""
+    },
     {
      "number": 3277,
      "title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
@@ -5029,6 +5152,15 @@
    ],
    "comments": [
     {
+     "id": 6906928053,
+     "issue": 3078,
+     "issue_title": "Сlient 5.0.1.5 gets cached after SLEEP or HIBERNATION",
+     "created_at": "2026-11-16T04:03:08Z",
+     "user": "left-winger502",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3078#issuecomment-6906928053",
+     "body": "Persist in 5.1.0.6, so annoying. Probably related to https://github.com/amnezia-vpn/amnezia-client/issues/3146"
+    },
+    {
      "id": 6902010498,
      "issue": 3277,
      "issue_title": "[Windows 11 26H2] Built-in AmneziaWG fails with WSAEFAULT, while standalone AmneziaWG 3.1.0 works",
@@ -7502,15 +7634,6 @@
      "user": "vasmarfas",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3216#issuecomment-6877418146",
      "body": "+1 here"
-    },
-    {
-     "id": 6870331836,
-     "issue": 3448,
-     "issue_title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
-     "created_at": "2026-11-14T02:37:59Z",
-     "user": "stufently",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3448#issuecomment-6870331836",
-     "body": "Почти Все крупные провайдеры где можно так делать уже в целом забанеены всеми своими подсетями а не по каждому айпи.\nА у мелких там обычно на месяц надо брать, так что разоришься\nну всем выдал персональные впны , пока все работает не банит , все сидят и с компа и с мобилы , видимо тут важно не превышать какие то лимиты , а в одного сложно их превысить\nда через что угодно в целом мне кажется это безразницы\n"
     }
    ]
   },

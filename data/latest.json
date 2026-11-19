@@ -1,9 +1,20 @@
 {
- "generated_at": "2026-11-18T20:30:12Z",
- "since": "2026-11-16T20:30:12Z",
+ "generated_at": "2026-11-19T02:34:04Z",
+ "since": "2026-11-17T02:34:04Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 686,
+     "title": "Iraq and Jordan block Telegram (16 Nov 2026): OONI measurements",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-19T01:36:15Z",
+     "updated_at": "2026-11-19T01:36:15Z",
+     "user": "Courier-Britva",
+     "url": "https://github.com/net4people/bbs/issues/686",
+     "body": "On 16 November 2026 the Iraqi government ordered Telegram blocked nationwide; Jordan blocked it the same days.\n\nOONI Probe `telegram` tests show the switch clearly (daily tests with anomalies / all tests):\n\n| Date (UTC) | Iraq | Jordan |\n| --- | --- | --- |\n| 10–14 Nov | 0–2 of 67–80 per day | 0 of 1–8 per day |\n| 15 Nov | 0 of 74 | 7 of 13 |\n| 16 Nov | 33 of 72 | 11 of 11 |\n| 17 Nov | 55 of 55 | 15 of 15 |\n\nWhatsApp and Signal in Iraq stay at the baseline over the same week (3 anomalies of ~500 tests each).\n\nIraq has blocked Telegram before, in August 2023 and in April–May 2026. The Kurdistan Region's ministry said it had received no federal notice this time (Shafaq News).\n\nDaily numbers per country and per app: https://tgscope.io/access-radar/telegram/iraq (built on OONI data).\n\nNews: [Kurdistan24](https://www.kurdistan24.net/en/story/953424/iraqi-government-orders-telegram-ban-over-regulatory-violations), [Al-Monitor](https://www.al-monitor.com/originals/2026/11/jordan-and-iraq-block-telegram-app-over-national-security-concerns), [Shafaq News](https://shafaq.com/en/Kurdistan/KRG-ministry-receives-no-federal-notice-on-Telegram-ban).\n"
+    },
     {
      "number": 685,
      "title": "udp obfuscation on SXT-Lite Mikrotic  to pass iran dpi",
@@ -41,10 +52,32 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-11-18T18:56:14Z",
-     "updated_at": "2026-11-18T19:35:37Z",
+     "updated_at": "2026-11-19T02:00:54Z",
      "user": "ngosang",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2638",
      "body": "**Version:** 3.0.0 (docker `purplei2p/i2pd:release-3.0.0`). The relevant code is unchanged in `openssl` HEAD.\n\n### Context\n\nI'm writing a SAM client that checks **BitTorrent UDP trackers on I2P** (`udp://tracker.i2p:6969/announce` style URLs, supported by I2PSnark since 2.10.0 and by the new i2pd torrents tunnel). The protocol is [BEP 15](https://www.bittorrent.org/beps/bep_0015.html) adapted to I2P by [Prop. 160](https://geti2p.net/spec/proposals/160-udp-trackers) / [udp-announces spec](https://geti2p.net/spec/udp-announces):\n\n| Step | Message | Must be sent as |\n|---|---|---|\n| 1 | Connect request (client -> tracker) | Datagram2 (protocol 19) |\n| 2 | Connect response (tracker -> client) | Raw (protocol 18) |\n| 3 | Announce request (client -> tracker), using the `connection_id` from step 2 | Datagram3 (protocol 20) |\n| 4 | Announce response (tracker -> client) | Raw (protocol 18) |\n\nSteps 1 and 3 must come from **the same destination**, because the tracker binds the `connection_id` to the sender hash. So the client needs a MASTER session with a DATAGRAM2 subsession, a DATAGRAM3 subsession and a RAW subsession.\n\n### Steps to reproduce\n\n```\nHELLO VERSION MIN=3.0 MAX=3.3\nSESSION CREATE STYLE=MASTER ID=m DESTINATION=TRANSIENT SIGNATURE_TYPE=7\nSESSION ADD STYLE=DATAGRAM2 ID=d2 FROM_PORT=6881 LISTEN_PORT=6882 PORT=<udp port> HOST=<udp host>\nSESSION ADD STYLE=DATAGRAM3 ID=d3 FROM_PORT=6881 LISTEN_PORT=6883 PORT=<udp port> HOST=<udp host>\nSESSION ADD STYLE=RAW ID=r LISTEN_PORT=6881 PORT=<udp port> HOST=<udp host>\n```\n\nAll subsessions are created OK. Then, via UDP to the SAM UDP port (7655), against the zzzot tracker `opentracker.dg2.i2p` (port 6969):\n\n1. **Connect request** through `d2` (16 bytes: `protocol_id=0x41727101980`, `action=0`, `transaction_id`):\n   ```\n   3.0 d2 opentracker.dg2.i2p FROM_PORT=6881 TO_PORT=6969\\n<connect request>\n   ```\n   ✅ The tracker replies with a valid connect response (`action=0`, same `transaction_id`, `connection_id`), received on the RAW subsession.\n\n2. **Announce request** through `d3` (98 bytes, `connection_id` from step 1, `action=1`, `info_hash`, `peer_id`, `port=6881`, ...):\n   ```\n   3.0 d3 opentracker.dg2.i2p FROM_PORT=6881 TO_PORT=6969\\n<announce request>\n   ```\n   ❌ The tracker replies with an error response (`action=3`) and the message `Bad protocol`, i.e. the announce did not arrive as Datagram3.\n\nOther trackers (`opentracker.skank.i2p`, `tracker.insulaocculta.i2p`) behave the same: they answer the connect request but silently drop the announce request.\n\n### Expected\n\nDatagrams sent through the `d3` subsession are sent as Datagram3 (protocol 20), and through `d2` as Datagram2 (protocol 19). According to the SAMv3 spec each subsession of a PRIMARY/MASTER session has its own style.\n\n### Actual\n\nAll datagram subsessions send with the version of the **first** datagram subsession added. In the example above `d3` sends Datagram2. If the DATAGRAM3 subsession is added first, then `d2` sends Datagram3 (and the trackers drop the connect request instead).\n\n### Cause\n\n- `ClientDestination::CreateDatagramDestination()` only creates `m_DatagramDestination` once, so the `version` passed by the first subsession wins (`Destination.cpp`).\n- `SAMSession::SendDatagram()` -> `DatagramDestination::SendDatagramTo()` -> `ObtainSession()` uses that default version and never applies the sending subsession's `DatagramVersion`.\n- Creating two separate sessions with the same keys is not possible either (`DUPLICATED_DEST`).\n\nThe built-in torrents tunnel avoids this by calling `session->SetVersion()` per message (`TorrentsTunnel.cpp`: Datagram2 for connect, Datagram3 for announce). SAM could do the same using the sending subsession's `DatagramVersion`.\n"
+    },
+    {
+     "number": 2639,
+     "title": "torrents load , unhex",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-18T21:46:56Z",
+     "updated_at": "2026-11-18T22:51:16Z",
+     "user": "UU-0665D27",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2639",
+     "body": "надо 2 раза перезапустить i2pd\n```\n==120268==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7bd0a7433964 at pc 0x56487f6fdd29 bp 0x7ffda83f50d0 sp 0x7ffda83f50c8\nWRITE of size 1 at 0x7bd0a7433964 thread T0\n    #0 0x56487f6fdd28 in boost::enable_if<boost::is_integral<boost::algorithm::detail::hex_iterator_traits<unsigned char*>::value_type>, unsigned char*>::type boost::algorithm::detail::decode_one<__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*, bool (*)(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>)>(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>&, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*, bool (*)(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>)) /usr/include/boost/algorithm/hex.hpp:135:14\n    #1 0x56487f6d2390 in unsigned char* boost::algorithm::unhex<__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*>(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*) /usr/include/boost/algorithm/hex.hpp:247:15\n    #2 0x56487f61aca9 in i2p::torrents::TorrentsTunnel::ReadMagnetFile(std::filesystem::__cxx11::path const&) /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/TorrentsTunnel.cpp:288:4\n    #3 0x56487f618324 in i2p::torrents::TorrentsTunnel::Start() /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/TorrentsTunnel.cpp:97:6\n    #4 0x56487ec66ba9 in i2p::client::ClientContext::ReadTunnels(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> const&, int&, int&) /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/ClientContext.cpp:1094:23\n    #5 0x56487ec48bed in i2p::client::ClientContext::ReadTunnels() /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/ClientContext.cpp:601:13\n    #6 0x56487ec43698 in i2p::client::ClientContext::Start() /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/ClientContext.cpp:58:3\n    #7 0x56487d83d03b in i2p::util::Daemon_Singleton::start() /home/u_uu/Documents/o/code/c/I2PD/daemon/Daemon.cpp:540:24\n    #8 0x56487dcb640e in i2p::util::DaemonUnix::start() /home/u_uu/Documents/o/code/c/I2PD/daemon/UnixDaemon.cpp:232:29\n    #9 0x56487dcb32d3 in main /home/u_uu/Documents/o/code/c/I2PD/daemon/i2pd.cpp:30:14\n    #10 0x7fd0a9227780  (/usr/lib/libc.so.6+0x27780) (BuildId: 6961407ef2e7877eabf5ed8c5a39aea9de7194c1)\n    #11 0x7fd0a92278b8 in __libc_start_main (/usr/lib/libc.so.6+0x278b8) (BuildId: 6961407ef2e7877eabf5ed8c5a39aea9de7194c1)\n    #12 0x56487d73d0d4 in _start (/srv/I2P/bin/i2pd_asan+0x436f0d4) (BuildId: 7da31e81ea56942e305a1314c3f43a38ded2d40d)\nAddress 0x7bd0a7433964 is located in stack of thread T0 at offset 356 in frame\n    #0 0x56487f61a68f in i2p::torrents::TorrentsTunnel::ReadMagnetFile(std::filesystem::__cxx11::path const&) /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/TorrentsTunnel.cpp:282\n  This frame has 17 object(s):\n    [32, 72) 'ref.tmp' (line 283)\n    [112, 152) 'ref.tmp' (line 283)\n    [192, 224) 'hexStr' (line 284)\n    [256, 296) 'ref.tmp' (line 284)\n    [336, 356) 'infoHash' (line 285) <== Memory access at offset 356 overflows this variable\n    [400, 432) 'ref.tmp' (line 297)\n    [464, 496) 'name' (line 300)\n    [528, 560) 'announce' (line 300)\n    [592, 632) 'pt' (line 3"
+    },
+    {
+     "number": 2640,
+     "title": "SAM: send each datagram subsession with its own version",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-18T22:43:27Z",
+     "updated_at": "2026-11-18T22:45:34Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2640",
+     "body": "Each datagram subsession of a MASTER session now sends with its own version, instead of all of them using the version of the first datagram subsession added.\n\nThe datagram destination is shared and its default version is fixed by the first subsession, since CreateDatagramDestination is called once. On send, the subsession's stored version is now applied per message through SetVersion, the same way TorrentsTunnel switches between Datagram2 and Datagram3.\n\nFix for #2638"
     },
     {
      "number": 2637,
@@ -59,6 +92,24 @@
     }
    ],
    "comments": [
+    {
+     "id": 6997378028,
+     "issue": 2638,
+     "issue_title": "SAM: subsessions of a MASTER session send all datagrams with the first subsession's version (breaks BitTorrent UDP tracker announces)",
+     "created_at": "2026-11-19T02:00:54Z",
+     "user": "Vort",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2638#issuecomment-6997378028",
+     "body": "@ngosang, this problem should be fixed with 9fbc41c9bbbbbd6b5219f5ad505d8a088e1bf7c6. Please check."
+    },
+    {
+     "id": 6993576118,
+     "issue": 2639,
+     "issue_title": "torrents load , unhex",
+     "created_at": "2026-11-18T22:31:49Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2639#issuecomment-6993576118",
+     "body": "https://github.com/PurpleI2P/i2pd/commit/ed4f10a7fadd2da54e618e5073ecfcb5dea14423"
+    },
     {
      "id": 6989398153,
      "issue": 2638,
@@ -131,6 +182,28 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7171,
+     "title": "TUN inbound: Add disableFakeICMP config option for pongs",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-15T22:15:42Z",
+     "updated_at": "2026-11-18T22:00:56Z",
+     "user": "navidmafi",
+     "url": "https://github.com/XTLS/Xray-core/pull/7171",
+     "body": ""
+    },
+    {
+     "number": 7369,
+     "title": "panic: slice bounds out of range [8192:8171] in XtlsPadding (VLESS outbound, Reality + Vision), recurring ~6x/hour on 25.6.8 / 25.9.5 / 25.12.8",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-10T21:13:29Z",
+     "updated_at": "2026-11-18T20:46:00Z",
+     "user": "ibrahimshaih",
+     "url": "https://github.com/XTLS/Xray-core/issues/7369",
+     "body": "## Summary\n\nA relay node (Xray terminates several inbounds and forwards everything through ONE VLESS+Reality+`xtls-rprx-vision` outbound to another Xray) crashes the whole process several times per hour with a negative-length `Extend` in `proxy.XtlsPadding`. All inbounds are dropped on every crash (about 1 s with `RestartSec=1`).\n\nNo `testseed` anywhere in the config (so this is not #5961's \"invalid testseed\" case). No mux: 0 `v1.mux.cool` connections in the log over 24 h.\n\n## Panic (identical every time, only goroutine ids differ)\n\n```\npanic: runtime error: slice bounds out of range [8192:8171]\n\ngoroutine 640 [running]:\ngithub.com/xtls/xray-core/common/buf.(*Buffer).Extend(...)\n        github.com/xtls/xray-core/common/buf/buffer.go:153\ngithub.com/xtls/xray-core/proxy.XtlsPadding(0xc00021f740, 0x0, 0xc0002e1a28, 0x1?, {0x19a0058, 0xc000254730}, {0xc000269200?, 0xc000730000?, 0xc00033fb40?})\n        github.com/xtls/xray-core/proxy/proxy.go:519 +0x79e\ngithub.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer(0xc0002e19e0, {0xc00047ea98, 0x1, 0x1})\n        github.com/xtls/xray-core/proxy/proxy.go:390 +0x5dd\ngithub.com/xtls/xray-core/common/buf.copyInternal(...)\n        github.com/xtls/xray-core/common/buf/copy.go:99 +0x15a\ngithub.com/xtls/xray-core/common/buf.Copy(...)\n        github.com/xtls/xray-core/common/buf/copy.go:116\ngithub.com/xtls/xray-core/proxy/vless/outbound.(*Handler).Process.func4()\n        github.com/xtls/xray-core/proxy/vless/outbound/outbound.go:360 +0xc79\n```\n\n(v25.12.8, go1.25.5, linux/amd64, kernel 6.8, 1 vCPU. `Process.func3` on 25.6.8 — same frames.)\n\n## Analysis\n\nThe high bound `8171` is exactly `buf.Size - 21`. In `XtlsPadding`:\n\n```go\nif paddingLen > buf.Size-21-contentLen {\n    paddingLen = buf.Size - 21 - contentLen\n}\n...\nnewbuffer.Extend(paddingLen)\n```\n\n`[8192:8171]` means `newbuffer.end == 8192` and `paddingLen == -21`, i.e. `contentLen == 8192`: a full 8192-byte block reached `XtlsPadding` unsplit. `Extend` has no check for negative `n`, so `b.v[b.end:end]` panics with low > high (the `end > len` check only guards the upper side).\n\n`ReshapeMultiBuffer` is supposed to prevent this (it splits every block with `Len() >= buf.Size-21`), and `VisionWriter.WriteMultiBuffer` calls it right before the loop, so a full block should not get through. I could not find the path by reading the code (`XtlsPadding` and `ReshapeMultiBuffer` are byte-identical in v25.12.8 and v26.11.9). Possibilities I could not exclude: a buffer that is mutated/re-used between `ReshapeMultiBuffer` and `XtlsPadding` (pool double-release?), or a block larger than `buf.Size` entering through a non-standard reader.\n\nCheap hardening regardless of root cause: clamp `paddingLen` at 0 (`if paddingLen < 0 { paddingLen = 0 }`) and/or reject `n < 0` in `Buffer.Extend`. That would turn a process-wide crash into a (harmless) missing padding. Note that `newbuffer.Write(b.Bytes())` also silently truncates if `contentLen + 21 > 8192`, so the root cause is worth fixing too.\n\n## Environment / what was tried\n\n- Topology: several inbounds (Reality-TCP-Vision, Reality-TCP-Vision with self-steal dest, XHTTP+TLS, gRPC+TLS) → one VLESS+Reality+Vision outbound → Xray 25.6.8 server.\n- Panics occur with users of ALL four inbounds (so not specific to one inbound transport).\n- Versions tried as the relay: 25.6.8 (~1 panic / 5–10 min), 25.9.5 (2 in 1h20m), 25.12.8 (~6 / hour, 434 in 3 days, clustered: up to 5 within a minute). Not yet tried: 26.x on this node (26.10.31/26.11.9 server side breaks sing-box Reality clients in our tests, so we cannot deploy it for production users).\n- Config has no `testseed`; `flow: xtls-rprx-vision` only.\n- Related: #2651 (same signature, fixed in 2023), #5961 (same signature on 26.2.6/26.3.27, closed with \"don't set testseed\"), #6072.\n\n## Expected\n\nNo process-wide panic on any input to the Vision writer.\n"
+    },
+    {
      "number": 7429,
      "title": "README: Fix star history chart",
      "is_pr": true,
@@ -191,7 +264,7 @@
      "is_pr": true,
      "state": "open",
      "created_at": "2026-11-08T05:58:35Z",
-     "updated_at": "2026-11-18T17:40:22Z",
+     "updated_at": "2026-11-18T21:17:48Z",
      "user": "osypai",
      "url": "https://github.com/XTLS/Xray-core/pull/7346",
      "body": "The UDP FullCone table (#5509) is keyed by the source only, and only the first packet of a session is routed, so later destinations of that source reuse its outbound. As the TUN never sees a socket close, a port that the OS reuses before the session expires inherits the old route. For example, DNS on a port last used by a direct or blocked flow never reaches the DNS outbound, and a resolver that retries from the same port (mDNSResponder) keeps the stale session alive.\n\nNow a new destination is routed once, with fake IPs judged by their domain and no DNS lookup made. It then joins its source's session for the same rule, or gets a session of its own. Destinations of one rule still share a session, so FullCone is kept within a rule, and a balancer picking another outbound doesn't split it. Routing runs off the goroutine that reads the tun. WireGuard and MASQUE servers are unchanged.\n\nChecked on a real utun on macOS with the system resolver: DNS on a reused port is answered and destinations of one rule leave from one port, while on main the DNS goes nowhere and every destination leaves from the first one. A new destination costs about 2 µs more; established flows and throughput are unchanged.\n\nAI disclosure: this PR was completed using Claude Opus 5.5."
@@ -505,17 +578,6 @@
      "body": "### Problem\n\n`ReshapeMultiBuffer` splits an oversized buffer once and writes the whole remainder into a single new buffer, discarding the `ErrBufferFull` that `Write` returns:\n\n```go\nbuffer2 := buf.New()\nbuffer2.Write(buffer1.BytesFrom(index))\n```\n\nBuffers longer than `buf.Size` reach it, because `buf.NewExisted` only enforces a minimum capacity and the gRPC transport wraps hunks of arbitrary size with it (`grpc/encoding/hunkconn.go:97`, `multiconn.go:78`). The remainder is truncated to exactly `buf.Size`, so `XtlsPadding` computes `paddingLen = buf.Size - 21 - buf.Size = -21` and `Buffer.Extend` slices `b.v[8192:8171]`, which panics and takes down the process. With the default split point of `buf.Size/2` the threshold is 12288 bytes.\n\n### Fix\n\nCopy the remainder out in chunks of at most `buf.Size-21`, the largest content `XtlsPadding` can fit, until nothing is left. Buffers up to `buf.Size` keep their previous two-piece shape, so normal traffic is unaffected.\n\n### Verification\n\nOn unmodified `main` (`f781c687`), a 12288-byte buffer panics with `slice bounds out of range [8192:8171]`. With this change, inputs of 8213 / 12288 / 20000 / 65535 bytes produce 2 / 3 / 3 / 9 buffers, every byte preserved and no piece above `buf.Size-21`. For inputs up to `buf.Size` the output shape is unchanged across the range of split points.\n\n`go build ./...`, `go vet ./...`, `go run ./infra/vformat -mode check` and `go test ./...` are clean; the three geodata-dependent packages fail identically on unmodified `main` here because `geoip.dat` / `geosite.dat` are absent locally.\n\nI reproduced this at the function level with the same `buf.NewExisted` constructor the gRPC transport uses, not end-to-end through a live gRPC inbound.\n\n### On scope\n\nKept inside `ReshapeMultiBuffer`. Rejecting `n < 0` in `Buffer.Extend` would swap one panic for another without addressing the truncation, and stopping `buf.NewExisted` from returning oversized buffers looks intended. Happy to take whichever shape you prefer.\n\nFixes #7369. Same panic signature as #2651, #5961 and #6072.\n"
     },
     {
-     "number": 7369,
-     "title": "panic: slice bounds out of range [8192:8171] in XtlsPadding (VLESS outbound, Reality + Vision), recurring ~6x/hour on 25.6.8 / 25.9.5 / 25.12.8",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-10T21:13:29Z",
-     "updated_at": "2026-11-17T13:49:47Z",
-     "user": "ibrahimshaih",
-     "url": "https://github.com/XTLS/Xray-core/issues/7369",
-     "body": "## Summary\n\nA relay node (Xray terminates several inbounds and forwards everything through ONE VLESS+Reality+`xtls-rprx-vision` outbound to another Xray) crashes the whole process several times per hour with a negative-length `Extend` in `proxy.XtlsPadding`. All inbounds are dropped on every crash (about 1 s with `RestartSec=1`).\n\nNo `testseed` anywhere in the config (so this is not #5961's \"invalid testseed\" case). No mux: 0 `v1.mux.cool` connections in the log over 24 h.\n\n## Panic (identical every time, only goroutine ids differ)\n\n```\npanic: runtime error: slice bounds out of range [8192:8171]\n\ngoroutine 640 [running]:\ngithub.com/xtls/xray-core/common/buf.(*Buffer).Extend(...)\n        github.com/xtls/xray-core/common/buf/buffer.go:153\ngithub.com/xtls/xray-core/proxy.XtlsPadding(0xc00021f740, 0x0, 0xc0002e1a28, 0x1?, {0x19a0058, 0xc000254730}, {0xc000269200?, 0xc000730000?, 0xc00033fb40?})\n        github.com/xtls/xray-core/proxy/proxy.go:519 +0x79e\ngithub.com/xtls/xray-core/proxy.(*VisionWriter).WriteMultiBuffer(0xc0002e19e0, {0xc00047ea98, 0x1, 0x1})\n        github.com/xtls/xray-core/proxy/proxy.go:390 +0x5dd\ngithub.com/xtls/xray-core/common/buf.copyInternal(...)\n        github.com/xtls/xray-core/common/buf/copy.go:99 +0x15a\ngithub.com/xtls/xray-core/common/buf.Copy(...)\n        github.com/xtls/xray-core/common/buf/copy.go:116\ngithub.com/xtls/xray-core/proxy/vless/outbound.(*Handler).Process.func4()\n        github.com/xtls/xray-core/proxy/vless/outbound/outbound.go:360 +0xc79\n```\n\n(v25.12.8, go1.25.5, linux/amd64, kernel 6.8, 1 vCPU. `Process.func3` on 25.6.8 — same frames.)\n\n## Analysis\n\nThe high bound `8171` is exactly `buf.Size - 21`. In `XtlsPadding`:\n\n```go\nif paddingLen > buf.Size-21-contentLen {\n    paddingLen = buf.Size - 21 - contentLen\n}\n...\nnewbuffer.Extend(paddingLen)\n```\n\n`[8192:8171]` means `newbuffer.end == 8192` and `paddingLen == -21`, i.e. `contentLen == 8192`: a full 8192-byte block reached `XtlsPadding` unsplit. `Extend` has no check for negative `n`, so `b.v[b.end:end]` panics with low > high (the `end > len` check only guards the upper side).\n\n`ReshapeMultiBuffer` is supposed to prevent this (it splits every block with `Len() >= buf.Size-21`), and `VisionWriter.WriteMultiBuffer` calls it right before the loop, so a full block should not get through. I could not find the path by reading the code (`XtlsPadding` and `ReshapeMultiBuffer` are byte-identical in v25.12.8 and v26.11.9). Possibilities I could not exclude: a buffer that is mutated/re-used between `ReshapeMultiBuffer` and `XtlsPadding` (pool double-release?), or a block larger than `buf.Size` entering through a non-standard reader.\n\nCheap hardening regardless of root cause: clamp `paddingLen` at 0 (`if paddingLen < 0 { paddingLen = 0 }`) and/or reject `n < 0` in `Buffer.Extend`. That would turn a process-wide crash into a (harmless) missing padding. Note that `newbuffer.Write(b.Bytes())` also silently truncates if `contentLen + 21 > 8192`, so the root cause is worth fixing too.\n\n## Environment / what was tried\n\n- Topology: several inbounds (Reality-TCP-Vision, Reality-TCP-Vision with self-steal dest, XHTTP+TLS, gRPC+TLS) → one VLESS+Reality+Vision outbound → Xray 25.6.8 server.\n- Panics occur with users of ALL four inbounds (so not specific to one inbound transport).\n- Versions tried as the relay: 25.6.8 (~1 panic / 5–10 min), 25.9.5 (2 in 1h20m), 25.12.8 (~6 / hour, 434 in 3 days, clustered: up to 5 within a minute). Not yet tried: 26.x on this node (26.10.31/26.11.9 server side breaks sing-box Reality clients in our tests, so we cannot deploy it for production users).\n- Config has no `testseed`; `flow: xtls-rprx-vision` only.\n- Related: #2651 (same signature, fixed in 2023), #5961 (same signature on 26.2.6/26.3.27, closed with \"don't set testseed\"), #6072.\n\n## Expected\n\nNo process-wide panic on any input to the Vision writer.\n"
-    },
-    {
      "number": 7437,
      "title": "HTTP & SOCKS inbounds: Add `email` to access log",
      "is_pr": true,
@@ -550,6 +612,24 @@
     }
    ],
    "comments": [
+    {
+     "id": 6991917859,
+     "issue": 7346,
+     "issue_title": "TUN inbound: Route each new UDP destination, keeping FullCone NAT within a route",
+     "created_at": "2026-11-18T21:17:47Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7346#issuecomment-6991917859",
+     "body": "firewall 没办法简单地搬到路由阶段，除非改写 IP"
+    },
+    {
+     "id": 6991140613,
+     "issue": 7369,
+     "issue_title": "panic: slice bounds out of range [8192:8171] in XtlsPadding (VLESS outbound, Reality + Vision), recurring ~6x/hour on 25.6.8 / 25.9.5 / 25.12.8",
+     "created_at": "2026-11-18T20:46:00Z",
+     "user": "ibrahimshaih",
+     "url": "https://github.com/XTLS/Xray-core/issues/7369#issuecomment-6991140613",
+     "body": "Thank you @anonymousmeower, that explains it. We do have a gRPC inbound on this relay (7 clients, roughly a third of all connections), and the bursts line up with a threshold like 12288.\n\nI reproduced it independently on v25.12.8 (`81f8f39`) with a small test: a 12288-byte buffer created with `buf.NewExisted` goes through `ReshapeMultiBuffer`, the second piece is exactly 8192 bytes, and `XtlsPadding` then computes `paddingLen = -21`. Agreed that clamping `paddingLen` is the wrong fix (it just trades a crash for truncation), the split has to be done properly.\n\nThis is what we run now on the production relay, in case it is useful as a starting point (it only changes the oversize path; buffers whose remainder fits are split exactly as before):\n\n```go\ntail := buffer1.BytesFrom(index)\nvar pieces []*buf.Buffer\nfor len(tail) > 0 {\n\tn := len(tail)\n\tif n > buf.Size-21 {\n\t\tn = buf.Size - 21\n\t}\n\tpiece := buf.New()\n\tpiece.Write(tail[:n])\n\tpieces = append(pieces, piece)\n\ttail = tail[n:]\n}\nbuffer1.Resize(0, index)\nmb2 = append(mb2, buffer1)\nfor _, piece := range pieces {\n\tmb2 = append(mb2, piece)\n}\n```\n\nA test with sizes 8171 / 8192 / 8213 / 12288 / 16384 / 20000 / 40000 (with and without a TLS application-data header) passes: every piece is <= `buf.Size-21`, the concatenation equals the input, and `XtlsPadding` does not panic on any piece. The same test fails on the unpatched code at 12288. Interop with sing-box and Xray 24/25/26 clients over Reality, XHTTP and gRPC is unchanged in our matrix. We will report back after a few days of real traffic (the relay was crashing about 100 times a day before).\n"
+    },
     {
      "id": 6988250440,
      "issue": 7429,
@@ -1089,15 +1169,6 @@
      "user": "OneMiny",
      "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-6939470828",
      "body": "> ~是仅 panic 而不会通过认证吧~\r\n\r\nYes, you're correct — it only causes a panic and does **not** bypass authentication.\r\n\r\nAfter reviewing the code and running tests, here's the precise breakdown:\r\n\r\n**Root cause — `proxy/socks/protocol.go` line 206:**\r\n\r\n```go\r\n// If s.config.Address is set to a domain (e.g. \"localhost\" or \"example.com\"),\r\n// AsAddress() returns a domainAddress, and calling .IP() on it panics.\r\nudpHub, err := internet.ListenSystemPacket(\r\n    context.Background(),\r\n    &net.UDPAddr{IP: responseAddress.IP(), Port: 0},  // 💥 panic here\r\n    nil,\r\n)\r\n```\r\n\r\nThis is because `domainAddress.IP()` in `common/net/address.go` unconditionally panics:\r\n\r\n```go\r\nfunc (domainAddress) IP() net.IP {\r\n    panic(\"Calling IP() on a DomainAddress.\")\r\n}\r\n```\r\n\r\n**Why it is NOT an authentication bypass:**\r\n\r\nThe panic occurs at line 206, which is reached only *after* `auth5()` completes successfully at line 148. An unauthenticated or wrongly-authenticated client is rejected before the panic site is ever reached (confirmed by testing all three scenarios: no-auth client, wrong-password client, and no-auth server).\r\n\r\n**Trigger conditions:**\r\n\r\nThe vulnerable path requires the server operator to have explicitly set `address` to a domain name (e.g. `\"localhost\"`) in the SOCKS inbound config. A remote attacker has no control over `responseAddress` — it comes from `s.config.Address` (server config), not from client input. The client only needs to send a `UDP ASSOCIATE` command to trigger the crash once the misconfiguration is in place.\r\n\r\n**Impact:** This is a **misconfiguration-induced crash** (DoS), not a security vulnerability. If `address` is left empty (default) or set to a valid IP, the panic never occurs.\r\n"
-    },
-    {
-     "id": 6930644265,
-     "issue": 7431,
-     "issue_title": "upgrade klauspost/compress to fix (CVE-2026-116591)",
-     "created_at": "2026-11-16T21:59:15Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-6930644265",
-     "body": "~~是仅 panic 而不会通过认证吧~~"
     },
     {
      "id": 6893932898,

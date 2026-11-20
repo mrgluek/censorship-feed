@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-19T20:36:20Z",
- "since": "2026-11-17T20:36:20Z",
+ "generated_at": "2026-11-20T02:19:15Z",
+ "since": "2026-11-18T02:19:15Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -89,6 +89,17 @@
   },
   "PurpleI2P/i2pd": {
    "issues": [
+    {
+     "number": 2641,
+     "title": "catch stoul exceptions in killstream and limittransit commands",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-19T22:54:28Z",
+     "updated_at": "2026-11-19T22:56:11Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2641",
+     "body": "Fix for #2283. The webconsole killstream and limittransit commands passed streamID/limit straight into std::stoul; an empty or non-numeric parameter threw, and the exception unwound the connection (caught far up in HTTPServer::Run). Both calls are now wrapped so an invalid value stays 0 and falls into the existing error branches."
+    },
     {
      "number": 2638,
      "title": "SAM: subsessions of a MASTER session send all datagrams with the first subsession's version (breaks BitTorrent UDP tracker announces)",
@@ -235,15 +246,6 @@
      "user": "Vort",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2637#issuecomment-6983032742",
      "body": "If you know about bugs in torrent client, then create corresponding bugreports.\nIf you want to rewrite i2pd in Rust - no problems, lots of people already tried it.\nBut this project will remain written in C++."
-    },
-    {
-     "id": 6963634676,
-     "issue": 1928,
-     "issue_title": "Add target address and port to webconsole for every client tunnel (issue #1877)",
-     "created_at": "2026-11-17T23:06:52Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/1928#issuecomment-6963634676",
-     "body": "In the SOCKS proxy branch of the I2P tunnels page (daemon/HTTPServer.cpp), the endpoint is printed from `httpProxy->GetLocalEndpoint()`, but this block handles `socksProxy` - it should be `socksProxy->GetLocalEndpoint()`. As written it shows the HTTP proxy's endpoint on the SOCKS line, and dereferences a null pointer (crash on opening the page) when the SOCKS proxy is enabled while the HTTP proxy is disabled."
     }
    ]
   },
@@ -254,12 +256,67 @@
   "XTLS/Xray-core": {
    "issues": [
     {
+     "number": 7175,
+     "title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-10-16T07:16:03Z",
+     "updated_at": "2026-11-20T01:15:18Z",
+     "user": "CluvexStudio",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175",
+     "body": "#7174 bolted a second Lua mask onto header-custom, which was the wrong way around. One `lua` mask covers all of it now: it is both a `tcpMasks` and a `udpMasks` entry, and the script decides what it does by the hooks it defines.\n\n-- `HandleHeader(stream, address, role)`, TCP: a free handshake before any traffic, with `stream:Write`, `stream:Read` and `stream:Sleep`. Return a string or an error and the connection is dropped\n-- `HandleHeaderWrite(header, address, role)` and `HandleHeaderRead(packet, address, role)`, UDP: prefix every packet with a header, and strip it on the other side by returning its length, or `nil` to drop the packet\n-- `HandleNoise(plan, address, role)` is the old noise hook, so `noise`'s `script` is gone (it has not been in a release yet)\n-- `role` is `client` or `server`, so one file serves both ends\n-- a hook the script does not define is not wrapped at all: a noise only script leaves TCP connections alone and never touches a packet\n-- the module is `xray.finalmask` now, with `Random` and `RandomBetween`\n\n```json\n{\n    \"udpMasks\": [{\"type\": \"lua\", \"settings\": {\"script\": \"mask.lua\", \"reset\": \"30-60\"}}]\n}\n```\n\nPer call it takes at most 64 noise packets and 65535 bytes of noise, 1024 bytes of header, and 65535 bytes each way in a handshake. A packet hook gets 1s, a handshake 30s. A UDP header is one Lua call per packet, the benchmarks in the package cover its cost.\n\nThe static lists can follow later, the same script can already do what they do.\n"
+    },
+    {
+     "number": 7372,
+     "title": "Fix noise after udphop",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-10T22:20:53Z",
+     "updated_at": "2026-11-20T00:23:25Z",
+     "user": "FDeghy",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372",
+     "body": "Fix noise emission when `noise` and `udphop` are used together.\n\nPreviously, noise state was keyed by the destination passed to `WriteTo`. udphop could replace that destination internally or switch the source socket without invalidating the noise state. Continuous outgoing traffic also refreshed the noise reset timeout, allowing repeated hops without another noise sequence.\n\n**Implementation**\n\n- Add shared `UDPPath` state through the existing finalmask dialer, containing the actual destination, a generation counter, and a mutex.\n- Increment the generation after a successful hop changes the local endpoint, destination IP, or destination port.\n- Have the noise wrapper clear its cached reset state when it observes a new generation. The next write emits noise before its payload, then resumes the existing reset behavior.\n- Serialize the complete masked write against hopping, keeping all noise packets, configured delays, and the associated payload on the same socket and destination.\n\nGeneration tracking also handles returning to a previously used endpoint. Failed hops retain the active path and generation; attempts that leave the endpoints unchanged do not trigger additional noise.\n\nBoth configured noise items and Lua scripts use the existing emission code. Mask ordering, socket deadline propagation, receive handling, and connection cleanup remain unchanged. The existing connection stays in place, preserving Hysteria continuity. No configuration fields are added.\n\n**Regression coverage**\n\n- Source-port-only, destination-port-only, destination-IP-only, and combined changes.\n- Continuous traffic, repeated writes on one path, and returning to a previous endpoint.\n- Unchanged endpoints and failed hops.\n- Concurrent hopping during delayed noise emission.\n- Configured items and Lua scripts, mask ordering, reset behavior, deadline propagation, and socket cleanup.\n\n**Verification**\n\n- Focused noise/udphop tests and race detection passed.\n- Finalmask and Hysteria package checks passed in short mode.\n- GitHub’s formatting/protobuf check passed after applying the repository formatter.\n- The full package run timed out in the separate Sudoku end-to-end harness; that run did not complete."
+    },
+    {
+     "number": 7393,
+     "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-13T13:33:16Z",
+     "updated_at": "2026-11-19T23:29:54Z",
+     "user": "hexband",
+     "url": "https://github.com/XTLS/Xray-core/pull/7393",
+     "body": "## Motivation\n\nWhen the server's domain resolves to several IPs, Happy Eyeballs is supposed to pick a working one. In Russia, however, some ISPs (the DPI boxes installed at them) drop the ServerHello for some of these IPs while TCP to them still connects. Which IPs are affected differs from one ISP and region to another and changes over time: an IP that is blocked for one client works for another, so removing it from DNS would only break it for everyone else. Happy Eyeballs today ends the race at the first TCP connection, so it happily picks such an IP, and then the TLS or REALITY handshake can never complete. A retry usually picks the same IP again, because it wins the TCP race again. In this situation the current Happy Eyeballs is of no use at all, even though other IPs of the same domain work fine.\n\n## What this PR adds\n\nA new optional field `successDefinition` in `sockopt.happyEyeballs`:\n\n| Value | The race is won by |\n|---|---|\n| `tcpConnected` (default) | the first established TCP connection, as before |\n| `tlsHandshakeComplete` | the first connection that completes the TLS or REALITY handshake |\n\n```json\n\"sockopt\": {\n  \"domainStrategy\": \"UseIP\",\n  \"happyEyeballs\": {\n    \"tryDelayMs\": 250,\n    \"maxConcurrentTry\": 4,\n    \"successDefinition\": \"tlsHandshakeComplete\"\n  }\n}\n```\n\nWithout `successDefinition`, or with `tcpConnected`, nothing changes. Without TLS or REALITY, `tlsHandshakeComplete` is the same as `tcpConnected`.\n\nThe behaviour follows section 6.1 of Happy Eyeballs v3, which says clients SHOULD wait for the TLS handshake to complete before canceling other attempts: https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/\nChromium's Happy Eyeballs v3 implementation does the same: a TCP-based attempt runs the TLS handshake inside it and completes only when the handshake does, and an attempt counts as slow (so the next one starts) if TCP and TLS together take longer than the connection attempt delay:\n- https://chromium.googlesource.com/chromium/src/+/main/net/socket/tls_stream_attempt.cc\n- https://chromium.googlesource.com/chromium/src/+/main/net/http/http_stream_pool_attempt.cc\n\nHappy Eyeballs v3 is still a draft, and browsers do not use it by default yet: in Chromium it is behind the `HappyEyeballsV3` feature, which is disabled by default, and Firefox enables it only in Nightly.\n\n## How it works\n\n- The scheduler of `TcpRaceDial` is reused as is (`tryDelayMs`, `maxConcurrentTry`, `prioritizeIPv6`, `interleave`); only the attempt it runs differs. With `tcpConnected` the attempt is the same system dial as before.\n- With `tlsHandshakeComplete` every attempt goes through TCP dial to one IP → FinalMask (if any) → the transport's own TLS or REALITY handshake. Only the TCP destination changes from attempt to attempt; masks apply to each attempt separately, exactly as on a normal dial.\n- An attempt keeps its `maxConcurrentTry` slot until its handshake ends, and a hanging handshake does not stop the scheduler from starting the next attempt after `tryDelayMs`.\n- Losing attempts are stopped by closing their connections. Transports that leave the handshake to the first write (gRPC, and HTTPUpgrade and XHTTP with Go TLS) get it completed inside the race, so a connection is never handshaked twice.\n- The race happens under the same conditions as the TCP race in `DialSystem`: `domainStrategy` set, at least two IPs, no `dialerProxy`, non-zero `tryDelayMs` and `maxConcurrentTry`. Otherwise the transport dials exactly as before.\n\nAll covered transports now dial through `internet.DialTCPWithHandshake(ctx, dest, streamSettings, handshake)`. `handshake` is a function that wraps the TCP connection with the transport's TLS or REALITY client; it holds the same code the transport used to run right after its own TCP dial.\n\nTransports covered: RAW (TLS, REALITY), WebSocket, HTTPUpgrade, gRPC (TLS, REALITY), XHTTP over HTTP/1.1 and HTTP/2 (TLS, REALITY), MASQUE over HTTP/2. For XHTTP the race runs once per new physical connection. UDP"
+    },
+    {
+     "number": 7425,
+     "title": "Outbounds: Avoid circular dependencies with the built-in DNS",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-15T18:22:57Z",
+     "updated_at": "2026-11-19T22:09:47Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7425",
+     "body": "重写 Lua 文档的时候被迫写了下面加粗的这段，觉得十分不科学，应该把它做成和 targetStrategy 一样防环，没有大的副作用。各出站的行为也比较统一。\n\n> ::: warning 循环依赖\n任意查询交给内置 DNS 模块处理时，若选中 DNS 服务器的 `address` 不含 `+local`，则到该服务器的连接会交给路由。若 `address` 是域名，路由脚本可能再次调用内置 DNS 解析它。新的查询可能按 DNS 和路由规则顺利完成，也可能经过多个 DNS 服务器和出站，重新依赖尚未完成的解析，形成死循环。\n\n> 为避免这种潜在的循环依赖，DNS 模块会将自身发起的所有连接标记为 `skipDNSResolve = true`。核心原生的路由模块不检查是否真的成环，而是据此标记简单粗暴地跳过 DNS 解析，直接杜绝成环可能；请求随后继续匹配其余规则并交给出站。Lua 脚本需要自行处理该标记，建议同样跳过解析，也可以按需扩展处理方式。\n\n> **Freedom 出站不会检查 `skipDNSResolve`。若脚本将这类连接交给它，且其 `sockopt.domainStrategy` 非 `AsIs`，就会再次调用内置 DNS 解析该域名。路由脚本无法干预出站的解析，需另行规避，不再赘述；其他出站的 `targetStrategy` 会像路由一样检查该标记跳过解析以避免成环。**\n\n> 其他出站也有另一种成环路径。若代理出站的服务器地址为域名，且 `sockopt.domainStrategy` 非 `AsIs`，出站就会调用内置 DNS 解析该地址。例如，出站 A 依赖 DNS A 的解析结果，而 DNS A 的查询又被送回出站 A，就会形成死循环；也可能先送到出站 B，再因解析 B 的服务器地址而回到 DNS A，形成更长的依赖链。这些出站与 DNS 之间的循环与路由脚本无关，需另行规避，此处不再赘述。"
+    },
+    {
+     "number": 7419,
+     "title": "Leave Team",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-15T10:34:24Z",
+     "updated_at": "2026-11-19T22:00:20Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/issues/7419",
+     "body": "Maintainer 没有权力，全是义务，不如回到 Contributor，串四面八方\n\nfinalmask 已失守（虽然就没想守），hy2 估计也快了\n\n我在这里的所有代码都是手写（部分参考过许多不错的项目 hysteria dnstt wireguard-go wireguard-windows），接连大量的 ai code 入侵下我放弃继续使用 xray，不是说 vibe 不好，是我只信任自己写的\n\n自上位以来接到的全是 feature request，个人能力有限，研究 rust 以及生活琐事都需要时间精力，也没精力实现新的 feature request，伊朗和俄罗斯需要自己的英雄\n\n上次重构给自己写进医院后脾气就有点暴躁，不好意思\n\n就这样吧，加纳"
+    },
+    {
      "number": 7364,
      "title": "VLESS: run multiplexing directly on transport",
      "is_pr": true,
      "state": "open",
      "created_at": "2026-11-10T12:20:09Z",
-     "updated_at": "2026-11-19T20:19:02Z",
+     "updated_at": "2026-11-19T21:56:07Z",
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364",
      "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
@@ -1244,17 +1301,6 @@
      "body": "On Windows, an application that shuts down Xray and immediately renames its log file can get a sharing violation. `Close` signals the log worker, which releases the file later when it exits.\n\nWait for the worker to release the writer before returning from `Close`. Ignore messages received after shutdown and check for shutdown again when acquiring the worker permit. In `app/log`, detach both handlers before waiting so a worker can finish formatting a message that itself records a log. Keep `Start` and `Close` serialized.\n\nThe regressions hold a real file writer open during message formatting, rename the file as soon as `Close` returns, and check that a late message cannot create another writer. Both regressions fail on the previous implementation. The Windows run reproduces the sharing violation.\n\n`Close` can now wait for in-flight formatting and writes to finish. The message queue remains best effort.\n\nWindows and Linux each passed all 14 tests in `./common/log`, `./app/log`, and `./app/log/command`. The Linux run used `-race`. `go vet` passed for all three packages on both platforms, and the Windows main build passed.\n\nAI-assisted implementation and tests.\n"
     },
     {
-     "number": 7372,
-     "title": "Fix noise after udphop",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-10T22:20:53Z",
-     "updated_at": "2026-11-19T06:38:48Z",
-     "user": "FDeghy",
-     "url": "https://github.com/XTLS/Xray-core/pull/7372",
-     "body": "Fix noise emission when `noise` and `udphop` are used together.\n\nPreviously, noise state was keyed by the destination passed to `WriteTo`. udphop could replace that destination internally or switch the source socket without invalidating the noise state. Continuous outgoing traffic also refreshed the noise reset timeout, allowing repeated hops without another noise sequence.\n\n**Implementation**\n\n- Add shared `UDPPath` state through the existing finalmask dialer, containing the actual destination, a generation counter, and a mutex.\n- Increment the generation after a successful hop changes the local endpoint, destination IP, or destination port.\n- Have the noise wrapper clear its cached reset state when it observes a new generation. The next write emits noise before its payload, then resumes the existing reset behavior.\n- Serialize the complete masked write against hopping, keeping all noise packets, configured delays, and the associated payload on the same socket and destination.\n\nGeneration tracking also handles returning to a previously used endpoint. Failed hops retain the active path and generation; attempts that leave the endpoints unchanged do not trigger additional noise.\n\nBoth configured noise items and Lua scripts use the existing emission code. Mask ordering, socket deadline propagation, receive handling, and connection cleanup remain unchanged. The existing connection stays in place, preserving Hysteria continuity. No configuration fields are added.\n\n**Regression coverage**\n\n- Source-port-only, destination-port-only, destination-IP-only, and combined changes.\n- Continuous traffic, repeated writes on one path, and returning to a previous endpoint.\n- Unchanged endpoints and failed hops.\n- Concurrent hopping during delayed noise emission.\n- Configured items and Lua scripts, mask ordering, reset behavior, deadline propagation, and socket cleanup.\n\n**Verification**\n\n- Focused noise/udphop tests and race detection passed.\n- Finalmask and Hysteria package checks passed in short mode.\n- GitHub’s formatting/protobuf check passed after applying the repository formatter.\n- The full package run timed out in the separate Sudoku end-to-end harness; that run did not complete."
-    },
-    {
      "number": 7357,
      "title": "chore(finalmask): code clean",
      "is_pr": true,
@@ -1330,17 +1376,6 @@
      "user": "konezumi0",
      "url": "https://github.com/XTLS/Xray-core/pull/7178",
      "body": "Related to #7177. Requesting review of resource ownership, shutdown semantics, and API compatibility\r\n\r\n## Problem\r\n\r\nOutbound gRPC clients are cached by destination and MemoryStreamConfig, but core shutdown never closes or removes them. In an embedding process that stays alive, clients can retain connections and continue reconnecting after their core has stopped.\r\n\r\n## Change\r\n\r\nGive memory stream settings synchronous close-hook registration, and close the resources from their owning outbound handler. Register each ClientConn for exact-entry cache removal and ClientConn.Close. Refuse both reuse and creation after owner closure starts; racing creation must either register for cleanup or close its unpublished client. Cleanup runs outside the settings/cache locks, and concurrent Close callers wait for the same result.\r\n\r\nThe supported Instance lifecycle is single-start. Each fresh core retains separate ownership even when endpoint and outbound tags match. No per-run generation model, idle-timeout change or per-RPC closure of the shared ClientConn is added.\r\n\r\n## Validation\r\n\r\n- Synthetic regression reproduces the problem on v26.3.27 and main da2248c.\r\n- `go test -race ./transport/internet ./transport/internet/grpc -count=1 -timeout=120s` passes on this exact branch.\r\n- Official `go run ./infra/vformat/main.go -mode check -pwd ./` passes.\r\n- Tests cover two live cores, sibling streams, normal/MultiMode, fresh-core cycles, failed-start cleanup, multiple destinations, owner/acquisition races, cancellation/backoff and forced dialerProxy lookup contention with Manager.Close.\r\n- Earlier candidate testing also ran the target race suites five times and the dialerProxy test ten times. Those results are supplementary, not a claim that the whole upstream suite passes.\r\n\r\n## Review questions / limits\r\n\r\n- Handler.Close previously always returned nil. This candidate propagates cleanup errors. Is propagation preferred, or should transport cleanup be logged while preserving the existing return policy? Embedders must distinguish a cleanup error from a still-running core.\r\n- MemoryStreamConfig with resource/mutex state must not be copied; direct external transport callers must close their settings.\r\n- Manager.RemoveHandler still bypasses Handler.Close. XHTTP/nested download settings and TUN eventfd cleanup remain unfixed.\r\n- No general multi-instance guarantee for Xray's other process-global networking state, TLS/Reality/masking matrix, or physical Android packet boundary is claimed.\r\n\r\nThis is intended as a draft for ownership/API review, not a claim that the Android product defect is resolved.\r\n"
-    },
-    {
-     "number": 7175,
-     "title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-10-16T07:16:03Z",
-     "updated_at": "2026-11-19T06:38:48Z",
-     "user": "CluvexStudio",
-     "url": "https://github.com/XTLS/Xray-core/pull/7175",
-     "body": "#7174 bolted a second Lua mask onto header-custom, which was the wrong way around. One `lua` mask covers all of it now: it is both a `tcpMasks` and a `udpMasks` entry, and the script decides what it does by the hooks it defines.\n\n-- `HandleHeader(stream, address, role)`, TCP: a free handshake before any traffic, with `stream:Write`, `stream:Read` and `stream:Sleep`. Return a string or an error and the connection is dropped\n-- `HandleHeaderWrite(header, address, role)` and `HandleHeaderRead(packet, address, role)`, UDP: prefix every packet with a header, and strip it on the other side by returning its length, or `nil` to drop the packet\n-- `HandleNoise(plan, address, role)` is the old noise hook, so `noise`'s `script` is gone (it has not been in a release yet)\n-- `role` is `client` or `server`, so one file serves both ends\n-- a hook the script does not define is not wrapped at all: a noise only script leaves TCP connections alone and never touches a packet\n-- the module is `xray.finalmask` now, with `Random` and `RandomBetween`\n\n```json\n{\n    \"udpMasks\": [{\"type\": \"lua\", \"settings\": {\"script\": \"mask.lua\", \"reset\": \"30-60\"}}]\n}\n```\n\nPer call it takes at most 64 noise packets and 65535 bytes of noise, 1024 bytes of header, and 65535 bytes each way in a handshake. A packet hook gets 1s, a handshake 30s. A UDP header is one Lua call per packet, the benchmarks in the package cover its cost.\n\nThe static lists can follow later, the same script can already do what they do.\n"
     },
     {
      "number": 7171,
@@ -1563,17 +1598,6 @@
      "body": "Fixes #7428.\n\nXDRIVE's S3 cleanup deletes the session key before listing its children. On a backend that rejects deletion of nonempty directories, the first DELETE returns HTTP 412 and cleanup stops. This change collects the keys under the session prefix across all list pages and deletes them in reverse lexicographic order. Each child is deleted before its directory marker, and the session key is deleted last. Cleanup holds one key string per listed object in memory.\n\n## Reproduction\n\n`TestS3DeleteNonemptyDirectory` uses the production S3 client against a local HTTP test server. The server returns 412 for a DELETE while the directory has children. It lists the `abc/up/` marker on the first page and its segment on the second. After deleting session `abc`, the test checks that the only remaining key belongs to the neighboring session `abcd`.\n\nTo reproduce on the base commit, run these commands from the PR checkout. They copy the new test into a temporary copy of the original source tree.\n\n```sh\nbefore=$(mktemp -d)\ngit archive 82b5b76b | tar -x -C \"$before\"\ncp transport/internet/xdrive/s3_test.go \"$before/transport/internet/xdrive/\"\n(cd \"$before\" && go test -count=1 -run '^TestS3DeleteNonemptyDirectory$' ./transport/internet/xdrive)\n```\n\nOn `82b5b76b` this fails with `S3 DELETE answered 412` on the first DELETE.\n\n## Verification\n\nOn `5bebf4e6` the regression test passed 50 consecutive runs under the race detector. The XDRIVE package tests, CLI build and repository format check also passed.\n\n```sh\ngo test -race -count=50 -run '^TestS3DeleteNonemptyDirectory$' ./transport/internet/xdrive\ngo test -count=1 ./transport/internet/xdrive\ngo build -o /dev/null ./main\ngo run ./infra/vformat/main.go -mode check -pwd ./\n```\n\nRunning `go vet ./transport/internet/xdrive` on both commits produced the same three existing lock-copy warnings in `client.go` and `params.go`.\n"
     },
     {
-     "number": 7425,
-     "title": "Outbounds: Avoid circular dependencies with the built-in DNS",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-15T18:22:57Z",
-     "updated_at": "2026-11-19T06:38:47Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7425",
-     "body": "重写 Lua 文档的时候被迫写了下面加粗的这段，觉得十分不科学，应该把它做成和 targetStrategy 一样防环，没有大的副作用。各出站的行为也比较统一。\n\n> ::: warning 循环依赖\n任意查询交给内置 DNS 模块处理时，若选中 DNS 服务器的 `address` 不含 `+local`，则到该服务器的连接会交给路由。若 `address` 是域名，路由脚本可能再次调用内置 DNS 解析它。新的查询可能按 DNS 和路由规则顺利完成，也可能经过多个 DNS 服务器和出站，重新依赖尚未完成的解析，形成死循环。\n\n> 为避免这种潜在的循环依赖，DNS 模块会将自身发起的所有连接标记为 `skipDNSResolve = true`。核心原生的路由模块不检查是否真的成环，而是据此标记简单粗暴地跳过 DNS 解析，直接杜绝成环可能；请求随后继续匹配其余规则并交给出站。Lua 脚本需要自行处理该标记，建议同样跳过解析，也可以按需扩展处理方式。\n\n> **Freedom 出站不会检查 `skipDNSResolve`。若脚本将这类连接交给它，且其 `sockopt.domainStrategy` 非 `AsIs`，就会再次调用内置 DNS 解析该域名。路由脚本无法干预出站的解析，需另行规避，不再赘述；其他出站的 `targetStrategy` 会像路由一样检查该标记跳过解析以避免成环。**\n\n> 其他出站也有另一种成环路径。若代理出站的服务器地址为域名，且 `sockopt.domainStrategy` 非 `AsIs`，出站就会调用内置 DNS 解析该地址。例如，出站 A 依赖 DNS A 的解析结果，而 DNS A 的查询又被送回出站 A，就会形成死循环；也可能先送到出站 B，再因解析 B 的服务器地址而回到 DNS A，形成更长的依赖链。这些出站与 DNS 之间的循环与路由脚本无关，需另行规避，此处不再赘述。"
-    },
-    {
      "number": 7421,
      "title": "XDRIVE: Cancel pending storage operations on interrupt",
      "is_pr": true,
@@ -1607,17 +1631,6 @@
      "body": ""
     },
     {
-     "number": 7419,
-     "title": "Leave Team",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-11-15T10:34:24Z",
-     "updated_at": "2026-11-19T04:57:24Z",
-     "user": "LjhAUMEM",
-     "url": "https://github.com/XTLS/Xray-core/issues/7419",
-     "body": "Maintainer 没有权力，全是义务，不如回到 Contributor，串四面八方\n\nfinalmask 已失守（虽然就没想守），hy2 估计也快了\n\n我在这里的所有代码都是手写（部分参考过许多不错的项目 hysteria dnstt wireguard-go wireguard-windows），接连大量的 ai code 入侵下我放弃继续使用 xray，不是说 vibe 不好，是我只信任自己写的\n\n自上位以来接到的全是 feature request，个人能力有限，研究 rust 以及生活琐事都需要时间精力，也没精力实现新的 feature request，伊朗和俄罗斯需要自己的英雄\n\n上次重构给自己写进医院后脾气就有点暴躁，不好意思\n\n就这样吧，加纳"
-    },
-    {
      "number": 7414,
      "title": "Routing: Fix `process` for Linux IPv4-mapped sockets",
      "is_pr": true,
@@ -1649,17 +1662,6 @@
      "user": "yandujun363",
      "url": "https://github.com/XTLS/Xray-core/pull/7423",
      "body": "Follow-up to #7402, rebased onto `main` after both #7402 and #7430 merged: this is no longer a stacked draft, the diff is four commits, and it also settles the delay question and the compression side effect that #7402 left behind.\n\n1. **Bound padding schedules and cancel their pauses on Close** (unchanged from the draft). Padding pauses are timers that watch a per-connection `done` channel; a configured schedule is rejected above 256 turns, 64 MiB of turns, or the handshake deadline minus ten seconds of pauses; an explicit empty `paddings` array (or `\"noPadding\": true`) disables padding, and an absent field keeps the preset.\n\n2. **Pause before a padding turn and never after the last one**. A configured `delay` used to be applied *after* its turn, so the last turn of a schedule paused even though nothing followed it: with `delay: \"300\"` on the final turn the first proxied packet went out 300 ms later, while both ends otherwise waited for nothing. The pause now leads into the turn it is configured on - a captured gap is written on the turn that follows it - and the last turn is not followed by a pause. Which value each end waits is unchanged and now stated in the proto comment: the side that sends the turn samples `[delay_min, delay_max]`, the peer spends exactly `delay_min` (it waits the minimum, not \"at least\" it), so a range jitters only the sending side and `delay_min == delay_max` reproduces a captured gap.\n\n3. **State what a configured padding list replaces**. Two decisions only lived in the pull request: a configured list is the complete schedule, so the preset's Play-state join tail runs only with the preset; and a peer cannot be checked for arriving early, because the turns are ordinary Minecraft packets that carry nothing to compare an early arrival against, with the pause bound covering a stalled peer. Both are now next to the code and pinned by a test.\n\n4. **Never compress the frames XMC writes**. After `Set Compression` the writer deflated everything at or above the threshold, which is exactly the padding (zeros, ~300:1) and the proxied bytes (already compressed or encrypted): the padded shape disappeared and the CPU work bought nothing. The writer now always sends the uncompressed variant, which vanilla accepts at any size (`Data Length = 0` is not subject to the threshold check), and the reader still inflates what a real server sends.\n\n#7430 landed while this was open and added a startup reader that drains the peer's padding independently while the local schedule writes. That is why point 3 no longer says the peer's turns stay in the stream for the next reader: they are read and dropped by that reader, while the pause limit still bounds a stalled peer. This branch is rebased onto #7430, and the two changes coexist - the reader drains, and the schedule still spends `delay_min` on the peer's turn. The handshake test that #7430 added now builds its schedule through this branch's `paddingScheduleFromConfig` instead of passing `[]*Padding` to the constructors.\n\n## Tests\n\n```text\ngo test -count=1 ./transport/internet/finalmask/xmc ./infra/conf\ngo test -count=1 ./transport/internet/finalmask/...\ngo test -count=1 -race ./transport/internet/finalmask/xmc\ngo build ./...\ngo run ./infra/vformat -pwd . -mode check\ngo run ./infra/vprotogen -pwd . -mode check\n```\n\nNew coverage: pause placement for both roles and the absence of a trailing pause; which end samples the range and which spends the minimum; a configured list replacing the whole preset on both ends; the writer never compressing (zero-filled and random bodies, 1 B to 64 KiB) while the reader still accepts deflated bodies, chunked writes and multiple frames per write.\n\n## End-to-end, real server, compression on\n\nLocal Fabric 26.1 server (protocol 775) with the server-side mod, `online-mode=true` through a local Yggdrasil API and authlib-injector, `network-compression-threshold=256` (the default), and a byte-counting relay in front of the server. The client side is this b"
-    },
-    {
-     "number": 7393,
-     "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-13T13:33:16Z",
-     "updated_at": "2026-11-18T14:56:19Z",
-     "user": "hexband",
-     "url": "https://github.com/XTLS/Xray-core/pull/7393",
-     "body": "## Motivation\n\nWhen the server's domain resolves to several IPs, Happy Eyeballs is supposed to pick a working one. In Russia, however, some ISPs (the DPI boxes installed at them) drop the ServerHello for some of these IPs while TCP to them still connects. Which IPs are affected differs from one ISP and region to another and changes over time: an IP that is blocked for one client works for another, so removing it from DNS would only break it for everyone else. Happy Eyeballs today ends the race at the first TCP connection, so it happily picks such an IP, and then the TLS or REALITY handshake can never complete. A retry usually picks the same IP again, because it wins the TCP race again. In this situation the current Happy Eyeballs is of no use at all, even though other IPs of the same domain work fine.\n\n## What this PR adds\n\nA new optional field `successDefinition` in `sockopt.happyEyeballs`:\n\n| Value | The race is won by |\n|---|---|\n| `tcpConnected` (default) | the first established TCP connection, as before |\n| `tlsHandshakeComplete` | the first connection that completes the TLS or REALITY handshake |\n\n```json\n\"sockopt\": {\n  \"domainStrategy\": \"UseIP\",\n  \"happyEyeballs\": {\n    \"tryDelayMs\": 250,\n    \"maxConcurrentTry\": 4,\n    \"successDefinition\": \"tlsHandshakeComplete\"\n  }\n}\n```\n\nWithout `successDefinition`, or with `tcpConnected`, nothing changes. Without TLS or REALITY, `tlsHandshakeComplete` is the same as `tcpConnected`.\n\nThe behaviour follows section 6.1 of Happy Eyeballs v3, which says clients SHOULD wait for the TLS handshake to complete before canceling other attempts: https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/\nChromium's Happy Eyeballs v3 implementation does the same: a TCP-based attempt runs the TLS handshake inside it and completes only when the handshake does, and an attempt counts as slow (so the next one starts) if TCP and TLS together take longer than the connection attempt delay:\n- https://chromium.googlesource.com/chromium/src/+/main/net/socket/tls_stream_attempt.cc\n- https://chromium.googlesource.com/chromium/src/+/main/net/http/http_stream_pool_attempt.cc\n\nHappy Eyeballs v3 is still a draft, and browsers do not use it by default yet: in Chromium it is behind the `HappyEyeballsV3` feature, which is disabled by default, and Firefox enables it only in Nightly.\n\n## How it works\n\n- The scheduler of `TcpRaceDial` is reused as is (`tryDelayMs`, `maxConcurrentTry`, `prioritizeIPv6`, `interleave`); only the attempt it runs differs. With `tcpConnected` the attempt is the same system dial as before.\n- With `tlsHandshakeComplete` every attempt goes through TCP dial to one IP → FinalMask (if any) → the transport's own TLS or REALITY handshake. Only the TCP destination changes from attempt to attempt; masks apply to each attempt separately, exactly as on a normal dial.\n- An attempt keeps its `maxConcurrentTry` slot until its handshake ends, and a hanging handshake does not stop the scheduler from starting the next attempt after `tryDelayMs`.\n- Losing attempts are stopped by closing their connections. Transports that leave the handshake to the first write (gRPC, and HTTPUpgrade and XHTTP with Go TLS) get it completed inside the race, so a connection is never handshaked twice.\n- The race happens under the same conditions as the TCP race in `DialSystem`: `domainStrategy` set, at least two IPs, no `dialerProxy`, non-zero `tryDelayMs` and `maxConcurrentTry`. Otherwise the transport dials exactly as before.\n\nAll covered transports now dial through `internet.DialTCPWithHandshake(ctx, dest, streamSettings, handshake)`. `handshake` is a function that wraps the TCP connection with the transport's TLS or REALITY client; it holds the same code the transport used to run right after its own TCP dial.\n\nTransports covered: RAW (TLS, REALITY), WebSocket, HTTPUpgrade, gRPC (TLS, REALITY), XHTTP over HTTP/1.1 and HTTP/2 (TLS, REALITY), MASQUE over HTTP/2. For XHTTP the race runs once per new physical connection. UDP"
     },
     {
      "number": 7420,
@@ -1759,20 +1761,90 @@
      "user": "fengyuluoye",
      "url": "https://github.com/XTLS/Xray-core/issues/7321",
      "body": "# Feature Request: Add `udp+local://` DNS scheme (plain UDP local mode)\n\n## Summary\n\nXray's DNS configuration supports `+local` variants for HTTPS, h2c, QUIC and TCP, but there is **no `udp+local` scheme** for plain UDP DNS in local mode. This means there is currently **no way to send plain UDP DNS queries to a local resolver while bypassing the routing/dispatcher stack**.\n\n## Current state\n\n`app/dns/nameserver.go`, `NewServer()` switch (main branch):\n\n```go\ncase strings.EqualFold(u.Scheme, \"https\"):      // DoH remote\ncase strings.EqualFold(u.Scheme, \"h2c\"):        // DoH h2c remote\ncase strings.EqualFold(u.Scheme, \"https+local\"): // DoH local\ncase strings.EqualFold(u.Scheme, \"h2c+local\"):   // DoH h2c local\ncase strings.EqualFold(u.Scheme, \"quic+local\"):  // DoQ local\ncase strings.EqualFold(u.Scheme, \"tcp\"):         // TCP remote\ncase strings.EqualFold(u.Scheme, \"tcp+local\"):   // TCP local\ncase strings.EqualFold(u.String(), \"fakedns\"):\n```\n\nEvery protocol except plain UDP has a `+local` form. Plain UDP falls through to the default branch:\n\n```go\nif dest.Network == net.Network_UDP {\n    return NewClassicNameServer(dest, dispatcher, ...)\n}\n```\n\nNote that `NewClassicNameServer` receives the `dispatcher`, so plain UDP **always goes through the routing stack** — there is no way to bypass it.\n\n## Why this matters (measured data)\n\nFor a local resolver (e.g. smartdns on `127.0.0.1`), bypassing the dispatcher matters. Measured on a local resolver over loopback, one A + one AAAA query for the same domain:\n\n| Path | p50 | Notes |\n|---|---|---|\n| `tcp+local://` (current workaround) | ~810µs | 2 TCP handshakes + 2 closes |\n| `tcp+local://` pipelined on 1 conn | ~680µs | would need connection pooling, not implemented |\n| **plain UDP, 2 packets sent in parallel** | **~376µs** | no handshake, no teardown |\n\nThe UDP path is ~2x faster than the current `tcp+local` workaround because it avoids TCP handshake/teardown entirely. Pairing responses by DNS ID worked in 200/200 trials with zero mismatch.\n\nFor users running a local caching resolver, this overhead is paid on every cache-miss lookup.\n\n## Secondary issue: port parsing for bare `udp://` schemes\n\nRelated bug found while investigating. With:\n\n```json\n\"dns\": { \"servers\": [\"udp://127.0.0.1:5353\"] }\n```\n\nxray logs:\n\n```\nDNS: created UDP client initialized for udp://127.0.0.1:5353:53\n```\n\nThe port becomes `5353:53` — the `:5353` is swallowed into the address (as a domain string) and then a default `:53` is appended by:\n\n```go\n// app/dns/nameserver_udp.go:41\nif address.Port == 0 {\n    address.Port = net.Port(53)\n}\n```\n\nThis is because `infra/conf/dns.go` builds the endpoint with `Address` and `Port` as separate fields, and `Address.Build()` calls `net.ParseAddress()` on the whole string including `:5353`, while `Port` stays 0.\n\nAttempting `udp://127.0.0.1` (no port) resolves to `udp://127.0.0.1:53`, which happens to work, but the scheme is still parsed as a domain so the connection fails with:\n\n```\nfailed to open connection to udp:udp://127.0.0.1:53\n> too many colons in address\n```\n\nContrast with `tcp+local`, which parses correctly because it uses `url.Hostname()` and `url.Port()` separately (`app/dns/nameserver_tcp.go:75-81`).\n\n## Proposed change\n\nAdd a `udp+local` case that mirrors `tcp+local` — parse host/port via `url.Hostname()` / `url.Port()` and pass `nil` as the dispatcher:\n\n```go\ncase strings.EqualFold(u.Scheme, \"udp+local\"): // DNS-over-UDP Local mode\n    return NewUDPNameServer(u, nil, disableCache, serveStale, serveExpiredTTL, clientIP), nil\n```\n\nWhere the new constructor resolves the destination the same way `baseTCPNameServer` does:\n\n```go\nport := net.Port(53)\nif url.Port() != \"\" {\n    if port, err = net.PortFromString(url.Port()); err != nil {\n        return nil, err\n    }\n}\ndest := net.UDPDestination(net.ParseAddress(url.Hostname()), port)\n```\n\nThis would also give users a documented way to hit a local resolver on a non-53 port without the address-swallowing bug.\n\n## Environment"
-    },
-    {
-     "number": 7405,
-     "title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-11-14T20:20:10Z",
-     "updated_at": "2026-11-17T22:49:24Z",
-     "user": "wywywywycloud",
-     "url": "https://github.com/XTLS/Xray-core/issues/7405",
-     "body": "As one of many VPN services using Xray, we’d find it useful to configure multiple TLS fingerprints, assign each a percentage (chance of choosing specific fingerprint on connection, analogous to `random`), and explicitly exclude fingerprints that do not work in our target networks. The core would select a fingerprint once per new connection according to those weights.\n\nFor example: **Firefox 9%, Chrome 70%, Edge 12%, Safari 9%**, with `ios`, `android`, and `chrome-133` excluded.\n\nIn our experience, Russian DPI blocks connections using those three fingerprints in some cases. Unrestricted random selection is therefore risky: individual connections may fail simply because an incompatible fingerprint was selected.\n\nWe previously used Firefox because it worked well in our environment. However, what works today may change, and having 100% of connections share the same normalized TLS fingerprint could itself help TSPU identify VPN traffic.\n\nWeighted selection would reduce this uniformity, while explicit control over the allowed fingerprints would help preserve reliability. This would not make VPN traffic indistinguishable from browsers, but it would give operators a practical way to manage that tradeoff.\n"
     }
    ],
    "comments": [
+    {
+     "id": 7027289805,
+     "issue": 7175,
+     "issue_title": "Finalmask: Add the `lua` mask (noise's `script` moves there)",
+     "created_at": "2026-11-20T01:15:18Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7175#issuecomment-7027289805",
+     "body": "All other dirty work is done now. I am refining the lua documentation to recall this part of the context, and we will be able to restart it very soon."
+    },
+    {
+     "id": 7026230483,
+     "issue": 7372,
+     "issue_title": "Fix noise after udphop",
+     "created_at": "2026-11-20T00:23:25Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7372#issuecomment-7026230483",
+     "body": "或许交给 lua 做比较合适，也不用吵了"
+    },
+    {
+     "id": 7025168595,
+     "issue": 7393,
+     "issue_title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
+     "created_at": "2026-11-19T23:29:54Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7393#issuecomment-7025168595",
+     "body": "不能硬把这个搬到现有的眼球里面，都不是一回事儿\r\n传统眼球是 tcp 握手竞速，在 xray 体系中可以同时管着内外层，放到 sockopt 是合适的\r\n\r\n考虑到实际用途，只应该放在传输安全里实现，新增个 `streamSettings.security.tlsSettings.handshakeRace`"
+    },
+    {
+     "id": 7023506796,
+     "issue": 7425,
+     "issue_title": "Outbounds: Avoid circular dependencies with the built-in DNS",
+     "created_at": "2026-11-19T22:05:18Z",
+     "user": "Meo597",
+     "url": "https://github.com/XTLS/Xray-core/pull/7425#issuecomment-7023506796",
+     "body": "“友好协商”之后，就是各退一步，“成千上万”伊朗人都在用的 server-less-iran 不必变更配置\r\n`freedom's sockopt.domainStrategy` 也暂不强行切断潜在的环，只是打 info 日志提醒用户\r\n我看了下 info 本就会刷屏，因此正经人都是 warn 只有遇到问题调试的时候降等级 core 也尽了提醒的义务"
+    },
+    {
+     "id": 7023232049,
+     "issue": 7425,
+     "issue_title": "Outbounds: Avoid circular dependencies with the built-in DNS",
+     "created_at": "2026-11-19T21:52:20Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7425#issuecomment-7023232049",
+     "body": "~~讨论出共识了没~~"
+    },
+    {
+     "id": 7023199732,
+     "issue": 7393,
+     "issue_title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
+     "created_at": "2026-11-19T21:50:48Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7393#issuecomment-7023199732",
+     "body": "这个可以有吧但不只是为了 Happy Eyeballs，若要合并 https://github.com/XTLS/Xray-core/pull/4320 也需要它"
+    },
+    {
+     "id": 7022475554,
+     "issue": 7364,
+     "issue_title": "VLESS: run multiplexing directly on transport",
+     "created_at": "2026-11-19T21:17:37Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7022475554",
+     "body": "~~Mux 已经没有 concurrent write 了， VMess 入站多那一百行代码是干嘛~~"
+    },
+    {
+     "id": 7022354247,
+     "issue": 7364,
+     "issue_title": "VLESS: run multiplexing directly on transport",
+     "created_at": "2026-11-19T21:12:06Z",
+     "user": "svlavr",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7022354247",
+     "body": "@RPRX, I finished the cleanup and pushed the changes. I removed another 28 lines from VMess inbound. Ordinary TCP and UDP use the `DispatchLink` path from #5143. The remaining VMess code serializes concurrent replies before encryption, completes the response according to the protocol, and sends the VMess response header before Mux frames.\n\nVMess outbound accepts `mux` in its original configuration location and uses the shared VLESS Multiplex implementation. I simplified Multiplex shutdown and Reverse, removed the long-running Reverse test, and kept the main Reverse scenario. I also fixed the TLS version check that broke Vision over mKCP.\n\nAll 11 protocol scenarios, interoperability checks with the earlier build, and targeted Multiplex tests with the race detector passed. The full PR is now 403 lines smaller than `main`."
+    },
+    {
+     "id": 7021822919,
+     "issue": 7364,
+     "issue_title": "VLESS: run multiplexing directly on transport",
+     "created_at": "2026-11-19T20:48:42Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7021822919",
+     "body": "```go\r\n\tif request.Command == protocol.RequestCommandMux {\r\n\t\tworker := multiplex.NewServerWorker(ctx, dispatch.DispatchLink, &transport.Link{Reader: clientReader, Writer: clientWriter})\r\n\t\t<-worker.WaitClosed()\r\n\t\treturn nil\r\n\t}\r\n```\r\n\r\n~~VLESS inbound 就只是这样，然而 VMess inbound。。。~~"
+    },
     {
      "id": 7019836362,
      "issue": 7429,
@@ -2167,7 +2239,7 @@
      "created_at": "2026-11-19T04:57:23Z",
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-7000156278",
-     "body": "~~？现在不就是为了避免这种 consume time 的问题吗~~"
+     "body": "~~？现在不就是为了避免这种 consume time 的问题吗 https://github.com/XTLS/Xray-core/pull/7445#issuecomment-7008098842~~"
     },
     {
      "id": 6999766667,
@@ -2638,15 +2710,6 @@
      "body": "@RPRX. Just ping. What should I do?"
     },
     {
-     "id": 6963279666,
-     "issue": 7405,
-     "issue_title": "Feature request: configurable TLS fingerprint selection with weights and an explicit allowlist",
-     "created_at": "2026-11-17T22:49:24Z",
-     "user": "wywywywycloud",
-     "url": "https://github.com/XTLS/Xray-core/issues/7405#issuecomment-6963279666",
-     "body": "@Fangliding the test has concluded - diversivication of fingerprints did not change the game - the server got flagged"
-    },
-    {
      "id": 6939470828,
      "issue": 7431,
      "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
@@ -2659,6 +2722,39 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3468,
+     "title": "[Android] Тест RKNHardering на обход split-tunneling показывает утечку IP сервера",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-14T14:04:44Z",
+     "updated_at": "2026-11-20T01:28:34Z",
+     "user": "EternalBlueInfinity",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3468",
+     "body": "Как воспроизвести:\n\n1. Импортировать любую подписку (если еще нет)\n2. Включить Split tunnelling, добавить в туннель только браузер.\n3. Установить и запустить RKNHardering.\n4. Подождать, пока он переберет все порты на предмет локального SOCKS.\n5. В самом конце появится сообщение с двумя IP адресами. Один из них обозначен как VPN IP.\n6. Открыть браузер, который был добавлен в туннель, и зайти на любой сайт, определяющий IP.\n7. Сравнить IP из пунктов 6 и 5. Они совпадают.\n\nВозможно, для Free / Premium, где адрес подключения и адрес выхода в сеть это не настолько большая проблема, но для Self-hosted решений, в которых это может быть один и тот же IP - это проблема, которая может приводить к блокировкам серверов. Вероятнее всего, в этом и состоит причина массовых жалоб на блокировки Self-Hosted серверов.\n\nПримеры клиентов, где это уже исправлено (во всяком случае для Xray):\n\nhttps://github.com/ttrroyy/RawlineMobile\nhttps://github.com/yanisplugg/yptun/\nhttps://github.com/NullCoreDeveloper/v2whitelist/\nhttps://github.com/GXUser7/yumi/\nhttps://github.com/sliva-name/ultimaVLESS/\nhttps://github.com/hussaroff/tunnel/"
+    },
+    {
+     "number": 3491,
+     "title": "Новые SNI в версии 5.1.1.9 (пре-релиз).",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-18T16:04:25Z",
+     "updated_at": "2026-11-20T00:00:30Z",
+     "user": "Vitalik93",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3491",
+     "body": "@vkamn Пока версия 5.1.1.9 не вышла в релиз, сразу хочу обратить внимание на новые рандомные SNI в ней (https://github.com/amnezia-vpn/amnezia-client/pull/3458/changes/11afa5884b342a284865e8f3abd864205851dceb). Среди них предлагается www.speedtest.net, который в России давно заблокирован. Зачем вы его добавили, не понятно. Либо просто уберите, либо замените на нормальный, например cloudflare.com.\n\n<img width=\"1051\" height=\"2186\" alt=\"Screenshot_20261118_180226\" src=\"https://github.com/user-attachments/assets/54f7c3ef-ec5a-4309-bb61-ec0dce0fab16\" />"
+    },
+    {
+     "number": 3502,
+     "title": "fix(windows): prefer VPN routes for full IPv4 tunnels",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-19T21:02:40Z",
+     "updated_at": "2026-11-19T21:02:40Z",
+     "user": "frimo-dev",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3502",
+     "body": "With split tunneling disabled, a successful Windows VPN connection can still leave Internet traffic on the physical interface. In the reproduced case on 5.1.0.6, the physical default route had an effective metric of 36 while the VPN default route had a metric of 4230. `Find-NetRoute 1.1.1.1` selected the physical interface, and HTTPS and DNS requests failed despite the client showing Connected.\n\nInstall the full IPv4 tunnel as two OS routes, `0.0.0.0/1` and `128.0.0.0/1`, so longest-prefix matching selects the tunnel ahead of the physical default route. The server's more-specific exclusion route still takes precedence. This follows the IPv4 default-route approach already used by the Linux and macOS backends.\n\nThe same expansion is used during removal. If creation fails partway through, roll back only routes created by that call; an already-existing route is not removed by rollback. Teardown attempts both deletions even if one fails.\n\nRelated to #3143 and #3158. This is an alternative scoped to IPv4 OS route specificity; #3158 instead normalizes the IP interface state for both address families. The peer's AllowedIPs and firewall settings are not modified by this patch.\n\n### Validation\n\n- On the affected Windows machine, manually adding the two OS routes restored TCP connectivity to `1.1.1.1:443`, DNS resolution and browsing.\n- Built the Windows x64 client, service and EXE installer using Qt 6.10.1 and MSVC 2022, based on 5.1.0.6 with this patch. The affected source file is byte-for-byte identical between that release and the current `dev` base before applying the patch; the complete current `dev` tree has not been rebuilt.\n- The user installed the patched build and confirmed that browsing works after disconnecting and reconnecting, without manually adding routes.\n- A standalone harness compiling the production routing methods with Qt/Win32 test doubles passed 12 cases, including route priority, endpoint exclusion, repeated add/remove, partial-creation rollback, preservation of pre-existing routes, deletion failures, specific prefixes and disabled IPv6 handling. These are control-flow checks, not live Windows API tests.\n\nIPv6 routing and DNS-leak behavior have not been validated by this change.\n"
+    },
     {
      "number": 3448,
      "title": "Полная блокировка IP Amnezia self-hoster раз в неделю в России",
@@ -2935,17 +3031,6 @@
      "body": "Приветствую.\n\nПрежде всего — спасибо за клиент и за то, что проект открыт: разбираться по исходникам и по вашим ответам в обращениях можно, и это очень помогает.\n\nПишу о поведении, которое мешает в работе, и постараюсь изложить его так, чтобы вам было меньше работы: только наблюдения, журналы и то, что я уже проверил сам.\n\n**Что происходит**\n\nНажимаю \"Отключить\". В части случаев всё проходит как надо: значок остаётся в трее, служба убирает маршруты. В остальных случаях окно и значок исчезают — программа завершается, а служба продолжает работать. Подключение при этом всегда проходит нормально.\n\nЧастота. За шесть циклов \"подключить — отключить\" подряд: четыре завершения. После того как в раздельное туннелирование по приложениям были добавлены две программы, из двух циклов завершился один. Похоже, дело не в настройках, а в моменте — то есть в гонке.\n\n**Обстановка**\n\n- Windows 11 IoT Enterprise LTSC, 10.0.26100 (24H2), x64.\n- AmneziaVPN 5.1.0.6 (файл `C:\\Program Files\\AmneziaVPN\\AmneziaVPN.exe`), Qt 6.11.1 (`Qt6RemoteObjects.dll` 6.11.1.0).\n- Драйвер `mullvad-split-tunnel.sys` 1.2.5.0, служба `AmneziaVPNSplitTunnel`.\n- Протокол VLESS (XRay) с `tun2socks.exe`.\n- Настройки: раздельное туннелирование по сайтам включено; по приложениям включено, в списке две записи (`max.exe`, `max-service.exe`); kill switch выключен; собственный DNS Amnezia выключен; автозапуск с ключом `--autostart`, запуск свёрнутым.\n- Клиент запущен обычным путём (автозапуск и оболочка рабочего стола), внешним менеджером процессов не управляется.\n\n**Что видно в журнале службы**\n\nУдачный цикл — служба успевает всё сделать, канал жив:\n\n```\n[16:48:11.724Z] Xray::stopXray()\n[16:48:13.443Z] IpcServerProcess errorOccurred  QProcess::Crashed\n[16:48:13.457Z] RouterWin::clearSavedRoutes forward rows size: 8\n[16:48:13.460Z] Router::clearSavedRoutes : removed routes: 4 of 8\n```\n\nНеудачный цикл — те же шаги, но после остановки `tun2socks` служба замолкает, уборки маршрутов нет:\n\n```\n[16:48:53.761Z] Xray::stopXray()\n[16:48:55.561Z] IpcServerProcess errorOccurred  QProcess::Crashed\n```\n\nРанний неудачный цикл, где ошибка канала видна явно:\n\n```\n[15:40:11.985Z] Xray::stopXray()\n[15:40:12.424Z] QWindowsPipeWriter: write failed. (Канал был закрыт.)\n[15:40:13.729Z] IpcServerProcess errorOccurred  QProcess::Crashed\n```\n\nМежду командой отключения и обрывом канала проходит от 0.4 до 1.7 секунды. В удачных циклах `clearSavedRoutes` успевает выполниться, в неудачных — нет.\n\n**Что я проверил сам, чтобы не отнимать ваше время**\n\n1. **Падения нет.** В журнале Application за день нет ни одного события 1000 или 1001 по `AmneziaVPN.exe` в моменты этих циклов. Завершение тихое — поэтому и обратился, а не отправил отчёт о сбое.\n2. **Драйвер раздельного туннелирования, судя по всему, здесь ни при чём.** Пока список исключённых приложений был пуст, в журнале на каждом цикле повторялось `Stopping Split tunnel not successfull`. После добавления двух программ появились `Set Process Config ok`, `Driver is ready`, `New Network Config Applied`, `Pushing new Ruleset for Split-Tunnel`, и эта строка из новых циклов исчезла. Поведение при отключении, однако, не изменилось. Спасибо за разбор в #3216: по нему стало понятно, что пустой список ведёт себя как выключенное раздельное туннелирование.\n3. **Накопленное состояние службы тоже не объясняет.** Остановка и запуск `AmneziaVPN-service` сбрасывают состояние драйвера, а исход при отключении остаётся прежним.\n4. **Сеть и сервер в порядке.** Подключение проходит, трафик идёт, DNS отвечает; от длительности сеанса исход не зависит.\n\n**Предположение**\n\nПохоже на гонку между остановкой Xray с завершением `tun2socks` и разрывом канала между интерфейсом и службой. В неудачном варианте интерфейс закрывает соединение раньше, чем служба доходит до отправки финального состояния и до `clearSavedRoutes`: служба остаётся с невыполненной уборкой, интерфейс — завершённым. Если предположение неверно, поправьте, пожалуйста.\n\n**Отдельно, возможно тот же корень**\n\n18.11.2026 в 00"
     },
     {
-     "number": 3491,
-     "title": "Новые SNI в версии 5.1.1.9 (пре-релиз).",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-18T16:04:25Z",
-     "updated_at": "2026-11-18T16:19:24Z",
-     "user": "Vitalik93",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3491",
-     "body": "@vkamn Пока версия 5.1.1.9 не вышла в релиз, сразу хочу обратить внимание на новые рандомные SNI в ней (https://github.com/amnezia-vpn/amnezia-client/pull/3458/changes/11afa5884b342a284865e8f3abd864205851dceb). Среди них предлагается www.speedtest.net, который в России давно заблокирован. Зачем вы его добавили, не понятно. Либо просто уберите, либо замените на нормальный, например cloudflare.com.\n\n<img width=\"1051\" height=\"2186\" alt=\"Screenshot_20261118_180226\" src=\"https://github.com/user-attachments/assets/54f7c3ef-ec5a-4309-bb61-ec0dce0fab16\" />"
-    },
-    {
      "number": 3382,
      "title": "feat(split-tunneling): wildcard site entries, resolved by observing DNS",
      "is_pr": true,
@@ -2999,20 +3084,45 @@
      "user": "VoskVosk",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3489",
      "body": "## Description\nAfter updating to 5.1.1.9, the app no longer opens its main window on macOS. Only the tray icon appears and the main thread spins at 100% CPU. Disconnecting the external monitor fixes it immediately — the app launches normally.\n\n## Environment\n- AmneziaVPN: 5.1.1 (9), `AmneziaVPN_5.1.1.9_macos_x64.pkg`\n- macOS: 14.7.2 Sonoma (23H311)\n- Hardware: MacBook Pro M2 (Mac14,7), 8 GB\n- Displays (mirror mode):\n  - Built-in Retina: 2560×1600 (scale 2×)\n  - Samsung Odyssey G91SD: 5120×1440 (32:9, scale 1×) — set as Main\n\n## Steps to reproduce\n1. Connect an external monitor with a different aspect ratio/scale factor than the built-in display.\n2. Enable display mirroring.\n3. Launch AmneziaVPN.\n\n## Expected behavior\nMain window opens.\n\n## Actual behavior\n- Only the tray icon is shown, the window never appears.\n- The `AmneziaVPN` main thread is stuck in a busy loop (~100% CPU) — macOS spindump reports a hang.\n- `AmneziaVPN-service` is running normally (idle in its event loop).\n- After disconnecting the external monitor, the app starts normally.\n\n## Spindump excerpt\nMain thread is spinning at the same address for all 79 samples (7.85s):\n\n    Thread 0x115fe  DispatchQueue \"com.apple.main-thread\"  79 samples  cpu time 7.770s\n      ??? (AmneziaVPN + 2828644) [0x10120a964] 1-79\n\nFull spindump attached.\n\n## Possible cause\nProbably a Qt window geometry / devicePixelRatio recalculation loop when the window is restored on a mirrored screen whose scale factor differs between the physical displays (2× vs 1×).\n\n## Workaround\nLaunch the app before connecting the external monitor, or use extended desktop mode instead of mirroring."
-    },
-    {
-     "number": 3487,
-     "title": "fix: close the running app from a single windows installer",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-17T19:44:39Z",
-     "updated_at": "2026-11-17T21:02:40Z",
-     "user": "yp-amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3487",
-     "body": ""
     }
    ],
    "comments": [
+    {
+     "id": 7027502618,
+     "issue": 3468,
+     "issue_title": "[Android] Тест RKNHardering на обход split-tunneling показывает утечку IP сервера",
+     "created_at": "2026-11-20T01:28:33Z",
+     "user": "Krypt0nC0R3",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3468#issuecomment-7027502618",
+     "body": "В RawlineMobile для AWG тоже сокрытие работает нормально"
+    },
+    {
+     "id": 7025720986,
+     "issue": 3491,
+     "issue_title": "Новые SNI в версии 5.1.1.9 (пре-релиз).",
+     "created_at": "2026-11-20T00:00:30Z",
+     "user": "Vitalik93",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3491#issuecomment-7025720986",
+     "body": "> Тогда уж добавьте storage.googleapis.com, все равно вы уже используете его в других целях\n\nТак он и так сейчас по умолчанию ставится. Я новую пре-релизую версию с автоподбором имел ввиду, что там давно заблокированный домен теперь будет попадаться в SNI."
+    },
+    {
+     "id": 7022049535,
+     "issue": 3491,
+     "issue_title": "Новые SNI в версии 5.1.1.9 (пре-релиз).",
+     "created_at": "2026-11-19T20:58:48Z",
+     "user": "EternalBlueInfinity",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3491#issuecomment-7022049535",
+     "body": "Тогда уж добавьте storage.googleapis.com, все равно вы уже используете его в других целях"
+    },
+    {
+     "id": 7021780874,
+     "issue": 3468,
+     "issue_title": "[Android] Тест RKNHardering на обход split-tunneling показывает утечку IP сервера",
+     "created_at": "2026-11-19T20:46:57Z",
+     "user": "EternalBlueInfinity",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3468#issuecomment-7021780874",
+     "body": "Мне кажется, отдельного внимания заслуживает то, как помимо утечки через tun0 тут ещё и оригинально решили проблему с локальными SOCKS портами\nhttps://github.com/GXUser7/yumi/issues/12"
+    },
     {
      "id": 7020695716,
      "issue": 3448,
@@ -3138,15 +3248,6 @@
      "user": "sematgt",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2442#issuecomment-6977922826",
      "body": "reboot network or reboot computer"
-    },
-    {
-     "id": 6966591804,
-     "issue": 2442,
-     "issue_title": "Error 302 when I add a Self-hosted VPN server.",
-     "created_at": "2026-11-18T01:51:56Z",
-     "user": "AuthorProxy",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/2442#issuecomment-6966591804",
-     "body": "> It didn't help\n\ncheck your port"
     }
    ]
   },

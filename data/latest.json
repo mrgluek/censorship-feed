@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-20T20:17:14Z",
- "since": "2026-11-18T20:17:14Z",
+ "generated_at": "2026-11-21T02:13:20Z",
+ "since": "2026-11-19T02:13:20Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -119,6 +119,28 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2585,
+     "title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-10-06T03:37:09Z",
+     "updated_at": "2026-11-21T01:56:20Z",
+     "user": "CrisRed",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
+     "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
+    },
+    {
+     "number": 2643,
+     "title": "guard std::stoi in BOB outport, inport and newkeys handlers",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-20T23:36:05Z",
+     "updated_at": "2026-11-20T23:46:35Z",
+     "user": "pobregat0",
+     "url": "https://github.com/PurpleI2P/i2pd/pull/2643",
+     "body": "The outport and inport command handlers passed their argument straight to std::stoi, and newkeys caught only std::invalid_argument. An empty, non-numeric or over long value threw and unwound out of the command dispatch, dropping the BOB connection. The conversions now default to a value the existing range check rejects and the newkeys catch covers std::exception, the same class as #2641."
+    },
+    {
      "number": 2642,
      "title": "Add PuszkaPandory router family certificate",
      "is_pr": true,
@@ -161,31 +183,27 @@
      "user": "SilmorSenedlen",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2627",
      "body": "Good day\nI noticed again that PGP signatures not published for [new release](https://github.com/PurpleI2P/i2pd/releases/tag/3.0.0) for a long time(2 weeks since release).\nCreating sums and signature files are manual action or just not all artifact have been compiled yet for this version?\nIf the second, how to check that this process is completed in Actions (so not to bother you again unnecessarily)?"
-    },
-    {
-     "number": 2639,
-     "title": "torrents load , unhex",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-11-18T21:46:56Z",
-     "updated_at": "2026-11-18T22:51:16Z",
-     "user": "UU-0665D27",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2639",
-     "body": "надо 2 раза перезапустить i2pd\n```\n==120268==ERROR: AddressSanitizer: stack-buffer-overflow on address 0x7bd0a7433964 at pc 0x56487f6fdd29 bp 0x7ffda83f50d0 sp 0x7ffda83f50c8\nWRITE of size 1 at 0x7bd0a7433964 thread T0\n    #0 0x56487f6fdd28 in boost::enable_if<boost::is_integral<boost::algorithm::detail::hex_iterator_traits<unsigned char*>::value_type>, unsigned char*>::type boost::algorithm::detail::decode_one<__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*, bool (*)(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>)>(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>&, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*, bool (*)(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>)) /usr/include/boost/algorithm/hex.hpp:135:14\n    #1 0x56487f6d2390 in unsigned char* boost::algorithm::unhex<__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*>(__gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, __gnu_cxx::__normal_iterator<char*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>>, unsigned char*) /usr/include/boost/algorithm/hex.hpp:247:15\n    #2 0x56487f61aca9 in i2p::torrents::TorrentsTunnel::ReadMagnetFile(std::filesystem::__cxx11::path const&) /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/TorrentsTunnel.cpp:288:4\n    #3 0x56487f618324 in i2p::torrents::TorrentsTunnel::Start() /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/TorrentsTunnel.cpp:97:6\n    #4 0x56487ec66ba9 in i2p::client::ClientContext::ReadTunnels(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> const&, int&, int&) /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/ClientContext.cpp:1094:23\n    #5 0x56487ec48bed in i2p::client::ClientContext::ReadTunnels() /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/ClientContext.cpp:601:13\n    #6 0x56487ec43698 in i2p::client::ClientContext::Start() /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/ClientContext.cpp:58:3\n    #7 0x56487d83d03b in i2p::util::Daemon_Singleton::start() /home/u_uu/Documents/o/code/c/I2PD/daemon/Daemon.cpp:540:24\n    #8 0x56487dcb640e in i2p::util::DaemonUnix::start() /home/u_uu/Documents/o/code/c/I2PD/daemon/UnixDaemon.cpp:232:29\n    #9 0x56487dcb32d3 in main /home/u_uu/Documents/o/code/c/I2PD/daemon/i2pd.cpp:30:14\n    #10 0x7fd0a9227780  (/usr/lib/libc.so.6+0x27780) (BuildId: 6961407ef2e7877eabf5ed8c5a39aea9de7194c1)\n    #11 0x7fd0a92278b8 in __libc_start_main (/usr/lib/libc.so.6+0x278b8) (BuildId: 6961407ef2e7877eabf5ed8c5a39aea9de7194c1)\n    #12 0x56487d73d0d4 in _start (/srv/I2P/bin/i2pd_asan+0x436f0d4) (BuildId: 7da31e81ea56942e305a1314c3f43a38ded2d40d)\nAddress 0x7bd0a7433964 is located in stack of thread T0 at offset 356 in frame\n    #0 0x56487f61a68f in i2p::torrents::TorrentsTunnel::ReadMagnetFile(std::filesystem::__cxx11::path const&) /home/u_uu/Documents/o/code/c/I2PD/libi2pd_client/TorrentsTunnel.cpp:282\n  This frame has 17 object(s):\n    [32, 72) 'ref.tmp' (line 283)\n    [112, 152) 'ref.tmp' (line 283)\n    [192, 224) 'hexStr' (line 284)\n    [256, 296) 'ref.tmp' (line 284)\n    [336, 356) 'infoHash' (line 285) <== Memory access at offset 356 overflows this variable\n    [400, 432) 'ref.tmp' (line 297)\n    [464, 496) 'name' (line 300)\n    [528, 560) 'announce' (line 300)\n    [592, 632) 'pt' (line 3"
-    },
-    {
-     "number": 2640,
-     "title": "SAM: send each datagram subsession with its own version",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-18T22:43:27Z",
-     "updated_at": "2026-11-18T22:45:34Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2640",
-     "body": "Each datagram subsession of a MASTER session now sends with its own version, instead of all of them using the version of the first datagram subsession added.\n\nThe datagram destination is shared and its default version is fixed by the first subsession, since CreateDatagramDestination is called once. On send, the subsession's stored version is now applied per message through SetVersion, the same way TorrentsTunnel switches between Datagram2 and Datagram3.\n\nFix for #2638"
     }
    ],
    "comments": [
+    {
+     "id": 7055484678,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-11-21T01:55:01Z",
+     "user": "orignal",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-7055484678",
+     "body": "It doesn't crash anymore. Anything else is beyond i2pd's scope. No reason to keep this issue open.\nYou are free to complain to Fedora/RedHart"
+    },
+    {
+     "id": 7053605888,
+     "issue": 2585,
+     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
+     "created_at": "2026-11-20T23:55:09Z",
+     "user": "OlegGirko",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-7053605888",
+     "body": "Could you please explain how you fixed this problem?"
+    },
     {
      "id": 7007148278,
      "issue": 2638,
@@ -203,24 +221,6 @@
      "user": "SilmorSenedlen",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2627#issuecomment-7005400284",
      "body": "@r4sas \nGood day\nCan you add signatures for this release?"
-    },
-    {
-     "id": 6997378028,
-     "issue": 2638,
-     "issue_title": "SAM: subsessions of a MASTER session send all datagrams with the first subsession's version (breaks BitTorrent UDP tracker announces)",
-     "created_at": "2026-11-19T02:00:54Z",
-     "user": "Vort",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2638#issuecomment-6997378028",
-     "body": "@ngosang, this problem should be fixed with 9fbc41c9bbbbbd6b5219f5ad505d8a088e1bf7c6. Please check."
-    },
-    {
-     "id": 6993576118,
-     "issue": 2639,
-     "issue_title": "torrents load , unhex",
-     "created_at": "2026-11-18T22:31:49Z",
-     "user": "orignal",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2639#issuecomment-6993576118",
-     "body": "https://github.com/PurpleI2P/i2pd/commit/ed4f10a7fadd2da54e618e5073ecfcb5dea14423"
     }
    ]
   },
@@ -230,6 +230,17 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7431,
+     "title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-16T18:49:30Z",
+     "updated_at": "2026-11-20T21:34:04Z",
+     "user": "OneMiny",
+     "url": "https://github.com/XTLS/Xray-core/pull/7431",
+     "body": "Updates github.com/klauspost/compress from v1.20.1 to v1.20.4 to address CVE-2026-116591 (GHSA-fpmh-frq8-7rj8).\n\nXray indirectly uses the Zstandard decoder through uTLS to decompress server certificate messages during TLS 1.3 handshakes. A crafted Zstandard frame can trigger an out-of-bounds panic in the affected decoder, potentially terminating the process when this certificate compression path is used.\n\nAdvisory: https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8\n\n### Validation\n\nA standalone streaming-decoder reproducer was run against both versions using the same 27,567-byte input:\n\n- v1.20.1: panics with `index out of range [33077] with length 32768` in a decoder worker goroutine, terminating the process.\n- v1.20.4: returns `corrupt input: weights tableLog too big` with zero output and exits without a panic.\n\n"
+    },
     {
      "number": 7393,
      "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
@@ -317,17 +328,6 @@
      "user": "Meo597",
      "url": "https://github.com/XTLS/Xray-core/pull/7429",
      "body": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6907616077"
-    },
-    {
-     "number": 7431,
-     "title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-16T18:49:30Z",
-     "updated_at": "2026-11-19T17:13:29Z",
-     "user": "OneMiny",
-     "url": "https://github.com/XTLS/Xray-core/pull/7431",
-     "body": "Updates github.com/klauspost/compress from v1.20.1 to v1.20.4 to address CVE-2026-116591 (GHSA-fpmh-frq8-7rj8).\n\nXray indirectly uses the Zstandard decoder through uTLS to decompress server certificate messages during TLS 1.3 handshakes. A crafted Zstandard frame can trigger an out-of-bounds panic in the affected decoder, potentially terminating the process when this certificate compression path is used.\n\nAdvisory: https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8\n\n### Validation\n\nA standalone streaming-decoder reproducer was run against both versions using the same 27,567-byte input:\n\n- v1.20.1: panics with `index out of range [33077] with length 32768` in a decoder worker goroutine, terminating the process.\n- v1.20.4: returns `corrupt input: weights tableLog too big` with zero output and exits without a panic.\n\n"
     },
     {
      "number": 7450,
@@ -1608,6 +1608,33 @@
    ],
    "comments": [
     {
+     "id": 7051157327,
+     "issue": 7431,
+     "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
+     "created_at": "2026-11-20T21:34:04Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-7051157327",
+     "body": "也好不用紧急发版了"
+    },
+    {
+     "id": 7051147493,
+     "issue": 7431,
+     "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
+     "created_at": "2026-11-20T21:33:32Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-7051147493",
+     "body": "> 能构造服务端响应的话，识别 uTLS 的方法有很多，不缺这一个，但目前也暂无更好的替代品了（指功能全的原生 Chrome 栈）\r\n\r\n据我所在不持有服务端证书的情况下目前是没有的 毕竟TLS要求很严几乎没有操作空间 这个BUG存在是因为它刚好是压缩证书消息这里 在验证证书的前最后一步出的问题 我看了下好像就Firefox指纹 用的不多 但是用的话是确确实实可以把客户端崩掉的"
+    },
+    {
+     "id": 7051106089,
+     "issue": 7431,
+     "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
+     "created_at": "2026-11-20T21:31:20Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-7051106089",
+     "body": "回去写了一下POC 写了一半发现这个BUG只有Firefox指纹受影响 因为chrome的CH是不带zstd算法的 就没法触发 99%的人应该是不受影响的\r\n这年头都是AI PR没有人类了 哎"
+    },
+    {
      "id": 7046117805,
      "issue": 7419,
      "issue_title": "Leave Team",
@@ -2191,24 +2218,6 @@
      "user": "salehMomtaz",
      "url": "https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6999731330",
      "body": "> \"@salehMomtaz You didn't understand. What I mean is: if some minor bugs aren't actually triggered by anyone, fixing them is useless — like that pile of race-condition fixes. And reviewing PRs requires reading a lot of code.\nAnd as the architecture iterates, small issues that nobody actually triggers will disappear on their own — and the big premise is still that the code actually has a problem, rather than AI just thinking there's a problem. Look at how many PRs get closed every day already.\"\n\ni looked at mentioned race condition fixes in recent requests - absolutely correct - minor bug was there - no one have triggered that race condition -> why would you consume time to fix it? "
-    },
-    {
-     "id": 6991917859,
-     "issue": 7346,
-     "issue_title": "TUN inbound: Route each new UDP destination, keeping FullCone NAT within a route",
-     "created_at": "2026-11-18T21:17:47Z",
-     "user": "Meo597",
-     "url": "https://github.com/XTLS/Xray-core/pull/7346#issuecomment-6991917859",
-     "body": "firewall 没办法简单地搬到路由阶段，除非改写 IP"
-    },
-    {
-     "id": 6991140613,
-     "issue": 7369,
-     "issue_title": "panic: slice bounds out of range [8192:8171] in XtlsPadding (VLESS outbound, Reality + Vision), recurring ~6x/hour on 25.6.8 / 25.9.5 / 25.12.8",
-     "created_at": "2026-11-18T20:46:00Z",
-     "user": "ibrahimshaih",
-     "url": "https://github.com/XTLS/Xray-core/issues/7369#issuecomment-6991140613",
-     "body": "Thank you @anonymousmeower, that explains it. We do have a gRPC inbound on this relay (7 clients, roughly a third of all connections), and the bursts line up with a threshold like 12288.\n\nI reproduced it independently on v25.12.8 (`81f8f39`) with a small test: a 12288-byte buffer created with `buf.NewExisted` goes through `ReshapeMultiBuffer`, the second piece is exactly 8192 bytes, and `XtlsPadding` then computes `paddingLen = -21`. Agreed that clamping `paddingLen` is the wrong fix (it just trades a crash for truncation), the split has to be done properly.\n\nThis is what we run now on the production relay, in case it is useful as a starting point (it only changes the oversize path; buffers whose remainder fits are split exactly as before):\n\n```go\ntail := buffer1.BytesFrom(index)\nvar pieces []*buf.Buffer\nfor len(tail) > 0 {\n\tn := len(tail)\n\tif n > buf.Size-21 {\n\t\tn = buf.Size - 21\n\t}\n\tpiece := buf.New()\n\tpiece.Write(tail[:n])\n\tpieces = append(pieces, piece)\n\ttail = tail[n:]\n}\nbuffer1.Resize(0, index)\nmb2 = append(mb2, buffer1)\nfor _, piece := range pieces {\n\tmb2 = append(mb2, piece)\n}\n```\n\nA test with sizes 8171 / 8192 / 8213 / 12288 / 16384 / 20000 / 40000 (with and without a TLS application-data header) passes: every piece is <= `buf.Size-21`, the concatenation equals the input, and `XtlsPadding` does not panic on any piece. The same test fails on the unpatched code at 12288. Interop with sing-box and Xray 24/25/26 clients over Reality, XHTTP and gRPC is unchanged in our matrix. We will report back after a few days of real traffic (the relay was crashing about 100 times a day before).\n"
     },
     {
      "id": 6987691943,

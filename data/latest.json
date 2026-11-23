@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-22T19:38:49Z",
- "since": "2026-11-20T19:38:49Z",
+ "generated_at": "2026-11-23T01:41:47Z",
+ "since": "2026-11-21T01:41:47Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -122,17 +122,6 @@
      "user": "CrisRed",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2585",
      "body": "i2pd crashes with a SIGSEGV in DSASigner::Sign (libi2pd/Signature.cpp, around line 86) on systems where OpenSSL refuses DSA operations, and the crash is fully reproducible on demand. The root cause is that the return values of EVP_DigestSignInit and EVP_DigestSign are never checked, so when the provider key management refuses the DSA key, the signing call fails silently and leaves the output buffer full of garbage. The subsequent d2i_DSA_SIG then returns NULL on that invalid data, and the NULL pointer goes straight into DSA_SIG_get0, which dereferences it and takes the process down.\n\nI'm hitting this on i2pd 2.59.0 running on Fedora 44/rawhide, with update-crypto-policies --show reporting DEFAULT. On this system even openssl genpkey -algorithm DSA fails outright with \"provider keymgmt failure\", so DSA simply cannot be assumed to work at all here. Any distro or setup where the OpenSSL provider refuses DSA should behave the same way.\n\nThe crash is remotely reachable through SAM. Opening a SAM connection and sending SESSION CREATE with STYLE=STREAM and DESTINATION=TRANSIENT, omitting SIGNATURE_TYPE, gives the session SIGNING_KEY_TYPE_DSA_SHA1 by default (SAMBridge::CreateSession in SAM.cpp), and the router dies the moment the transient destination tries to sign its first LeaseSet. Since anyone able to reach the SAM port can trigger this, it feels more serious than an ordinary local crash.\n\nThe failing path looks like this: EVP_DigestSignInit(ctx, NULL, EVP_sha1(), NULL, m_PrivateKey) followed by EVP_DigestSign(ctx, sign, &l, buf, len) with the result ignored, then DSA_SIG *sig = d2i_DSA_SIG(NULL, &s1, l) yielding NULL on failure, and finally DSA_SIG_get0(sig, &r, &s) where the segfault happens. Backtrace of the crashing thread:\n\n```\n#0  DSA_SIG_get0 (sig=0x0, ...) at crypto/dsa/dsa_sign.c:137\n#1  i2p::crypto::DSASigner::Sign (...) at libi2pd/Signature.cpp:86\n#2  i2p::data::PrivateKeys::Sign (...) at libi2pd/Identity.cpp:658\n#3  i2p::data::LocalLeaseSet2::LocalLeaseSet2 (...) at libi2pd/LeaseSet.cpp:948\n...\n#11 i2p::client::ClientDestination::CreateNewLeaseSet (...) at libi2pd/Destination.cpp:1497\n#12 i2p::client::LeaseSetDestination::UpdateLeaseSet (...) at libi2pd/Destination.cpp:272\n```\n\nAs a fix, the signer should at minimum validate the EVP calls and fail cleanly instead of dereferencing NULL. It might also be worth considering a fallback to a signature type the local OpenSSL actually supports, since DSA can no longer be taken for granted. Related to this, when CreateSession receives a SIGNATURE_TYPE that fails to resolve it currently just logs a warning and keeps going with the DSA default, which I would expect to be a hard error at session creation time rather than a deferred crash. Happy to attach the full backtrace and core dump if useful."
-    },
-    {
-     "number": 2643,
-     "title": "guard std::stoi in BOB outport, inport and newkeys handlers",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-20T23:36:05Z",
-     "updated_at": "2026-11-20T23:46:35Z",
-     "user": "pobregat0",
-     "url": "https://github.com/PurpleI2P/i2pd/pull/2643",
-     "body": "The outport and inport command handlers passed their argument straight to std::stoi, and newkeys caught only std::invalid_argument. An empty, non-numeric or over long value threw and unwound out of the command dispatch, dropping the BOB connection. The conversions now default to a value the existing range check rejects and the newkeys catch covers std::exception, the same class as #2641."
     }
    ],
    "comments": [
@@ -198,15 +187,6 @@
      "user": "orignal",
      "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-7055484678",
      "body": "It doesn't crash anymore. Anything else is beyond i2pd's scope. No reason to keep this issue open.\nYou are free to complain to Fedora/RedHart"
-    },
-    {
-     "id": 7053605888,
-     "issue": 2585,
-     "issue_title": "SIGSEGV in DSASigner::Sign when OpenSSL provider refuses DSA signing",
-     "created_at": "2026-11-20T23:55:09Z",
-     "user": "OlegGirko",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-7053605888",
-     "body": "Could you please explain how you fixed this problem?"
     }
    ]
   },
@@ -216,6 +196,116 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7475,
+     "title": "Bump golang.org/x/net from 0.62.0 to 0.63.0",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-23T00:27:04Z",
+     "updated_at": "2026-11-23T00:27:07Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7475",
+     "body": "Bumps [golang.org/x/net](https://github.com/golang/net) from 0.62.0 to 0.63.0.\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/golang/net/commit/e573c118f8a9bddf68306f814cd38dbe11bf7b10\"><code>e573c11</code></a> go.mod: update golang.org/x dependencies</li>\n<li><a href=\"https://github.com/golang/net/commit/e44ac12c0d40f5de4834f3f6f73aeed26f066bca\"><code>e44ac12</code></a> http2: fix a few issues revealed by the net/http unified pool</li>\n<li>See full diff in <a href=\"https://github.com/golang/net/compare/v0.62.0...v0.63.0\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=golang.org/x/net&package-manager=go_modules&previous-version=0.62.0&new-version=0.63.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>"
+    },
+    {
+     "number": 7474,
+     "title": "Bump lukechampine.com/blake3 from 1.4.1 to 1.5.0",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-23T00:26:47Z",
+     "updated_at": "2026-11-23T00:26:50Z",
+     "user": "dependabot[bot]",
+     "url": "https://github.com/XTLS/Xray-core/pull/7474",
+     "body": "Bumps lukechampine.com/blake3 from 1.4.1 to 1.5.0.\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=lukechampine.com/blake3&package-manager=go_modules&previous-version=1.4.1&new-version=1.5.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\n\n\n</details>"
+    },
+    {
+     "number": 7347,
+     "title": "TUN inbound: Half-close the app connection when the outbound is done, instead of waiting for `uplinkOnly`",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-08T08:24:57Z",
+     "updated_at": "2026-11-22T22:43:19Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7347",
+     "body": "## Why\n\nWith Xray's TUN as the system VPN, an app that reads a response until the server closes waits about 1 s more than it should on every such connection. The outbound already knows the response is over, but TUN keeps the app's connection open until the whole dispatch ends, and that happens only after `uplinkOnly`. Examples are HTTP/1.0 without `Content-Length`, RTSP (Moonlight in #5845) and simple request and reply protocols. With this change the app gets the end of the response right away\n\n## What changed\n\n- TUN sends FIN to the app as soon as the outbound is done with the response. The app can still send, and the connection is closed as before when the dispatch is over\n- the lightweight TCP stack gets `CloseWrite` for that\n- the rest of the core still closes links in pairs, as agreed in the thread\n\n## Testing and limits\n\n- `TestTCPCloseWrite` checks that FIN goes out, that data from the app is still read after it and that `Close` sends nothing more. `go test -race ./proxy/tun` passes\n- this helps only when the outbound itself sees the end of the response, for example freedom or VMess. Over VLESS the outbound ends only after `uplinkOnly` on the server, so the wait there stays\n\nRelated #5845 #7345\n"
+    },
+    {
+     "number": 7178,
+     "title": "grpc: close cached clients with their outbound handler",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-10-16T08:57:31Z",
+     "updated_at": "2026-11-22T22:29:15Z",
+     "user": "konezumi0",
+     "url": "https://github.com/XTLS/Xray-core/pull/7178",
+     "body": "Related to #7177. Requesting review of resource ownership, shutdown semantics, and API compatibility\r\n\r\n## Problem\r\n\r\nOutbound gRPC clients are cached by destination and MemoryStreamConfig, but core shutdown never closes or removes them. In an embedding process that stays alive, clients can retain connections and continue reconnecting after their core has stopped.\r\n\r\n## Change\r\n\r\nGive memory stream settings synchronous close-hook registration, and close the resources from their owning outbound handler. Register each ClientConn for exact-entry cache removal and ClientConn.Close. Refuse both reuse and creation after owner closure starts; racing creation must either register for cleanup or close its unpublished client. Cleanup runs outside the settings/cache locks, and concurrent Close callers wait for the same result.\r\n\r\nThe supported Instance lifecycle is single-start. Each fresh core retains separate ownership even when endpoint and outbound tags match. No per-run generation model, idle-timeout change or per-RPC closure of the shared ClientConn is added.\r\n\r\n## Validation\r\n\r\n- Synthetic regression reproduces the problem on v26.3.27 and main da2248c.\r\n- `go test -race ./transport/internet ./transport/internet/grpc -count=1 -timeout=120s` passes on this exact branch.\r\n- Official `go run ./infra/vformat/main.go -mode check -pwd ./` passes.\r\n- Tests cover two live cores, sibling streams, normal/MultiMode, fresh-core cycles, failed-start cleanup, multiple destinations, owner/acquisition races, cancellation/backoff and forced dialerProxy lookup contention with Manager.Close.\r\n- Earlier candidate testing also ran the target race suites five times and the dialerProxy test ten times. Those results are supplementary, not a claim that the whole upstream suite passes.\r\n\r\n## Review questions / limits\r\n\r\n- Handler.Close previously always returned nil. This candidate propagates cleanup errors. Is propagation preferred, or should transport cleanup be logged while preserving the existing return policy? Embedders must distinguish a cleanup error from a still-running core.\r\n- MemoryStreamConfig with resource/mutex state must not be copied; direct external transport callers must close their settings.\r\n- Manager.RemoveHandler still bypasses Handler.Close. XHTTP/nested download settings and TUN eventfd cleanup remain unfixed.\r\n- No general multi-instance guarantee for Xray's other process-global networking state, TLS/Reality/masking matrix, or physical Android packet boundary is claimed.\r\n\r\nThis is intended as a draft for ownership/API review, not a claim that the Android product defect is resolved.\r\n"
+    },
+    {
+     "number": 7471,
+     "title": "Freedom: Fix PROXY protocol client address encoding across TCP and UDP",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-22T21:54:26Z",
+     "updated_at": "2026-11-22T22:26:38Z",
+     "user": "kevdliu",
+     "url": "https://github.com/XTLS/Xray-core/pull/7471",
+     "body": "**Problem**\nWhen proxyProtocol is set on a Freedom outbound, the PROXY protocol header is built from the inbound source address and the remote address of the outgoing connection. However, `proxyproto.HeaderProxyFromAddrs` only fills in the addresses when the source address and the destination address are of the same type: both TCP or both UDP. If they differ, it falls back to an UNSPEC/UNKNOWN header and leaves the addresses out. The backend then never sees the real client IP. \n\nThis happens whenever the client's transport protocol doesn't match the one Freedom uses to reach the destination. For example:\n- The client connects over UDP (QUIC-based inbounds such as Hysteria2, or UDP-based transports) and the request goes out over TCP\n- The client connects over TCP and the traffic goes out as UDP\n\n**Solution**\nThis PR updates proxy header construction to match the source address type to the destination transport when constructing the header. This preserves the client IP and port for both UDP-to-TCP and TCP-to-UDP address conversion. The change is limited to header construction.\n\n**Testing**\n- Verified that a TCP listener receives the original IPv4 and IPv6 client endpoints with PROXY v1 and v2.\n- Verified that a TCP source and UDP destination produce a PROXY v2 UDP header with the original endpoints.\n- Ran the PROXY protocol, finalmask, Freedom, and configuration package tests. All passed."
+    },
+    {
+     "number": 7382,
+     "title": "Issue with terminating dead connections",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-11T19:53:52Z",
+     "updated_at": "2026-11-22T22:19:59Z",
+     "user": "megasoheilsh",
+     "url": "https://github.com/XTLS/Xray-core/issues/7382",
+     "body": "### Integrity requirements\n\n- [x] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [x] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [x] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [x] I searched issues and did not find any similar issues.\n- [x] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nHello. When the client terminates the core, the server cuts off idle connection the connection 5 minutes later. Please provide a solution to resolve this issue.\nI discussed this issue with my good friend @patterniha  who suggested using the 'custom sockopt' method. I also tested this configuration with the help of AI, but the problem regarding the closure of dead connections remains unresolved.\n\"customSockopt\": [\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"1\",\n          \"opt\": \"9\",\n          \"value\": \"1\",\n          \"type\": \"int\"\n        },\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"6\",\n          \"opt\": \"6\",\n          \"value\": \"1\",\n          \"type\": \"int\"\n        },\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"6\",\n          \"opt\": \"5\",\n          \"value\": \"1\",\n          \"type\": \"int\"\n        },\n        {\n          \"system\": \"linux\",\n          \"network\": \"tcp\",\n          \"level\": \"6\",\n          \"opt\": \"4\",\n          \"value\": \"10\",\n          \"type\": \"int\"\n        }\n      ]\n    }\n  },\n\n### Reproduction Method\n\nxhttp + tls + custom header\n\n### Client config\n\nnone \n\n### Server config\n\n{\n  \"api\": {\n    \"listen\": \"127.0.0.1:60350\",\n    \"services\": [\n      \"HandlerService\",\n      \"LoggerService\",\n      \"StatsService\",\n      \"RoutingService\"\n    ],\n    \"tag\": \"api\"\n  },\n  \"burstObservatory\": null,\n  \"dns\": {\n    \"queryStrategy\": \"UseIP\",\n    \"servers\": [\n      \"https://8.8.8.8/dns-query\",\n      \"https://1.1.1.1/dns-query\"\n    ],\n    \"tag\": \"dns_inbound\"\n  },\n  \"fakedns\": null,\n  \"inbounds\": [\n    {\n      \"listen\": null,\n      \"port\": 443,\n      \"protocol\": \"vless\",\n      \"settings\": {\n        \"clients\": [\n          {\n            \"email\": \"\",\n            \"flow\": \"\",\n            \"id\": \"929fb3a2-9c51-4e34-a946-daab72dec7e0\"\n          }\n        ],\n        \"decryption\": \"\",\n        \"encryption\": \"\",\n        \"selectedAuth\": \"ML-KEM-768, Post-Quantum\"\n      },\n      \"sniffing\": {\n        \"destOverride\": [\n          \"quic\",\n          \"fakedns\",\n          \"tls\"\n        ],\n        \"enabled\": true,\n        \"routeOnly\": true\n      },\n      \"streamSettings\": {\n        \"finalmask\": {\n          \"tcp\": [\n            {\n              \"settings\": {\n                \"clients\": [\n                ],\n                \"errors\": [],\n                \"servers\": [\n                ]\n              },\n              \"type\": \"header-custom\"\n            }\n          ]\n        },\n        \"network\": \"xhttp\",\n        \"security\": \"tls\",\n        \"tlsSettings\": {\n          \"alpn\": [\n            \"h2\"\n          ],\n          \"certificates\": [\n          ],\n          \"echForceQuery\": \"none\",\n          \"maxVersion\": \"1.3\",\n          \"minVersion\": \"1.2\"\n        },\n        \"xhttpSettings\": {\n          \"extra\": {\n            \"scMaxBufferedPosts\": 30,\n            \"scMaxEachPostBytes\": \"1000000\",\n            \"scMinPostsIntervalMs\": \"30\",\n            \"scStreamUpServerSecs\": \"10\",\n            \"xPaddingBytes\": \"1\"\n          },\n          \"mode\": \"auto\",\n          \"path\": \"/\"\n        },\n        \"sockopt\": {\n          \"tcpKeepAliveIdle\": 20,\n          \"tcpKeepAliveInterval\": 1\n        }\n      },\n      \"tag\": \"inbound-443\"\n    }\n  ],\n  \"log\": {\n    \"access\": \"none\",\n    \"error\": \"none\",\n    \"loglevel\": \"none\",\n    \"maskAddress\": \"\"\n  },\n  \"observatory\": null,\n  \"outbounds\": [\n    {\n      \"protocol"
+    },
+    {
+     "number": 7473,
+     "title": "Add lock to tcp dns handler",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-22T22:18:20Z",
+     "updated_at": "2026-11-22T22:18:20Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7473",
+     "body": "close #7462"
+    },
+    {
+     "number": 7472,
+     "title": "Claude Team account",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-22T22:00:12Z",
+     "updated_at": "2026-11-22T22:03:02Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/issues/7472",
+     "body": "I started using AI after @RPRX refused to add `cipherSuites` to the standard share-link abbreviation names. I needed AI because I wasn't very familiar with UI development on Android and Windows, so I used it to develop pattN/pattNG with support for `cipherSuites`.\n\nBut after using it for a while, I realized what a great blessing it is, and that if you guide it properly, it can do amazing things, you no longer need to spend your time and mental energy on many routine tasks, allowing you to focus on more important work.\n\nI've never asked @RPRX for anything, he made me a member himself (although I thought I might also receive a very small share of the sponsorships after he started getting sponsored).\n\nbut I am now requesting a Claude Team account from @RPRX, not just for myself, but for all team members, to help further improve Xray.\n\nI have repeatedly seen @RPRX  using Copilot, which offers relatively low-quality results. I’m confident that if @RPRX  spends some time working with Claude models, his perspective on AI will change.\n\nClaude can significantly accelerate our progress toward achieving our goals."
+    },
+    {
+     "number": 7460,
+     "title": "TUN inbound: Support a configurable Wintun adapter GUID on Windows (#7458)",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-22T10:19:08Z",
+     "updated_at": "2026-11-22T21:24:02Z",
+     "user": "Plangto",
+     "url": "https://github.com/XTLS/Xray-core/pull/7460",
+     "body": "Implements #7458.\n\nAdds an optional \"guid\" to the TUN inbound, used when Xray creates the Wintun adapter:\n\n  \"settings\": { \"name\": \"xray0\", \"guid\": \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\" }\n\n- Omitted: the GUID is still MD5 of the name, nothing changes.\n- Set: passed to wintun.CreateAdapter. An adapter that already has the name is\n  still opened by name and reused, so the name stays the primary key.\n- Windows only, but validated as a canonical GUID on every platform, so a typo\n  fails at config load instead of at TUN start.\n- windows.GUID is built explicitly with the first three groups little-endian,\n  which is what the old unsafe reinterpretation of the MD5 bytes produced, so\n  the default path is unchanged.\n\nFiles: proxy/tun/config.proto (+ regenerated config.pb.go), new proxy/tun/guid.go,\ntun_windows.go, infra/conf/tun.go, tests (including a //go:build windows one for\nthe GUID layout), and a paragraph in proxy/tun/README.md.\n\nTested: go test ./proxy/tun/ ./infra/conf/, builds for windows/amd64+arm64,\ndarwin/arm64, freebsd/amd64, linux/arm64, GOOS=windows go vet,\nvprotogen -mode check.\n\nNote: xtls.github.io needs a \"guid\" row in the TUN inbound section."
+    },
+    {
+     "number": 7393,
+     "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-13T13:33:16Z",
+     "updated_at": "2026-11-22T21:13:30Z",
+     "user": "hexband",
+     "url": "https://github.com/XTLS/Xray-core/pull/7393",
+     "body": "## Motivation\n\nWhen the server's domain resolves to several IPs, Happy Eyeballs is supposed to pick a working one. In Russia, however, some ISPs (the DPI boxes installed at them) drop the ServerHello for some of these IPs while TCP to them still connects. Which IPs are affected differs from one ISP and region to another and changes over time: an IP that is blocked for one client works for another, so removing it from DNS would only break it for everyone else. Happy Eyeballs today ends the race at the first TCP connection, so it happily picks such an IP, and then the TLS or REALITY handshake can never complete. A retry usually picks the same IP again, because it wins the TCP race again. In this situation the current Happy Eyeballs is of no use at all, even though other IPs of the same domain work fine.\n\n## What this PR adds\n\nA new optional field `successDefinition` in `sockopt.happyEyeballs`:\n\n| Value | The race is won by |\n|---|---|\n| `tcpConnected` (default) | the first established TCP connection, as before |\n| `tlsHandshakeComplete` | the first connection that completes the TLS or REALITY handshake |\n\n```json\n\"sockopt\": {\n  \"domainStrategy\": \"UseIP\",\n  \"happyEyeballs\": {\n    \"tryDelayMs\": 250,\n    \"maxConcurrentTry\": 4,\n    \"successDefinition\": \"tlsHandshakeComplete\"\n  }\n}\n```\n\nWithout `successDefinition`, or with `tcpConnected`, nothing changes. Without TLS or REALITY, `tlsHandshakeComplete` is the same as `tcpConnected`.\n\nThe behaviour follows section 6.1 of Happy Eyeballs v3, which says clients SHOULD wait for the TLS handshake to complete before canceling other attempts: https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/\nChromium's Happy Eyeballs v3 implementation does the same: a TCP-based attempt runs the TLS handshake inside it and completes only when the handshake does, and an attempt counts as slow (so the next one starts) if TCP and TLS together take longer than the connection attempt delay:\n- https://chromium.googlesource.com/chromium/src/+/main/net/socket/tls_stream_attempt.cc\n- https://chromium.googlesource.com/chromium/src/+/main/net/http/http_stream_pool_attempt.cc\n\nHappy Eyeballs v3 is still a draft, and browsers do not use it by default yet: in Chromium it is behind the `HappyEyeballsV3` feature, which is disabled by default, and Firefox enables it only in Nightly.\n\n## How it works\n\n- The scheduler of `TcpRaceDial` is reused as is (`tryDelayMs`, `maxConcurrentTry`, `prioritizeIPv6`, `interleave`); only the attempt it runs differs. With `tcpConnected` the attempt is the same system dial as before.\n- With `tlsHandshakeComplete` every attempt goes through TCP dial to one IP → FinalMask (if any) → the transport's own TLS or REALITY handshake. Only the TCP destination changes from attempt to attempt; masks apply to each attempt separately, exactly as on a normal dial.\n- An attempt keeps its `maxConcurrentTry` slot until its handshake ends, and a hanging handshake does not stop the scheduler from starting the next attempt after `tryDelayMs`.\n- Losing attempts are stopped by closing their connections. Transports that leave the handshake to the first write (gRPC, and HTTPUpgrade and XHTTP with Go TLS) get it completed inside the race, so a connection is never handshaked twice.\n- The race happens under the same conditions as the TCP race in `DialSystem`: `domainStrategy` set, at least two IPs, no `dialerProxy`, non-zero `tryDelayMs` and `maxConcurrentTry`. Otherwise the transport dials exactly as before.\n\nAll covered transports now dial through `internet.DialTCPWithHandshake(ctx, dest, streamSettings, handshake)`. `handshake` is a function that wraps the TCP connection with the transport's TLS or REALITY client; it holds the same code the transport used to run right after its own TCP dial.\n\nTransports covered: RAW (TLS, REALITY), WebSocket, HTTPUpgrade, gRPC (TLS, REALITY), XHTTP over HTTP/1.1 and HTTP/2 (TLS, REALITY), MASQUE over HTTP/2. For XHTTP the race runs once per new physical connection. UDP"
+    },
     {
      "number": 7352,
      "title": "XDRIVE transport: Release notes & more optimizations for the Google Drive backend",
@@ -338,17 +428,6 @@
      "body": "## Why\n\nThe VLESS outbound with `xtls-rprx-vision` rejects UDP/443 only after it has dialed the server, up to five attempts, and finished the TLS or REALITY handshake. Browsers try QUIC first and fall back to TCP, so every such attempt pays a dial and a handshake for a request that is rejected anyway.\n\n## What changed\n\nThe check moves to the start of `Process`, before the dial and before a connection is taken from the `testpre` pool, so a rejected request does not use up a pre-connected one. Requests that were rejected after the dial are now rejected before it, with the same error. `xtls-rprx-vision-udp443`, no flow, other UDP ports and TCP 443 dial as before.\n\n## Testing and limits\n\n`TestVisionRejectsUDP443BeforeDialing` checks that UDP/443 through Vision is rejected without a dial, it fails on `main`. `TestDialsWhatVisionDoesNotReject` checks that the cases above still dial.\n\nMeasured on a build based on v26.10.31, on a local stand with a REALITY server with Vision on localhost, 300 QUIC attempts.\n\n| | CPU per attempt | memory per session |\n| -- | -- | -- |\n| before | 2.29 ms | 44.2 KB |\n| this PR | 0.85 ms | 42.4 KB |\n\n`go test -race ./proxy/vless/...` passes.\n"
     },
     {
-     "number": 7393,
-     "title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-13T13:33:16Z",
-     "updated_at": "2026-11-22T14:47:26Z",
-     "user": "hexband",
-     "url": "https://github.com/XTLS/Xray-core/pull/7393",
-     "body": "## Motivation\n\nWhen the server's domain resolves to several IPs, Happy Eyeballs is supposed to pick a working one. In Russia, however, some ISPs (the DPI boxes installed at them) drop the ServerHello for some of these IPs while TCP to them still connects. Which IPs are affected differs from one ISP and region to another and changes over time: an IP that is blocked for one client works for another, so removing it from DNS would only break it for everyone else. Happy Eyeballs today ends the race at the first TCP connection, so it happily picks such an IP, and then the TLS or REALITY handshake can never complete. A retry usually picks the same IP again, because it wins the TCP race again. In this situation the current Happy Eyeballs is of no use at all, even though other IPs of the same domain work fine.\n\n## What this PR adds\n\nA new optional field `successDefinition` in `sockopt.happyEyeballs`:\n\n| Value | The race is won by |\n|---|---|\n| `tcpConnected` (default) | the first established TCP connection, as before |\n| `tlsHandshakeComplete` | the first connection that completes the TLS or REALITY handshake |\n\n```json\n\"sockopt\": {\n  \"domainStrategy\": \"UseIP\",\n  \"happyEyeballs\": {\n    \"tryDelayMs\": 250,\n    \"maxConcurrentTry\": 4,\n    \"successDefinition\": \"tlsHandshakeComplete\"\n  }\n}\n```\n\nWithout `successDefinition`, or with `tcpConnected`, nothing changes. Without TLS or REALITY, `tlsHandshakeComplete` is the same as `tcpConnected`.\n\nThe behaviour follows section 6.1 of Happy Eyeballs v3, which says clients SHOULD wait for the TLS handshake to complete before canceling other attempts: https://datatracker.ietf.org/doc/draft-ietf-happy-happyeyeballs-v3/\nChromium's Happy Eyeballs v3 implementation does the same: a TCP-based attempt runs the TLS handshake inside it and completes only when the handshake does, and an attempt counts as slow (so the next one starts) if TCP and TLS together take longer than the connection attempt delay:\n- https://chromium.googlesource.com/chromium/src/+/main/net/socket/tls_stream_attempt.cc\n- https://chromium.googlesource.com/chromium/src/+/main/net/http/http_stream_pool_attempt.cc\n\nHappy Eyeballs v3 is still a draft, and browsers do not use it by default yet: in Chromium it is behind the `HappyEyeballsV3` feature, which is disabled by default, and Firefox enables it only in Nightly.\n\n## How it works\n\n- The scheduler of `TcpRaceDial` is reused as is (`tryDelayMs`, `maxConcurrentTry`, `prioritizeIPv6`, `interleave`); only the attempt it runs differs. With `tcpConnected` the attempt is the same system dial as before.\n- With `tlsHandshakeComplete` every attempt goes through TCP dial to one IP → FinalMask (if any) → the transport's own TLS or REALITY handshake. Only the TCP destination changes from attempt to attempt; masks apply to each attempt separately, exactly as on a normal dial.\n- An attempt keeps its `maxConcurrentTry` slot until its handshake ends, and a hanging handshake does not stop the scheduler from starting the next attempt after `tryDelayMs`.\n- Losing attempts are stopped by closing their connections. Transports that leave the handshake to the first write (gRPC, and HTTPUpgrade and XHTTP with Go TLS) get it completed inside the race, so a connection is never handshaked twice.\n- The race happens under the same conditions as the TCP race in `DialSystem`: `domainStrategy` set, at least two IPs, no `dialerProxy`, non-zero `tryDelayMs` and `maxConcurrentTry`. Otherwise the transport dials exactly as before.\n\nAll covered transports now dial through `internet.DialTCPWithHandshake(ctx, dest, streamSettings, handshake)`. `handshake` is a function that wraps the TCP connection with the transport's TLS or REALITY client; it holds the same code the transport used to run right after its own TCP dial.\n\nTransports covered: RAW (TLS, REALITY), WebSocket, HTTPUpgrade, gRPC (TLS, REALITY), XHTTP over HTTP/1.1 and HTTP/2 (TLS, REALITY), MASQUE over HTTP/2. For XHTTP the race runs once per new physical connection. UDP"
-    },
-    {
      "number": 7457,
      "title": "XDNS finalmask: Add `alphabet`",
      "is_pr": true,
@@ -435,17 +514,6 @@
      "user": "mcrmck",
      "url": "https://github.com/XTLS/Xray-core/pull/7453",
      "body": "Fixes https://github.com/XTLS/Xray-core/issues/7398\n\nThe reload/OCSP goroutine wrote `certs[index]` and `cert.OCSPStaple` while handshakes read them in `GetCertificate`. Each certificate is now kept in an `atomic.Pointer`. The goroutine replaces it instead of changing it, and a new OCSP staple goes on a copy of the certificate.\n\nThis follows the approach suggested in the issue, with one change: `GetCertificate` loads each slot where it reads it, so it does not allocate a slice on every handshake.\n\n**Test**: `TestCertificateReloadDuringHandshakes` loads a certificate from files with `ocspStapling: 1`, so it reloads every second. It then replaces the files and calls `GetCertificate` until the new certificate is served.\n- On main, `go test -race` reports the race between `config.go:91` (the reload) and `:254` (the handshake), and the test fails.\n- With this PR it passes.\n- `go test -race -skip TestECHDial ./transport/internet/tls/` passes. `TestECHDial` needs network access.\n- The TLS and Vision scenarios in `testing/scenarios` pass.\n\n中文：证书热重载 / OCSP 协程与 TLS 握手之间存在数据竞争。现在每个证书放在 `atomic.Pointer` 里，重载时整体替换，OCSP 更新在副本上进行。附带 `-race` 回归测试，在 main 上失败，本 PR 通过。\n"
-    },
-    {
-     "number": 7460,
-     "title": "TUN inbound: Support a configurable Wintun adapter GUID on Windows (#7458)",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-22T10:19:08Z",
-     "updated_at": "2026-11-22T10:19:08Z",
-     "user": "Plangto",
-     "url": "https://github.com/XTLS/Xray-core/pull/7460",
-     "body": "Implements #7458.\n\nAdds an optional \"guid\" to the TUN inbound, used when Xray creates the Wintun adapter:\n\n  \"settings\": { \"name\": \"xray0\", \"guid\": \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\" }\n\n- Omitted: the GUID is still MD5 of the name, nothing changes.\n- Set: passed to wintun.CreateAdapter. An adapter that already has the name is\n  still opened by name and reused, so the name stays the primary key.\n- Windows only, but validated as a canonical GUID on every platform, so a typo\n  fails at config load instead of at TUN start.\n- windows.GUID is built explicitly with the first three groups little-endian,\n  which is what the old unsafe reinterpretation of the MD5 bytes produced, so\n  the default path is unchanged.\n\nFiles: proxy/tun/config.proto (+ regenerated config.pb.go), new proxy/tun/guid.go,\ntun_windows.go, infra/conf/tun.go, tests (including a //go:build windows one for\nthe GUID layout), and a paragraph in proxy/tun/README.md.\n\nTested: go test ./proxy/tun/ ./infra/conf/, builds for windows/amd64+arm64,\ndarwin/arm64, freebsd/amd64, linux/arm64, GOOS=windows go vet,\nvprotogen -mode check.\n\nNote: xtls.github.io needs a \"guid\" row in the TUN inbound section."
     },
     {
      "number": 7452,
@@ -963,20 +1031,81 @@
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364",
      "body": "Move multiplexing to `proxy/vless/multiplex` and Reverse to `proxy/vless/reverse`. VLESS inbound, outbound and Reverse use direct transport paths. Intermediate pipes are removed from all VLESS Multiplex and Reverse paths and from the VMess Multiplex inbound adapter.\n\nConfigure VLESS outbound through `settings.multiplex`. The old generic outbound Mux and classic Reverse paths are removed.\n\nPreserve incremental TCP delivery, whole UDP packets and XUDP reconnection. Simplify shutdown and VMess response startup, and retain actual framing and transport errors.\n\nFirst working version for review.\n"
-    },
-    {
-     "number": 7431,
-     "title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-16T18:49:30Z",
-     "updated_at": "2026-11-20T21:34:04Z",
-     "user": "OneMiny",
-     "url": "https://github.com/XTLS/Xray-core/pull/7431",
-     "body": "Updates github.com/klauspost/compress from v1.20.1 to v1.20.4 to address CVE-2026-116591 (GHSA-fpmh-frq8-7rj8).\n\nXray indirectly uses the Zstandard decoder through uTLS to decompress server certificate messages during TLS 1.3 handshakes. A crafted Zstandard frame can trigger an out-of-bounds panic in the affected decoder, potentially terminating the process when this certificate compression path is used.\n\nAdvisory: https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8\n\n### Validation\n\nA standalone streaming-decoder reproducer was run against both versions using the same 27,567-byte input:\n\n- v1.20.1: panics with `index out of range [33077] with length 32768` in a decoder worker goroutine, terminating the process.\n- v1.20.4: returns `corrupt input: weights tableLog too big` with zero output and exits without a panic.\n\n"
     }
    ],
    "comments": [
+    {
+     "id": 7087029594,
+     "issue": 7347,
+     "issue_title": "TUN inbound: Half-close the app connection when the outbound is done, instead of waiting for `uplinkOnly`",
+     "created_at": "2026-11-22T22:43:19Z",
+     "user": "StarProxima",
+     "url": "https://github.com/XTLS/Xray-core/pull/7347#issuecomment-7087029594",
+     "body": "@RPRX only the TUN part is left now, as you asked. Anything you'd like changed before it goes in?"
+    },
+    {
+     "id": 7086852364,
+     "issue": 7178,
+     "issue_title": "grpc: close cached clients with their outbound handler",
+     "created_at": "2026-11-22T22:29:14Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7178#issuecomment-7086852364",
+     "body": "生命周期的问题有点大该改但不是这样"
+    },
+    {
+     "id": 7086820269,
+     "issue": 7471,
+     "issue_title": "Freedom: Fix PROXY protocol client address encoding across TCP and UDP",
+     "created_at": "2026-11-22T22:26:38Z",
+     "user": "kevdliu",
+     "url": "https://github.com/XTLS/Xray-core/pull/7471#issuecomment-7086820269",
+     "body": "My use case for it is this: I have a private internal web server that can only be accessed via xray. I have it configured like this:\r\n```\r\n{\r\n      \"tag\": \"privateserver\",\r\n      \"protocol\": \"freedom\",\r\n      \"settings\": {\r\n        \"redirect\": \"127.0.0.1:38462\",\r\n        \"finalRules\": [\r\n          {\r\n            \"ip\": [\r\n              \"127.0.0.1\"\r\n            ],\r\n            \"port\": \"38462\",\r\n            \"action\": \"allow\",\r\n            \"network\": \"tcp\"\r\n          }\r\n        ],\r\n        \"proxyProtocol\": 2\r\n      }\r\n    }\r\n```\r\n\r\nThe server needs to see the IP of the client, which is why I have proxy protocol configured. However, if the client connects to xray using UDP based protocol such as hysteria2, the proxy protocol fails to pass the correct client ip to the web server and instead passes 127.0.0.1. \r\n\r\nDo you have any suggestions on how the web server can reliably get the client ip?"
+    },
+    {
+     "id": 7086735019,
+     "issue": 7382,
+     "issue_title": "Issue with terminating dead connections",
+     "created_at": "2026-11-22T22:19:59Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7382#issuecomment-7086735019",
+     "body": "设置一个合适的 tcpkeepalive和tcpusertimeout 以清理死连接（如果它们非常多）"
+    },
+    {
+     "id": 7086604424,
+     "issue": 7471,
+     "issue_title": "Freedom: Fix PROXY protocol client address encoding across TCP and UDP",
+     "created_at": "2026-11-22T22:09:57Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7471#issuecomment-7086604424",
+     "body": "https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt\r\n感觉为非tunnel入站和fallback之类的四层转发发送proxy protocol属于某种程度的滥用和未定义行为\r\n应该没人依赖这个吧？这有啥用"
+    },
+    {
+     "id": 7086511875,
+     "issue": 7472,
+     "issue_title": "Claude Team account",
+     "created_at": "2026-11-22T22:03:02Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/issues/7472#issuecomment-7086511875",
+     "body": "I only closed it because it's not really an issue, but it's still not complete !"
+    },
+    {
+     "id": 7086021659,
+     "issue": 7460,
+     "issue_title": "TUN inbound: Support a configurable Wintun adapter GUID on Windows (#7458)",
+     "created_at": "2026-11-22T21:24:02Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7460#issuecomment-7086021659",
+     "body": "Claude review comment:\n\nThere's a byte-order bug in `adapterGUID`: it fills `Data1`, `Data2` and `Data3` with `binary.LittleEndian`, but in a GUID's text form those three groups are the field values written most significant byte first. So the adapter gets a different GUID than the one configured:\n\n- `\"guid\": \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\"` creates the adapter as `{10B8A76B-AD9D-D111-80B4-00C04FD430C8}`\n- `\"01020304-0506-0708-090a-0b0c0d0e0f10\"` becomes `{04030201-0605-0807-090A-0B0C0D0E0F10}`\n\nYou can see it by comparing `adapterGUID(...).String()` with `windows.GUIDFromString(\"{\" + guid + \"}\")`.\n\nCould you please switch those three fields to `binary.BigEndian`, and update `TestAdapterGUID` to expect `Data1: 0x01020304, Data2: 0x0506, Data3: 0x0708`? Ideally the test would also check that `guid.String() == \"{01020304-0506-0708-090A-0B0C0D0E0F10}\"`. The MD5 fallback can stay as it is, since that GUID is never shown to anyone as text, so its byte order doesn't matter."
+    },
+    {
+     "id": 7085870540,
+     "issue": 7393,
+     "issue_title": "Happy Eyeballs: add successDefinition to race until TLS handshake completes",
+     "created_at": "2026-11-22T21:12:25Z",
+     "user": "patterniha",
+     "url": "https://github.com/XTLS/Xray-core/pull/7393#issuecomment-7085870540",
+     "body": "> 你看过几个pr?几乎所有pr我都要自己人工看一遍 问claude几个问题改一下就approve很骄傲了？又是把所有传输的握手劫持走包成匿名函数给下面好让其他层看 代码多丑 侵入性你自己看不到？还是你没写过多少代码？\r\n\r\nI reviewed the code myself first, and then, just to be sure, I also asked Claude to review it.\r\n\r\n~I don't think you've forgotten that I wrote the `happyEyeballs` by hand myself.~\r\n\r\n~Also, when Claude can prove the Riemann hypothesis, using Claude as an assistant is not something to be ashamed of; it's something to be proud of..~\r\n\r\nI still think this is the \"best effort\" if we want to have this feature in Xray.\r\n\r\nAnyway, everything continues to work exactly as before without `successDefinition` (Except that some of the code has been moved to \"happy_eyeballs.go\", which we can move back to TLS codes).\r\n\r\nIn short, this PR doesn't change any existing behavior. It simply introduces a new feature, which we can refine and fix any issues with later.\r\n\r\n"
+    },
     {
      "id": 7084116299,
      "issue": 7352,
@@ -1633,38 +1762,22 @@
      "user": "yandujun363",
      "url": "https://github.com/XTLS/Xray-core/pull/7416#issuecomment-7055967272",
      "body": "@RPRX 应该没问题了，差点把这个忘记了，审查之后没问题就合并吧。  \r\n下一步打算是：\r\n\r\n- [ ] 优化配置，实现类似 header-custom 的 clients 和 servers\r\n- [ ] 优化填充，实现伪装为一般同步流量\r\n- [ ] 尝试实现 pjscruggs/raknetify2 这个模组的UDP功能，这样可以光明正大用UDP解决队头阻塞"
-    },
-    {
-     "id": 7051157327,
-     "issue": 7431,
-     "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
-     "created_at": "2026-11-20T21:34:04Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-7051157327",
-     "body": "也好不用紧急发版了"
-    },
-    {
-     "id": 7051147493,
-     "issue": 7431,
-     "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
-     "created_at": "2026-11-20T21:33:32Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-7051147493",
-     "body": "> 能构造服务端响应的话，识别 uTLS 的方法有很多，不缺这一个，但目前也暂无更好的替代品了（指功能全的原生 Chrome 栈）\r\n\r\n据我所在不持有服务端证书的情况下目前是没有的 毕竟TLS要求很严几乎没有操作空间 这个BUG存在是因为它刚好是压缩证书消息这里 在验证证书的前最后一步出的问题 我看了下好像就Firefox指纹 用的不多 但是用的话是确确实实可以把客户端崩掉的"
-    },
-    {
-     "id": 7051106089,
-     "issue": 7431,
-     "issue_title": "Dependency: Update github.com/klauspost/compress to v1.20.4 to fix CVE-2026-116591",
-     "created_at": "2026-11-20T21:31:20Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7431#issuecomment-7051106089",
-     "body": "回去写了一下POC 写了一半发现这个BUG只有Firefox指纹受影响 因为chrome的CH是不带zstd算法的 就没法触发 99%的人应该是不受影响的\r\n这年头都是AI PR没有人类了 哎"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3403,
+     "title": "Android 17 AWG 3.1 with split-tunneling connection off after screen locked",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-05T05:20:05Z",
+     "updated_at": "2026-11-23T01:41:34Z",
+     "user": "ZooMch1k",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3403",
+     "body": "On android 17(tested on Galaxy fold 7 and Pixel 10a) while split-tunneling apps, after screen locked and unlock connection drops and can revive either in 15-20 sec(handshake time) or not revive before reboot VPN in notification shade.\nAll rights and energy settings seted."
+    },
     {
      "number": 3499,
      "title": "Windows: Full-tunnel route capture overrides connected routes on other interfaces",
@@ -1865,6 +1978,15 @@
     }
    ],
    "comments": [
+    {
+     "id": 7089344315,
+     "issue": 3403,
+     "issue_title": "Android 17 AWG 3.1 with split-tunneling connection off after screen locked",
+     "created_at": "2026-11-23T01:41:34Z",
+     "user": "onnx1",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3403#issuecomment-7089344315",
+     "body": "Same on Nothing Phone 3a Pro (Android 17), have to constantly disconnect and reconnect after unlocking the phone."
+    },
     {
      "id": 7082841497,
      "issue": 3499,

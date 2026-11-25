@@ -1,9 +1,20 @@
 {
- "generated_at": "2026-11-24T23:53:31Z",
- "since": "2026-11-22T23:53:31Z",
+ "generated_at": "2026-11-25T08:32:40Z",
+ "since": "2026-11-23T08:32:40Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
+    {
+     "number": 689,
+     "title": "Forged packet injection against QUIC SNI x.com, China, since 2026-11-17",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-23T14:44:23Z",
+     "updated_at": "2026-11-25T06:11:00Z",
+     "user": "UjuiUjuMandan",
+     "url": "https://github.com/net4people/bbs/issues/689",
+     "body": "## Prior QUIC block\n\nPlease see [Exposing and Circumventing SNI-based QUIC Censorship of the Great Firewall of China](https://gfw.report/publications/usenixsecurity25/en/) #505 published July 2025. Summary:\n\n1. The GFW decrypt SNI in QUIC `CRYPTO` payload with easily obtained key.\n2. The GFW drops packets against 3-tuple for 180 seconds after seeing targeted SNI.\n3. The block can be bypassed by splitting the SNI across multiple QUIC `CRYPTO`.\n4. The blocklist differs with TLS SNI list.\n\n## New packet injection behavior\n\nSince the [direction connection to x.com tweet](https://x.com/k1uchanQ/status/2120471549828575281) got popular, the GFW technician soon patched the split SNI bypass bug and added new block strategy.\n\nBlock date source: https://x.com/rokedap50929384/status/2122477887492108319\n\n```\ncurl --http3-only -v https://x.com \\\n--connect-to ::172.66.0.227 \\\n--curves X25519MLKEM768\n```\n```\n*   Trying 172.66.0.227:443...\n* SSL Trust Anchors:\n*   CAfile: \n*   CApath: \n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 93ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 114ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 161ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 101ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 101ms\n...\n```\n\nBased on packet capture I found the GFW would inject 2 fake QUIC packets, 1 `CONNECTION_CLOSE` frame followed by 1 `Version Negotiation`.\n\n## Circumvention \n\n1. Ignore the forged UDP packets, they arrive abnormally soon, usually below 30ms, while real response from Cloudflare arrive in above 100ms.\n2. Bogus CRYPTO or ACK frame injection from [CircumVolve: Automated Discovery of Censorship Evasion Strategies Using Large Language Models](https://gfw.report/publications/ccs26/en/#bogus-crypto-frame-frame-prefixing).\n3. Send garbage packets before the first Initial, [`HINT_ZERO` in phantomsocks](https://github.com/macronut/phantomsocks/blob/0c47adb0495f697aa4030c93396ed71fed87b0e5/phantomtcp/quic.go#L1631). With this even SNI split is not needed.\n\n## Pcap files\n\n* 36 pairs of forged packets against x.com: [gfw-x.com-quic-injection.pcap.zip](https://github.com/user-attachments/files/35282736/gfw-x.com-quic-injection.pcap.zip)\n* Control capture, `cloudflare.com` SNI to the same IP address: [gfw-x.com-quic-sni-control-benign-sni-same-ip.pcap.zip](https://github.com/user-attachments/files/35282734/gfw-x.com-quic-sni-control-benign-sni-same-ip.pcap.zip)\n* Bypass the block with garbage packets: [gfw-x.com-quic-hint-zero-bypass.pcap.zip](https://github.com/user-attachments/files/35282735/gfw-x.com-quic-hint-zero-bypass.pcap.zip)"
+    },
     {
      "number": 690,
      "title": "[Software] HotaruNet: Protocol-adaptive anti-censorship client for Android & Windows (VLESS REALITY, WARP, Hysteria 2)",
@@ -14,17 +25,6 @@
      "user": "OneForAllHub",
      "url": "https://github.com/net4people/bbs/issues/690",
      "body": "### Overview & Context\nIn environments with state-level Deep Packet Inspection (DPI) and dynamic throttling (such as Iranian telecoms including MCI, MTN Irancell, and fixed ADSL/VDSL, as well as similar censorship firewalls), simple network reachability tests (e.g., 0-byte HTTP 204 checks or TCP handshakes) regularly yield false positives: a node appears \"connected\", but sustained data transfer is throttled down to 0 KB/s.\n\nTo address this, we developed **HotaruNet** (latest release: **v2.3.44**), an open-source censorship-resistant client for Android and Windows 10/11 designed around empirical throughput probing and dynamic protocol adaptation.\n\n### Core Architecture & Design Principles\n1. **Empirical Throughput Probing (Speed & Bandwidth over Ping)**:\n   - Rather than relying on ICMP or zero-byte 204 pings, Go-based JNI probes execute sequential calibrated download measurements (~32 KiB payloads over CDN assets / `speed.cloudflare.com/__down?bytes=32768`).\n   - Probe timeouts are tuned to 4000ms to allow cold TLS handshakes to complete without false-negative zero reports under latency jitter.\n   - Candidate routing score is dominated by empirical download throughput (`Bps`) and the `throughput / latency` ratio.\n\n2. **Protocol-Adaptive Auto-Selection**:\n   - The engine dynamically monitors and switches between censorship-resistant transports:\n     - **VLESS REALITY** (TCP 443 + Vision flow)\n     - **Cloudflare WARP Dedicated** (WireGuard across clean Anycast IP ranges)\n     - **Hysteria 2** (QUIC / UDP with custom BBR congestion control)\n     - **XHTTP / SplitHTTP** (HTTP/2 or HTTP/3 transport)\n     - **WebSocket + TLS** (reverse proxy / CDN fallback)\n\n3. **Live Watchdog & Degradation Failover**:\n   - Active background monitoring probes download throughput every 25–35 seconds.\n   - If throughput drops below the streaming threshold (64 KB/s) for 3 consecutive intervals (`slowSamples >= 3`), it initiates an automatic seamless route failover.\n   - Preserves non-prejudicial routing across all global geographic egresses based strictly on empirical capacity.\n\n4. **Dual Native Implementations**:\n   - **Android**: Native Kotlin + Go (Xray-core + Tun2Socks + WireGuard).\n   - **Windows**: Modern desktop application built on Tauri v2 + Rust + Xray-core + Wintun driver (portable, standalone).\n\n### Repository & Releases\n- **GitHub Repository**: \\[REDACTED\\]\n- **Latest Release (v2.3.44)**: \\[REDACTED\\]\n- **Web & Live Node Feeds**: \\[REDACTED\\]\n\nWe welcome feedback, code contributions, and benchmark observations from researchers and circumvention developers operating in various filtered network topologies."
-    },
-    {
-     "number": 689,
-     "title": "Forged packet injection against QUIC SNI x.com, China, since 2026-11-17",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-23T14:44:23Z",
-     "updated_at": "2026-11-23T20:21:31Z",
-     "user": "UjuiUjuMandan",
-     "url": "https://github.com/net4people/bbs/issues/689",
-     "body": "## Prior QUIC block\n\nPlease see [Exposing and Circumventing SNI-based QUIC Censorship of the Great Firewall of China](https://gfw.report/publications/usenixsecurity25/en/) published July 2025. Summary:\n\n1. The GFW decrypt SNI in QUIC `CRYPTO` payload with easily obtained key.\n2. The GFW drops packets against 3-tuple for 180 seconds after seeing targeted SNI.\n3. The block can be bypassed by splitting the SNI across multiple QUIC `CRYPTO`.\n4. The blocklist differs with TLS SNI list.\n\n## New packet injection behavior\n\nSince the [direction connection to x.com tweet](https://x.com/k1uchanQ/status/2120471549828575281) got popular, the GFW technician soon patched the split SNI bypass bug and added new block strategy.\n\nBlock date source: https://x.com/rokedap50929384/status/2122477887492108319\n\n```\ncurl --http3-only -v https://x.com \\\n--connect-to ::172.66.0.227 \\\n--curves X25519MLKEM768\n```\n```\n*   Trying 172.66.0.227:443...\n* SSL Trust Anchors:\n*   CAfile: \n*   CApath: \n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 93ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 114ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 161ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 101ms\n*   Trying 172.66.0.227:443...\n* QUIC connect to 172.66.0.227 port 443 failed: Weird server reply\n* connect attempts inconclusive, retrying in 101ms\n...\n```\n\nBased on packet capture I found the GFW would inject 2 fake QUIC packets, 1 `CONNECTION_CLOSE` frame followed by 1 `Version Negotiation`.\n\n## Circumvention \n\n1. Ignore the forged UDP packets, they arrive abnormally soon, usually below 30ms, while real response from Cloudflare arrive in above 100ms.\n2. Bogus CRYPTO or ACK frame injection from [CircumVolve: Automated Discovery of Censorship Evasion Strategies Using Large Language Models](https://gfw.report/publications/ccs26/en/#bogus-crypto-frame-frame-prefixing).\n3. Send garbage packets before the first Initial, [`HINT_ZERO` in phantomsocks](https://github.com/macronut/phantomsocks/blob/0c47adb0495f697aa4030c93396ed71fed87b0e5/phantomtcp/quic.go#L1631). With this even SNI split is not needed.\n\n## Pcap files\n\n* 36 pairs of forged packets against x.com: [gfw-x.com-quic-injection.pcap.zip](https://github.com/user-attachments/files/35282736/gfw-x.com-quic-injection.pcap.zip)\n* Control capture, `cloudflare.com` SNI to the same IP address: [gfw-x.com-quic-sni-control-benign-sni-same-ip.pcap.zip](https://github.com/user-attachments/files/35282734/gfw-x.com-quic-sni-control-benign-sni-same-ip.pcap.zip)\n* Bypass the block with garbage packets: [gfw-x.com-quic-hint-zero-bypass.pcap.zip](https://github.com/user-attachments/files/35282735/gfw-x.com-quic-hint-zero-bypass.pcap.zip)"
     },
     {
      "number": 688,
@@ -86,17 +86,6 @@
      "user": "freeacetone",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2649",
      "body": "Плавающий баг с ресетом соединения. Если потерян пакет 1, три следующих пакета закрывают поток, хотя эти пакеты как раз доказывают, что собеседник отвечает"
-    },
-    {
-     "number": 2647,
-     "title": "Reseed server `coconut.incognet.io` serves SU3 with empty RouterInfo files",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-21T15:05:59Z",
-     "updated_at": "2026-11-23T04:05:25Z",
-     "user": "jpk68",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2647",
-     "body": "When doing some testing today (2026-11-21), I noticed that `https://coconut.incognet.io/i2pseeds.su3` contains 100 zip entries, all of which were zero bytes in length (e.g. `routerInfo-j0eELJO7ndA9c4A95NE-T~F4mXI-3aM4c5gTd0xOy4o=.dat`). The other default reseed servers seemed to be fine.\n\nThis results in several \"Identity: Buffer length 0 is too small\" errors when a new router attempts to reseed from it (so, to be precise, about 100 log entries), which makes it look like a memory problem.\n\nI guess some potential solutions here include removing this reseed server until the issue is fixed, or just skipping entries in `Reseeder::ProcessZIPStream` that decompress to fewer bytes than a minimal identity, with only one log warning shown per bundle to prevent log spam.\n\nEdit: it looks like this server has been publishing faulty bundles since at least last April (seven months at this point). See: #2372"
     }
    ],
    "comments": [
@@ -117,15 +106,6 @@
      "user": "orignal",
      "url": "https://github.com/PurpleI2P/i2pd/pull/2650#issuecomment-7143153845",
      "body": "No needs of such overhead because static char iT64[256]; takes care about this. Non-base64 char will return -1.\r\n"
-    },
-    {
-     "id": 7091264640,
-     "issue": 2647,
-     "issue_title": "Reseed server `coconut.incognet.io` serves SU3 with empty RouterInfo files",
-     "created_at": "2026-11-23T04:05:25Z",
-     "user": "zzzi2p",
-     "url": "https://github.com/PurpleI2P/i2pd/issues/2647#issuecomment-7091264640",
-     "body": "I reported it down and to remove it due to an expired SSL cert, in my June 26, 2026 email to everyone including orignal. He said i2pd doesn't check SSL cert expiration so it didn't matter to him. But it's off my list. My emails are just recommendations, I'm not responsible for other projects, who make their own decisions."
     }
    ]
   },
@@ -141,10 +121,43 @@
      "is_pr": false,
      "state": "open",
      "created_at": "2026-10-20T14:40:01Z",
-     "updated_at": "2026-11-24T23:28:59Z",
+     "updated_at": "2026-11-25T07:36:04Z",
      "user": "4erdenko",
      "url": "https://github.com/XTLS/Xray-core/issues/7208",
      "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
+    },
+    {
+     "number": 7481,
+     "title": "xray无法加载已指定format的非标准扩展名config文件",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-25T05:07:04Z",
+     "updated_at": "2026-11-25T05:07:04Z",
+     "user": "vimagick",
+     "url": "https://github.com/XTLS/Xray-core/issues/7481",
+     "body": "### 完整性要求\n\n- [x] 我读完了 issue 模板中的所有注释，确保填写符合要求。\n- [x] 我保证阅读了文档，了解所有我编写的配置文件项的含义，而不是大量堆砌看似有用的选项或默认值。\n- [x] 我提供了完整的配置文件和日志，而不是出于自己的判断只给出截取的部分。\n- [x] 我搜索了 issues, 没有发现已提出的类似问题。\n- [x] 问题在 Release 最新的版本上可以成功复现\n\n### 描述\n\n```bash\n# rename config file\n$ mv config.yaml config\n\n# v2ray works as expected\n$ v2ray run -format=yaml -config=config \nV2Ray 5.53.0 (V2Fly, a community-driven edition of V2Ray.) Custom (go1.26.1 linux/amd64)\nA unified platform for anti-censorship.\n2026/11/25 05:00:22 [Warning] V2Ray 5.53.0 started\n^C\n\n# xray cannot read config file\n$ xray run -format=yaml -config=config \nXray 26.11.9 (Xray, Penetrates Everything.) 676eaf6 (go1.27.3 linux/amd64)\nA unified platform for anti-censorship.\nFailed to start: main: failed to load config files: [config] > infra/conf/serial: failed to read config: &{Name:config Format:yaml} > main/confloader/external: unsupported config file extension: config\n```\n\n### 重现方式\n\n把config扩展名去掉，就可以重现，例如：\n\n- config.json -> config\n- config.yaml -> config\n\n### 客户端配置\n\n客户端未启动\n\n### 服务端配置\n\n```bash\n$ xray --version\nXray 26.11.9 (Xray, Penetrates Everything.) 676eaf6 (go1.27.3 linux/amd64)\nA unified platform for anti-censorship.\n```\n\n### 客户端日志\n\n客户端未启动\n\n### 服务端日志\n\n```bash\n$ xray run -format=yaml -config=config \nXray 26.11.9 (Xray, Penetrates Everything.) 676eaf6 (go1.27.3 linux/amd64)\nA unified platform for anti-censorship.\nFailed to start: main: failed to load config files: [config] > infra/conf/serial: failed to read config: &{Name:config Format:yaml} > main/confloader/external: unsupported config file extension: config\n```"
+    },
+    {
+     "number": 7479,
+     "title": "transport/internet: non-force DNS empty response is logged at error level without the domain",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-25T04:07:18Z",
+     "updated_at": "2026-11-25T04:07:18Z",
+     "user": "evgenyzh",
+     "url": "https://github.com/XTLS/Xray-core/issues/7479",
+     "body": "### What version of Xray did you use?\n26.11.9 (676eaf6). For comparison: 26.3.27 (d2758a0).\n\n### Which operating system and architecture?\nLinux amd64, official `Xray-linux-64.zip` builds.\n\n### Minimal config\n```json\n{\n  \"log\": {\"loglevel\": \"debug\", \"access\": \"none\"},\n  \"dns\": {\"queryStrategy\": \"UseIPv4\", \"servers\": [\"https://1.1.1.1/dns-query\", \"localhost\"]},\n  \"inbounds\": [{\"listen\":\"127.0.0.1\",\"port\":19090,\"protocol\":\"socks\",\"settings\":{\"auth\":\"no\",\"udp\":false}}],\n  \"outbounds\": [{\"protocol\":\"freedom\",\"settings\":{\"domainStrategy\":\"UseIP\"}}]\n}\n```\n\n### Steps to reproduce\n```bash\ncurl -fsSL -o x.zip https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-64.zip\nunzip -q x.zip\n./xray run -c cfg.json &\ncurl -sS --max-time 8 --socks5-hostname 127.0.0.1:19090 http://ipv6.google.com/\n```\n`ipv6.google.com` is AAAA-only; an A query returns CNAME + NOERROR/NODATA. Repeat with the 26.3.27 binary.\n\n### What did you expect?\nThe A query returns NOERROR/NODATA. Because `UseIP` is a non-force strategy, `DialSystem` continues dialing with the domain and the system resolver may even connect on an IPv6-capable host. The expected behavior is an informational log line (as in 26.3.27), not an error per retry:\n```\n[Info] proxy/freedom: failed to get IP address for domain ipv6.google.com > features/dns: empty response\n```\n\n### What actually happened?\n26.11.9 logs the failure at error level on every retry, and the domain is missing:\n```\n2026/11/25 03:02:37.280261 [Error] [840701999] transport/internet: failed to resolve ip > features/dns: empty response\n2026/11/25 03:02:37.658563 [Error] [840701999] transport/internet: failed to resolve ip > features/dns: empty response\n```\n26.3.27, same config:\n```\n2026/11/25 03:02:41.314476 [Info] [3525449037] proxy/freedom: failed to get IP address for domain ipv6.google.com > features/dns: empty response\n2026/11/25 03:02:41.723299 [Info] [3525449037] proxy/freedom: failed to get IP address for domain ipv6.google.com > features/dns: empty response\n```\n\nReal-world case: Facebook netseer measurement names like `<uuid>-netseer-ipaddr-assoc.xy.fbcdn.net` are AAAA-only by design. Each app session produces up to 5 error lines per connection (freedom retries); with `loglevel: error` this is the only visible output, and journal-based monitoring alerts on it.\n\n### Suggested fix\n1. Log at info/debug when `sockopt.DomainStrategy.ForceIP()` is false; keep error for force strategies.\n2. Include the domain in the message, e.g. `failed to resolve ip for <domain>`, so operators can filter or route it.\n3. Or do not log `ErrEmptyResponse` at error level for non-force strategies at all; return the error to the caller and let it decide.\n\n### Notes\n- 26.3.27 resolved the name inside `proxy/freedom` and logged at Info with the domain; 26.11.9 moved the lookup into `transport/internet.DialSystem`, so the domain is lost.\n- Because the strategy is non-force, the dial continues after the log, so on an IPv6-capable host the connection may succeed. This is log noise, not necessarily a failed connection.\n- Reproduced with both official binaries on the same config; 1.1.1.1 returns NOERROR/NODATA for the test name.\n"
+    },
+    {
+     "number": 7455,
+     "title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-22T03:25:45Z",
+     "updated_at": "2026-11-25T02:50:21Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7455",
+     "body": "> **Revision note / 修订说明**\n>\n> This issue originally proposed splitting the XMC config into `clients`/`servers` blocks. After the discussion (RPRX: the split has no clear advantage yet, keep the config as-is; switch the data path to 20 Hz instead, breaking is fine), the split was dropped and the PR #7456 was repurposed. To avoid opening a duplicate issue, this issue is updated in place: the title and description now track the 20 Hz data shaping.\n>\n> 本 issue 最初提出把 XMC 配置拆成 `clients`/`servers` 区块。讨论后（RPRX：暂时没看到拆分的明显优势，配置先别动；改为 20Hz 发数据，可以 breaking），拆分方案已放弃，#7456 也随之改成了 20Hz 实现。为避免再开一个重复 issue，这里直接原地更新标题和说明，改为跟踪 20Hz 数据整形。\n\n### Problem / 问题\n\nAfter the login/configuration handshake, XMC currently wraps proxy writes in `xmc:data` custom payloads immediately (up to 24 KiB each). An idle connection therefore emits no packets, and a busy one becomes a bulk TCP stream.\n\nReal Minecraft is not a bandwidth-driven stream; it is a 20 TPS (50 ms) clock:\n\n- both directions keep sending small packets even while idle (the client's per-tick packet, the server's entity/world updates);\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) flushes queued packets once per tick;\n- chunk loading is tick-shaped too: [Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) reports a \"chunks per tick\" rate, the server waits for batch acknowledgements, and [Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) targets roughly half of the available bandwidth;\n- the 26.3 capture in #7423 shows packet rates near multiples of 20/s in both directions: idle c2s 21 pkt/s / 89 B/s, s2c 41 pkt/s / 5.6 KB/s; running 43/697 and 99/69K; join 2.2 MB / 12 s.\n\nXMC 目前握手完成后会立即把代理写入封成 `xmc:data` 载荷（每块最多 24 KiB）：空闲时没有包，忙时就是一条 bulk TCP 流。\n\n真实 Minecraft 不是带宽驱动的流，而是 20 TPS（50ms）的时钟：\n\n- 空闲时双向也持续有小包（客户端每 tick 的包、服务端的实体/世界更新）；\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) 每 tick 才 flush 一次队列里的包；\n- 区块加载同样按 tick 整形：[Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) 上报的是 \"chunks per tick\"，服务端要等 batch ack，[Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) 还把目标压在约一半带宽；\n- #7423 的 26.3 抓包显示双向包率都接近 20/s 的整数倍：挂机 c2s 21 包/s / 89 B/s、s2c 41 包/s / 5.6 KB/s；跑动 43/697 与 99/69K；进服 2.2 MB / 12 s。\n\n### Proposal / 方案（implemented in #7456）\n\nAfter the handshake, queue proxy writes and flush them once per 50 ms game tick:\n\n- every tick writes one small `xmc:pad` frame, so an idle connection keeps the 20 Hz cadence in both directions;\n- queued data is split into `xmc:data` payloads of at most 24 KiB and emitted inside the same tick batch;\n- no artificial bandwidth cap: a busy tick may carry several payloads, like a Minecraft chunk burst;\n- `Close` flushes the queued tick before closing the connection, so the last bytes are not dropped.\n\nThe startup `paddings` schedule and the configuration format are unchanged. This is a breaking wire change for XMC (old and new peers do not pair), which is acceptable for a finalmask mask.\n\n握手完成后把代理写入入队，每 50ms 游戏 tick flush 一次：\n\n- 每个 tick 固定发一个小 `xmc:pad` 帧，保证空闲时双向都有 20Hz 节拍；\n- 队列数据按 24 KiB 拆成 `xmc:data` 载荷，在同一个 tick 批次里发出；\n- 不设人为带宽上限：忙的 tick 可以带多个载荷，像 MC 的区块 burst；\n- `Close` 前先 flush 队列，避免最后几个字节丢失。\n\n启动阶段的 `paddings` 预置和配置格式不变。对 XMC 是 breaking 的线格式变更（新旧端不能互配），对 finalmask 来说可以接受。\n\n### Scope / 范围\n\n- One padding frame per tick per direction for now; the packet-count/size distribution is not yet state-dependent (idle/walk/loading).\n- The vanilla chunk-batch/credit shape is not reproduced yet; this change only adds the 20 Hz cadence.\n- The config split (`clients`/`servers`) is dropped; see the revision note.\n\n- 目前每个 tick 每方向一个 padding 帧，包数/尺寸分布还没按状态（idle/walk/loading）区分；\n- 还没复刻 vanilla 的 chunk batch/信用窗口，仅加入 20Hz 节拍；\n- 配置拆分（`clients`/`servers`）已放弃，见顶部修订说明。\n\n### Tests / 测试\n\nUnit: `go test ./transport/internet/finalmask/xmc/` covers the tick cadence, per-tick b"
     },
     {
      "number": 7364,
@@ -200,17 +213,6 @@
      "user": "Fangliding",
      "url": "https://github.com/XTLS/Xray-core/pull/7467",
      "body": ""
-    },
-    {
-     "number": 7455,
-     "title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-22T03:25:45Z",
-     "updated_at": "2026-11-24T20:18:02Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7455",
-     "body": "> **Revision note / 修订说明**\n>\n> This issue originally proposed splitting the XMC config into `clients`/`servers` blocks. After the discussion (RPRX: the split has no clear advantage yet, keep the config as-is; switch the data path to 20 Hz instead, breaking is fine), the split was dropped and the PR #7456 was repurposed. To avoid opening a duplicate issue, this issue is updated in place: the title and description now track the 20 Hz data shaping.\n>\n> 本 issue 最初提出把 XMC 配置拆成 `clients`/`servers` 区块。讨论后（RPRX：暂时没看到拆分的明显优势，配置先别动；改为 20Hz 发数据，可以 breaking），拆分方案已放弃，#7456 也随之改成了 20Hz 实现。为避免再开一个重复 issue，这里直接原地更新标题和说明，改为跟踪 20Hz 数据整形。\n\n### Problem / 问题\n\nAfter the login/configuration handshake, XMC currently wraps proxy writes in `xmc:data` custom payloads immediately (up to 24 KiB each). An idle connection therefore emits no packets, and a busy one becomes a bulk TCP stream.\n\nReal Minecraft is not a bandwidth-driven stream; it is a 20 TPS (50 ms) clock:\n\n- both directions keep sending small packets even while idle (the client's per-tick packet, the server's entity/world updates);\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) flushes queued packets once per tick;\n- chunk loading is tick-shaped too: [Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) reports a \"chunks per tick\" rate, the server waits for batch acknowledgements, and [Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) targets roughly half of the available bandwidth;\n- the 26.3 capture in #7423 shows packet rates near multiples of 20/s in both directions: idle c2s 21 pkt/s / 89 B/s, s2c 41 pkt/s / 5.6 KB/s; running 43/697 and 99/69K; join 2.2 MB / 12 s.\n\nXMC 目前握手完成后会立即把代理写入封成 `xmc:data` 载荷（每块最多 24 KiB）：空闲时没有包，忙时就是一条 bulk TCP 流。\n\n真实 Minecraft 不是带宽驱动的流，而是 20 TPS（50ms）的时钟：\n\n- 空闲时双向也持续有小包（客户端每 tick 的包、服务端的实体/世界更新）；\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) 每 tick 才 flush 一次队列里的包；\n- 区块加载同样按 tick 整形：[Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) 上报的是 \"chunks per tick\"，服务端要等 batch ack，[Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) 还把目标压在约一半带宽；\n- #7423 的 26.3 抓包显示双向包率都接近 20/s 的整数倍：挂机 c2s 21 包/s / 89 B/s、s2c 41 包/s / 5.6 KB/s；跑动 43/697 与 99/69K；进服 2.2 MB / 12 s。\n\n### Proposal / 方案（implemented in #7456）\n\nAfter the handshake, queue proxy writes and flush them once per 50 ms game tick:\n\n- every tick writes one small `xmc:pad` frame, so an idle connection keeps the 20 Hz cadence in both directions;\n- queued data is split into `xmc:data` payloads of at most 24 KiB and emitted inside the same tick batch;\n- no artificial bandwidth cap: a busy tick may carry several payloads, like a Minecraft chunk burst;\n- `Close` flushes the queued tick before closing the connection, so the last bytes are not dropped.\n\nThe startup `paddings` schedule and the configuration format are unchanged. This is a breaking wire change for XMC (old and new peers do not pair), which is acceptable for a finalmask mask.\n\n握手完成后把代理写入入队，每 50ms 游戏 tick flush 一次：\n\n- 每个 tick 固定发一个小 `xmc:pad` 帧，保证空闲时双向都有 20Hz 节拍；\n- 队列数据按 24 KiB 拆成 `xmc:data` 载荷，在同一个 tick 批次里发出；\n- 不设人为带宽上限：忙的 tick 可以带多个载荷，像 MC 的区块 burst；\n- `Close` 前先 flush 队列，避免最后几个字节丢失。\n\n启动阶段的 `paddings` 预置和配置格式不变。对 XMC 是 breaking 的线格式变更（新旧端不能互配），对 finalmask 来说可以接受。\n\n### Scope / 范围\n\n- One padding frame per tick per direction for now; the packet-count/size distribution is not yet state-dependent (idle/walk/loading).\n- The vanilla chunk-batch/credit shape is not reproduced yet; this change only adds the 20 Hz cadence.\n- The config split (`clients`/`servers`) is dropped; see the revision note.\n\n- 目前每个 tick 每方向一个 padding 帧，包数/尺寸分布还没按状态（idle/walk/loading）区分；\n- 还没复刻 vanilla 的 chunk batch/信用窗口，仅加入 20Hz 节拍；\n- 配置拆分（`clients`/`servers`）已放弃，见顶部修订说明。\n\n### Tests / 测试\n\nUnit: `go test ./transport/internet/finalmask/xmc/` covers the tick cadence, per-tick b"
     },
     {
      "number": 7444,
@@ -735,7 +737,7 @@
      "is_pr": true,
      "state": "closed",
      "created_at": "2026-11-22T06:41:41Z",
-     "updated_at": "2026-11-24T13:06:38Z",
+     "updated_at": "2026-11-25T07:43:36Z",
      "user": "ranthe21",
      "url": "https://github.com/XTLS/Xray-core/pull/7457",
      "body": "ye, it's stupid: Iranian firewall cuts XDNS as soon as the query names look like base32. One UDP socket to 1.1.1.1 gets about 16 answers and then nothing, while the same queries with other characters all go through.\n\nThis adds `alphabet` to `domains`: 32 unique chars from a-z0-9, set the same on both sides. Empty keeps the old base32, so existing configs don't change.\n\n```jsonc\n\"domains\": [{\"names\": [\"t.example.com\"], \"alphabet\": \"v9u8t0s1rqponmlkjihgfedcba765432\"}]\n```\n\nTested on a TCI home line with one `udp://1.1.1.1:53` entry, two runs each:\n\n- default: the handshake never finishes, 0 bytes\n- custom alphabet: handshake in about 2.4 s, about 4 MB down in 60 s, 2 MB up\n- 40 raw TXT queries from one socket: base32 got 16/40 answers, the custom alphabet 40/40\n"
@@ -860,20 +862,45 @@
      "user": "LjhAUMEM",
      "url": "https://github.com/XTLS/Xray-core/issues/7419",
      "body": "Maintainer 没有权力，全是义务，不如回到 Contributor，串四面八方\n\nfinalmask 已失守（虽然就没想守），hy2 估计也快了\n\n我在这里的所有代码都是手写（部分参考过许多不错的项目 hysteria dnstt wireguard-go wireguard-windows），接连大量的 ai code 入侵下我放弃继续使用 xray，不是说 vibe 不好，是我只信任自己写的\n\n自上位以来接到的全是 feature request，个人能力有限，研究 rust 以及生活琐事都需要时间精力，也没精力实现新的 feature request，伊朗和俄罗斯需要自己的英雄\n\n上次重构给自己写进医院后脾气就有点暴躁，不好意思\n\n就这样吧，加纳"
-    },
-    {
-     "number": 7472,
-     "title": "Claude Team account",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-11-22T22:00:12Z",
-     "updated_at": "2026-11-23T05:17:04Z",
-     "user": "patterniha",
-     "url": "https://github.com/XTLS/Xray-core/issues/7472",
-     "body": "I started using AI after @RPRX refused to add `cipherSuites` to the standard share-link abbreviation names. I needed AI because I wasn't very familiar with UI development on Android and Windows, so I used it to develop pattN/pattNG with support for `cipherSuites`.\n\nBut after using it for a while, I realized what a great blessing it is, and that if you guide it properly, it can do amazing things, you no longer need to spend your time and mental energy on many routine tasks, allowing you to focus on more important work.\n\nI've never asked @RPRX for anything, he made me a member himself (although I thought I might also receive a very small share of the sponsorships after he started getting sponsored).\n\nbut I am now requesting a Claude Team account from @RPRX, not just for myself, but for all team members, to help further improve Xray.\n\nI have repeatedly seen @RPRX  using Copilot, which offers relatively low-quality results. I’m confident that if @RPRX  spends some time working with Claude models, his perspective on AI will change.\n\nClaude can significantly accelerate our progress toward achieving our goals."
     }
    ],
    "comments": [
+    {
+     "id": 7156182721,
+     "issue": 7457,
+     "issue_title": "XDNS finalmask: Add `alphabet` to `domains` for UDP/53 in Iran",
+     "created_at": "2026-11-25T07:43:35Z",
+     "user": "owltrainer",
+     "url": "https://github.com/XTLS/Xray-core/pull/7457#issuecomment-7156182721",
+     "body": "Nice option. One small thing that might go well with it: right now Encode always cuts the name into full labelLimit-sized labels with the leftover at the end, so the label layout is fully predictable from the payload size. Since Decode strips all the dots anyway, the client could split into random-length labels with no protocol change, and old servers would still work.\r\n\r\nIt wouldn't touch the total length or the character distribution, so it's just a small step. @ranthe21 do you have any sign the firewall looks at label structure, or is it only the characters?"
+    },
+    {
+     "id": 7152003824,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-25T03:32:04Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7152003824",
+     "body": "Just to know what commit Changed the behaviour and recovered the Speed ( Peaking 7 MB/s ):\nhttps://github.com/anonymously-hidden/Xray-core/commit/223dc05bb7f855f24e4a546c6c40d66137b93a76\n\nReleased version:\nhttps://github.com/anonymously-hidden/Xray-core/releases/tag/v26.10.31-resume.91\n\nUpdate: with the latest commit, I hit above 9 MB/s  ; Actually, Right now here is the low traffic Time, That's why I have more Bandwidth.\nUpdate 2: Seems I managed to Hit 10.5 MB/s ; This is a Highly Optimized Version on the latest commit.\n~~I think It's ready for merging, Please Give it a try if there are no issues.~~\n\n<img width=\"1391\" height=\"814\" alt=\"image\" src=\"https://github.com/user-attachments/assets/6968222d-fc5e-4d09-8751-57f56b185688\" />"
+    },
+    {
+     "id": 7151252963,
+     "issue": 7455,
+     "issue_title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
+     "created_at": "2026-11-25T02:50:21Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7455#issuecomment-7151252963",
+     "body": "> 但是世界上都没有专门面向mc的dpi\n\n既然这样我就直接抄26.3/777得了。\n也省得整表和麻将屎山对干  \n\n实际上这个分析是我自己要求的，也可能是我过于谨慎~~毕竟我在思考买服务器的时候都要考虑SSH会不会被GFW干掉~~"
+    },
+    {
+     "id": 7150071032,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-25T01:53:06Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7150071032",
+     "body": "I'll be trying more; then if no progress is made I'll let you know.\nUpdate: The good news is I recovered the Download Speed, I'm looking to consolidate it via feeding the AI more logs...\n~~This time the difference is that it's capped under 3000 Lines.~~"
+    },
     {
      "id": 7147450331,
      "issue": 7208,
@@ -1703,60 +1730,6 @@
      "body": "I think AI-assisted code review is a promising direction, and I'd like to share an example from my own experience.\n\nI collected the history of Xray developers' discussions going back to the early days of the project, extracted key architectural decisions and the reasoning behind them, and used that material to build specialized skills and AI agents for code analysis, review, and testing.\n\nThis approach has already produced useful results. Instead of analyzing only the current source code, the agents can take the project's history, previous design decisions, and developers' experience into account when evaluating changes and designing test scenarios.\n\nIn my experience, this significantly reduces meaningless AI-generated suggestions and makes the analysis much more relevant. Of course, there is still plenty of room for improvement, and I continue refining the system for my own workflow. But the direction has proven practical.\n\nA small part of this work is publicly available in my [Xray Core DevKit](https://github.com/svlavr/xray-core-devkit). It is more of an example of the tools and workflow than a finished universal solution.\n\nI think we could go further and create a **publicly available AI toolkit specifically for Xray-core**, at least for preliminary PR review.\n\nSuch a toolkit could include knowledge of the project's architecture, development conventions, historical design decisions, specialized review agents, and testing procedures based on accumulated experience.\n\n**PR authors could install this toolkit locally and run their changes through it before submitting a PR.**\n\nThis could help identify unnecessary modifications, architectural inconsistencies, compatibility issues, and common mistakes before maintainers have to review them.\n\nNaturally, this would not replace human review or real testing. The idea is to provide a preliminary filter on the contributor's side, reducing the number of low-quality PRs and saving maintainers' time rather than creating even more AI-generated review comments for them to read.\n\nIn my opinion, the real value of AI here is not simply asking another model to review the code. It is about giving AI access to the project's accumulated engineering knowledge, architectural reasoning, and development experience, then using that context to evaluate changes and validate them through meaningful tests.\n\nWith the right approach, AI could actually reduce the maintainers' workload instead of adding to it."
     },
     {
-     "id": 7094504127,
-     "issue": 7364,
-     "issue_title": "VLESS Multiplex, Reverse Proxy: Refactor to move code into VLESS; Mux only uses `settings.multiplex` in VLESS/VMess outbound",
-     "created_at": "2026-11-23T07:36:12Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7094504127",
-     "body": "Done"
-    },
-    {
-     "id": 7093556557,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-23T06:39:55Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7093556557",
-     "body": "我在同步代码时发现了问题：根据 README 所述它似乎兼容旧版 XDRIVE，请清理掉，另外 README 尽量精简，也不要单开 direct-media.md"
-    },
-    {
-     "id": 7093035477,
-     "issue": 7364,
-     "issue_title": "VLESS Multiplex, Reverse Proxy: Refactor to move code into VLESS; Mux only uses `settings.multiplex` in VLESS/VMess outbound",
-     "created_at": "2026-11-23T06:07:55Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7093035477",
-     "body": "In `proxy/vmess/inbound/inbound.go` on `main`, line 105 declared the `inboundHandlerManager` field. When `New` created a VMess inbound, line 116 looked up the manager with `GetFeature` and stored it in that field. That was the field’s only use.\n\nI removed the field and its `GetFeature` call from `VMess.New`. Registration works as before. In `core/xray.go`, `AddInboundHandler` looks up the manager, creates the handler, and registers it with `AddHandler`.\n\nI restored `userByEmail` and left `inboundHandlerManager` out. VMess already gets everything it needs for registration and traffic handling through the existing Core path."
-    },
-    {
-     "id": 7092671931,
-     "issue": 7364,
-     "issue_title": "VLESS Multiplex, Reverse Proxy: Refactor to move code into VLESS; Mux only uses `settings.multiplex` in VLESS/VMess outbound",
-     "created_at": "2026-11-23T05:43:55Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7092671931",
-     "body": "I needed a little break too 🙂 I’ll push the commit today."
-    },
-    {
-     "id": 7092264424,
-     "issue": 7472,
-     "issue_title": "Claude Team account",
-     "created_at": "2026-11-23T05:16:32Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7472#issuecomment-7092264424",
-     "body": "> I’m confident that if @RPRX spends some time working with Claude models, his perspective on AI will change.\n\n~~我寻思我也没有什么负面的 perspective https://github.com/XTLS/Xray-core/issues/7419#issuecomment-6894989962 https://github.com/XTLS/Xray-core/issues/7419#issuecomment-7067878895~~\n\n---\n\n> I have repeatedly seen @RPRX using Copilot, which offers relatively low-quality results.\n\n试过充 GitHub 但不接受 pre-paid 虚拟卡 https://github.com/XTLS/Xray-core/pull/7401#issuecomment-6876702404 ，Claude 应该也不接受，另外封号比较严重（显然我不会用真实的身份或 IP）\n\n~~我觉得中转 API 都无所谓~~，有没有接受虚拟货币或 pre-paid 卡的平台，或者有没有成员愿意用自己的卡，二是如果跳 IP 登录不应导致封号\n\n@yuhan6665 @Fangliding @Meo597 @yiguodev @KobeArthurScofield"
-    },
-    {
-     "id": 7090656962,
-     "issue": 7460,
-     "issue_title": "TUN inbound: Support configurable Wintun adapter `guid` on Windows",
-     "created_at": "2026-11-23T03:20:00Z",
-     "user": "Plangto",
-     "url": "https://github.com/XTLS/Xray-core/pull/7460#issuecomment-7090656962",
-     "body": "> Claude review comment:\n> \n> There's a byte-order bug in `adapterGUID`: it fills `Data1`, `Data2` and `Data3` with `binary.LittleEndian`, but in a GUID's text form those three groups are the field values written most significant byte first. So the adapter gets a different GUID than the one configured:\n> \n> * `\"guid\": \"6ba7b810-9dad-11d1-80b4-00c04fd430c8\"` creates the adapter as `{10B8A76B-AD9D-D111-80B4-00C04FD430C8}`\n> * `\"01020304-0506-0708-090a-0b0c0d0e0f10\"` becomes `{04030201-0605-0807-090A-0B0C0D0E0F10}`\n> \n> You can see it by comparing `adapterGUID(...).String()` with `windows.GUIDFromString(\"{\" + guid + \"}\")`.\n> \n> Could you please switch those three fields to `binary.BigEndian`, and update `TestAdapterGUID` to expect `Data1: 0x01020304, Data2: 0x0506, Data3: 0x0708`? Ideally the test would also check that `guid.String() == \"{01020304-0506-0708-090A-0B0C0D0E0F10}\"`. The MD5 fallback can stay as it is, since that GUID is never shown to anyone as text, so its byte order doesn't matter.\n\nThanks, you're right — fixed in the follow-up commit:\n\"Fix the byte order of a configured Wintun GUID\".\n\nThe canonical 16 bytes keep the first three groups big-endian (that's how\n`CLSIDFromString` reads them), and I was reading them with `binary.LittleEndian`,\nso every group reached the adapter swapped: `01020304-0506-0708-…` landed as\n`{04030201-0605-0807-…}`.\n\n- `tun_windows.go`: `binary.BigEndian` for `Data1`/`Data2`/`Data3`; `Data4` unchanged.\n- `guid_windows_test.go`: the old test asserted the swapped struct, which is why it\n  passed. It now expects `Data1 0x01020304, Data2 0x0506, Data3 0x0708` and also\n  compares against `windows.GUIDFromString(\"{01020304-0506-0708-090A-0B0C0D0E0F10}\")`\n  and `GUID.String()`, so it is checked against Windows' own parsing and formatting\n  rather than against my own assumption a second time.\n\nThe MD5 fallback is left alone, as you noted: its hash bytes are taken as the\nstruct does, same as before, and that GUID is never rendered as text."
-    },
-    {
      "id": 7069961755,
      "issue": 7429,
      "issue_title": "README.md: Fix star history chart; Add Project listing criteria; Add CONTRIBUTING.md and PULL_REQUEST_TEMPLATE.md",
@@ -1769,6 +1742,17 @@
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 1551,
+     "title": "Split tunneling doesnt work on Linux with `AmneziaWG` (`Self-hosted VPN`)",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2025-04-25T12:01:58Z",
+     "updated_at": "2026-11-25T05:59:13Z",
+     "user": "hacker-hackman",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1551",
+     "body": "**Describe the bug**\nWhen using the `AmneziaWG` protocol on Linux with `Self-hosted VPN`, the split tunneling feature is not functioning properly:\n- When I select the option `Only the sites listed here will be accessed through the VPN`, the VPN doesn't work at all.\n- When I select `Addresses from the list should not be accessed via VPN`, the VPN applies to all sites, completely ignoring my excluded sites list.\n\n**Steps to Reproduce**\n1. Select \"Self-hosted VPN\" on the welcome screen\n2. Enter your credentials and click \"Continue\"\n3. After installation completes, go to Settings > Connection > Site-based split tunneling\n4. Select `Only the sites listed here will be accessed through the VPN`, add several sites to the list, and enable the \"Split tunneling\" switch\n5. Click \"Connect\" and open your browser to verify that the VPN doesn't work at all\n6. Repeat steps 3-5 but select `Addresses from the list should not be accessed via VPN` to verify that the VPN affects every site, including those on your blacklist\n\n**Expected behavior**\n- When `Only the sites listed here will be accessed through the VPN` is selected and split tunneling is enabled: only sites on my list should use the VPN connection\n- When `Addresses from the list should not be accessed via VPN` is selected and split tunneling is enabled: all sites except those on my excluded list should use the VPN connection\n\n**Desktop (please complete the following information):**\n- OS: Linux Mint 21.3\n- Amnezia Version: 4.8.5.0\n\n**Server (please complete the following information):**\n- OS: Debian 12 (bookworm)"
+    },
     {
      "number": 3429,
      "title": "[Android] Публикация адреса XRay в маршрутах VPN позволяет другим приложениям прочитать его",
@@ -1988,53 +1972,18 @@
      "user": "samirakhmedov",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2154",
      "body": "# **Fix Android Launcher Icons for Modern Devices**\r\n\r\nUpdated Android launcher icons to address visual issues on later Android devices and similar devices. Added themed icons (monochrome mask support for Android 13+ Quick Settings) and full adaptive icons with foreground/background layers for proper scaling and theming. Refreshed icon designs for a cleaner, more modern \r\n\r\n**Changes**\r\n- Added adaptive icon format (`mipmap-anydpi-v26/ic_launcher.xml`, `ic_launcher_foreground.xml`, `ic_launcher_background.xml`).\r\n- Added themed icon support for Android 13+ dynamic theming.\r\n\r\n**Screenshots**\r\nBefore (Pixel 9): \r\n\r\n![telegram-cloud-photo-size-2-5451608590637535674-y](https://github.com/user-attachments/assets/d174783c-1d42-49f7-8aa1-2c6a4dc3cf56)\r\n\r\nAfter: \r\n\r\n<img width=\"336\" height=\"127\" alt=\"Screenshot 2026-01-24 at 18 36 59\" src=\"https://github.com/user-attachments/assets/23fefce2-75e1-436e-b67c-92255047f7d6\" />\r\n\r\n<img width=\"337\" height=\"102\" alt=\"Screenshot 2026-01-24 at 18 37 26\" src=\"https://github.com/user-attachments/assets/4fa7f90a-6a6f-4051-908b-e58bbbaff3a3\" />\r\n\r\n**Related Issues**\r\nCloses #1650 (Adaptive Icons on modern Android). \r\n\r\nReady for review—happy to adjust based on Amnezia team feedback! 🚀\r\n"
-    },
-    {
-     "number": 3517,
-     "title": "Error while installing 5.1.1.10",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-22T12:31:13Z",
-     "updated_at": "2026-11-23T05:49:22Z",
-     "user": "Botan626",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3517",
-     "body": "Windows 10 x64 10.0.19045.7850 version.\n<img width=\"602\" height=\"412\" alt=\"image\" src=\"https://github.com/user-attachments/assets/44846f64-f618-4a7b-b7c5-ca7e5b4ed8d7\" />\n\nif press ignore:\n<img width=\"602\" height=\"412\" alt=\"image\" src=\"https://github.com/user-attachments/assets/e14d8785-ca94-4b10-9ffa-f5d0fb75ca0c\" />"
-    },
-    {
-     "number": 3519,
-     "title": "раздельное туннелирование приложений линукс",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-23T05:44:31Z",
-     "updated_at": "2026-11-23T05:45:09Z",
-     "user": "dkpost3",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3519",
-     "body": "Привет всем, вопрос а почему для линукс это закоменчено? Там есть проблемы? "
-    },
-    {
-     "number": 1898,
-     "title": "App based split tunneling for Windows works only in \"should NOT have access\" mode",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2025-09-30T09:15:27Z",
-     "updated_at": "2026-11-23T05:04:18Z",
-     "user": "VGorash",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1898",
-     "body": "On Windows I can't use split tunneling only for specified apps. I can only block vpn from some apps (\"Apps from the list should NOT have access via VPN\")\n\nI want to be able configure split tunneling with \"Apps from the list SHOULD have access via VPN\"\n\n<img width=\"359\" height=\"113\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/64ef98bd-db67-448b-9609-fc76d925d5f4\" />"
-    },
-    {
-     "number": 3403,
-     "title": "Android 17 AWG 3.1 with split-tunneling connection off after screen locked",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-05T05:20:05Z",
-     "updated_at": "2026-11-23T01:41:34Z",
-     "user": "ZooMch1k",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3403",
-     "body": "On android 17(tested on Galaxy fold 7 and Pixel 10a) while split-tunneling apps, after screen locked and unlock connection drops and can revive either in 15-20 sec(handshake time) or not revive before reboot VPN in notification shade.\nAll rights and energy settings seted."
     }
    ],
    "comments": [
+    {
+     "id": 7154328216,
+     "issue": 1551,
+     "issue_title": "Split tunneling doesnt work on Linux with `AmneziaWG` (`Self-hosted VPN`)",
+     "created_at": "2026-11-25T05:59:13Z",
+     "user": "ipg0",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1551#issuecomment-7154328216",
+     "body": "Still broken on arch, 5.1.1.10 (Nov 19 2026, c71e65d), awg 3.1"
+    },
     {
      "id": 7140564394,
      "issue": 3191,
@@ -2097,24 +2046,6 @@
      "user": "samirakhmedov",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/2154#issuecomment-7096357374",
      "body": "closing as fixed"
-    },
-    {
-     "id": 7092094784,
-     "issue": 1898,
-     "issue_title": "App based split tunneling for Windows works only in \"should NOT have access\" mode",
-     "created_at": "2026-11-23T05:04:18Z",
-     "user": "Celador420",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1898#issuecomment-7092094784",
-     "body": "One data point for the Windows option to route only selected apps through the VPN: in an earlier prototype, an isolated IPv4 UDP test passed with the existing signed split-tunnel driver, without changing the driver. Separately, I tested the allowlist with a self-hosted Xray connection in a Windows VM. That’s narrower than general Windows support, but it may be worth exploring as an alternative to the driver change proposed in #2559. I can share a focused source patch and test notes if useful."
-    },
-    {
-     "id": 7089344315,
-     "issue": 3403,
-     "issue_title": "Android 17 AWG 3.1 with split-tunneling connection off after screen locked",
-     "created_at": "2026-11-23T01:41:34Z",
-     "user": "onnx1",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3403#issuecomment-7089344315",
-     "body": "Same on Nothing Phone 3a Pro (Android 17), have to constantly disconnect and reconnect after unlocking the phone."
     }
    ]
   },

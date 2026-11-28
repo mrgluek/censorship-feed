@@ -1,6 +1,6 @@
 {
- "generated_at": "2026-11-28T07:47:33Z",
- "since": "2026-11-26T07:47:33Z",
+ "generated_at": "2026-11-28T17:31:56Z",
+ "since": "2026-11-26T17:31:56Z",
  "repos": {
   "net4people/bbs": {
    "issues": [
@@ -47,6 +47,17 @@
   "PurpleI2P/i2pd": {
    "issues": [
     {
+     "number": 2655,
+     "title": "Does not start on Fedora Silverblue",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-28T08:37:05Z",
+     "updated_at": "2026-11-28T12:08:27Z",
+     "user": "martinandersson",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2655",
+     "body": "I installed I2P v3.0.0 from Flathub on Fedora Silverblue (GNOME v51.1). Problem is the app won't start. Absolutely nothing shows up.\n\nIf I try to start from the terminal this is the output before the command just returns:\n\n> johndoe@pc:~$ flatpak run website.i2pd.i2pd\n> QSocketNotifier: Can only be used with threads started with QThread\n> \n> (process:3): Gtk-WARNING **: 09:27:58.641: Locale not supported by C library.\n> \tUsing the fallback 'C' locale.\n> /app/bin/i2pd_qt_wrapper: line 12:     3 Segmentation fault         (core dumped) i2pd_qt --datadir=$I2PDATADIR\n\nPlease note that the \"local not supported\" warning I get from a number of apps and they all start. So this is not unique to I2PD and I suspect is not the underlying cause. The \"qt wrapper\" thing is a bit suspicious though!"
+    },
+    {
      "number": 2461,
      "title": "webconsole: fix action note grammar",
      "is_pr": true,
@@ -58,7 +69,17 @@
      "body": "Fix grammar in the commands page note.\n\nKeep the existing localized text by updating the source keys.\n\nFixes #2173."
     }
    ],
-   "comments": []
+   "comments": [
+    {
+     "id": 7239021035,
+     "issue": 2655,
+     "issue_title": "Does not start on Fedora Silverblue",
+     "created_at": "2026-11-28T12:08:27Z",
+     "user": "Vort",
+     "url": "https://github.com/PurpleI2P/i2pd/issues/2655#issuecomment-7239021035",
+     "body": "I suspect problem may appear because Fedora broke openssl functionality.\n\nI have two suggestions:\n1. Try i2pd built from latest commit;\n2. Try modifying system settings as explained [here](https://github.com/PurpleI2P/i2pd/issues/2585#issuecomment-6406044386)."
+    }
+   ]
   },
   "markqvist/Reticulum": {
    "issues": [],
@@ -66,6 +87,83 @@
   },
   "XTLS/Xray-core": {
    "issues": [
+    {
+     "number": 7357,
+     "title": "chore(finalmask): code clean",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-09T09:52:21Z",
+     "updated_at": "2026-11-28T17:11:31Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7357",
+     "body": ""
+    },
+    {
+     "number": 7208,
+     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-10-20T14:40:01Z",
+     "updated_at": "2026-11-28T17:09:52Z",
+     "user": "4erdenko",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208",
+     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
+    },
+    {
+     "number": 7512,
+     "title": "[Feature / RFC] Multi-level client routing: nested balancers, fallback & consistentHash strategies, lazy per-group health checks",
+     "is_pr": false,
+     "state": "closed",
+     "created_at": "2026-11-28T15:41:14Z",
+     "updated_at": "2026-11-28T17:07:55Z",
+     "user": "Rerowros",
+     "url": "https://github.com/XTLS/Xray-core/issues/7512",
+     "body": "Hi @RPRX and maintainers,\n\nBefore writing any code, I want to check whether this routing model fits Xray-core's design and whether small, focused PRs for individual parts of it would at least be considered for review.\n\n### Use case\n\nDesktop and mobile clients increasingly load all available outbounds (e.g. 30–60 nodes) into a single Xray instance and route different services simultaneously through independent multi-tier pools. For example, inside one config running at the same time:\n\n- **Default traffic (`main-select`)**: user picks between an automatic cascade (`auto-cascade`) or a specific regional group (`region-eu`, `region-us`, ...). Inside `auto-cascade`, traffic tries `tier-1-pool` first (load-balanced across several nodes with sticky per-domain hashing), falls back to `tier-2-pool` if `tier-1` is down, and finally to `tier-3-pool`.\n- **Service A (e.g. video)**: ordered failover across 3 pools (`video-fast` -> `video-secondary` -> `auto-cascade`), where each pool picks the lowest-latency healthy node using a service-specific probe URL (`expectedStatus: 204`).\n- **Service B (e.g. API / chat)**: checks an actual service health endpoint (`expectedStatus: 200`) and fails over from a regional pool to a backup pool only when that endpoint stops responding.\n- **Service C (e.g. streaming that works directly on some ISPs and is blocked on others)**: ordered failover `[direct, main-select]` probed against a specific endpoint (`expectedStatus: 403`) — stays direct while reachable and automatically routes through the proxy pool when blocked.\n- **Idle groups**: a config may define 20–50 such service/regional groups, most of which are unused during a session, so health checks must be lazy (only run when traffic actually hits that group) to avoid constant probe storms across 50+ outbounds.\n\nXray-core already handles multi-outbound simultaneous routing well, and already has `routing.balancers`, `observatory`/`burstObservatory`, `leastPing`, `leastLoad`, and `RoutingService.OverrideBalancerTarget`. Four focused additions in `app/router` and `app/observatory` would make the model above possible natively without restarting the core:\n\n### Proposed incremental additions\n\n#### 1. Nested balancers (DAG resolution + `direct` as a candidate)\nAllow a balancer's `selector`, `fallbackTag`, and `OverrideBalancerTarget` to reference another `balancerTag` (or a `direct` outbound tag), with cycle detection at config load.\n\n```json\n\"routing\": {\n  \"balancers\": [\n    {\n      \"tag\": \"tier-1\",\n      \"selector\": [\"node-a-\"],\n      \"strategy\": { \"type\": \"consistentHash\" }\n    },\n    {\n      \"tag\": \"tier-2\",\n      \"selector\": [\"node-b-\"],\n      \"strategy\": { \"type\": \"consistentHash\" }\n    },\n    {\n      \"tag\": \"auto-cascade\",\n      \"selector\": [\"tier-1\", \"tier-2\"],\n      \"strategy\": { \"type\": \"fallback\" }\n    },\n    {\n      \"tag\": \"service-c\",\n      \"selector\": [\"direct\", \"auto-cascade\"],\n      \"strategy\": { \"type\": \"fallback\" }\n    },\n    {\n      \"tag\": \"main-select\",\n      \"selector\": [\"auto-cascade\", \"region-eu\", \"region-us\"],\n      \"strategy\": { \"type\": \"fallback\" }\n    }\n  ],\n  \"rules\": [\n    { \"domain\": [\"geosite:service-a\"], \"balancerTag\": \"service-a\" },\n    { \"domain\": [\"geosite:service-b\"], \"balancerTag\": \"service-b\" },\n    { \"domain\": [\"geosite:service-c\"], \"balancerTag\": \"service-c\" },\n    { \"network\": \"tcp,udp\", \"balancerTag\": \"main-select\" }\n  ]\n}\n```\n\n#### 2. Two additional balancing strategies: `fallback` and `consistentHash`\n- **`fallback`**: pick the first alive candidate from `selector` in configured order (according to observatory status), moving to the next only when the current one fails. Essential for priority cascades (tier 1 -> tier 2 -> tier 3, or `direct` -> proxy) and for services sensitive to IP flapping.\n- **`consistentHash`**: distribute connections across healthy candidates in a pool using consistent hashing on target domain/IP, so traffic spreads evenly across a pool while the same site stays on the same exit IP.\n\n#### 3. Per-g"
+    },
+    {
+     "number": 7511,
+     "title": "HTTPUpgrade: Fix data loss",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-28T07:40:22Z",
+     "updated_at": "2026-11-28T17:05:54Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7511",
+     "body": "close #7509\n"
+    },
+    {
+     "number": 7513,
+     "title": "HTTPUpgrade: Fix client panic and out-of-bounds read on buffered 101 response",
+     "is_pr": true,
+     "state": "closed",
+     "created_at": "2026-11-28T16:42:04Z",
+     "updated_at": "2026-11-28T17:05:21Z",
+     "user": "Rerowros",
+     "url": "https://github.com/XTLS/Xray-core/pull/7513",
+     "body": "### Problem\n\nIn `transport/internet/httpupgrade/dialer.go`, `ConnRF.Read` creates `bufio.NewReaderSize(c.Conn, len(b))` and then drains buffered bytes with:\n\n```go\nreturn reader.Read(b[:reader.Buffered()])\n```\n\nGo's `bufio.NewReaderSize` enforces a minimum buffer size of 16 bytes, so `reader.Buffered()` can exceed `len(b)` (and `cap(b)`) whenever the peer sends initial payload bytes in the same packet as the `101 Switching Protocols` response:\n\n1. **Default `Ed == 0` (`dialhttpUpgrade` calls `connRF.Read([]byte{})`, `cap(b) == 0`):** `b[:reader.Buffered()]` panics with `runtime error: slice bounds out of range [:N] with capacity 0` and crashes the Xray process.\n2. **`Ed > 0` with small `len(b)` (e.g. VLESS `DecodeResponseHeader` calling `ReadFullFrom(conn, 1)` where `len(b) == 1, cap(b) == 8192`):** `b[:reader.Buffered()]` slices past `len(b)` into the caller's backing array and returns `n > len(b)`, corrupting protocol framing.\n\n### Fix\n\n- Keep the `*bufio.Reader` on `ConnRF` only while buffered payload remains after `http.ReadResponse`, then release it (`c.reader = nil`) as soon as drained.\n- Preserve deferred `bufio.Reader` errors (such as `io.EOF` / `close_notify` arriving in the same read as `101` or its buffered payload): return them immediately on `101 + EOF` (`Buffered() == 0`), or on the next `Read` after delivering buffered bytes so callers like `buf.BufferedReader` do not discard the final bytes.\n- Add unit tests covering pipelined `101 + payload` on `Dial` (`Ed == 0`), `len(b) < Buffered() <= cap(b)`, non-blocking zero-length `Read`, and `data + error` returned in the same read.\n\nRelated to #7511 (server side).\n"
+    },
+    {
+     "number": 7456,
+     "title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-22T03:25:56Z",
+     "updated_at": "2026-11-28T16:09:58Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7456",
+     "body": "Refs #7455. The config split proposed there was dropped after the discussion; this PR now carries the login and data-shaping work that came out of it.\n\n## What changed\n\n### 1. The login is a version table, not literals\n\nEvery packet id the mask writes or matches is the registration order of `LoginProtocols` / `ConfigurationProtocols`, so it now lives in one table (`protocol_table.go`), one row per release:\n\n| Release | Protocol | Login Finished session id |\n| --- | --- | --- |\n| 1.21.1 / 1.21.2·1.21.3 | 767 / 768 | no |\n| 1.21.4, 1.21.5, 1.21.6 | 769–771 | no |\n| 1.21.7·1.21.8, 1.21.9·1.21.10 | 772, 773 | no |\n| 1.21.11, 26.1 | 774, 775 | no |\n| 26.2, 26.3 | 776, 777 | yes |\n\nRows were not copied from a capture:\n\n- 767–775: minecraft-data's per-version `protocol.json` (`data/pc/<version>/`), which stores the same registration order as `{id: packet name}`;\n- 776–777: the official 26.2 / 26.3 jars, `LoginProtocols` and `ConfigurationProtocols`.\n\n26.3 is the reason the table exists. It inserts `ClientboundPostEffectsPacket` at `0x0a` in the configuration clientbound list, after the keep-alive and before `store_cookie`, and the list has grown by four packets since 1.21.1. Every id the mask uses happened to stay put — the table makes the next move a one-line change instead of a diff of five files, and `protocol_table_test.go` pins every id.\n\n### 2. The login is the vanilla 26.3 exchange\n\nDecompiled from the official 26.3 jars (`LoginProtocols`, `ServerLoginPacketListenerImpl`, `ClientHandshakePacketListenerImpl`):\n\n- client: loops over login packets instead of expecting a fixed order; requires the encryption exchange and refuses a server that asks it not to authenticate, because an offline-mode login has nothing to reproduce and no session to verify; answers login plugin requests with a null payload and cookie requests with an absent cookie; reports Login Disconnect reasons;\n- `Login Finished` carries the connection session id from 26.2 on — the server writes one per process like vanilla, the client reads and ignores it, and trailing bytes are ignored because Mojang has appended a field to this packet before;\n- server: selects its row from the handshake and rejects an unknown version with the Login Disconnect a vanilla server sends (`outdated_client` below 754, `incompatible` above), validates the player name the 26.x way (≤ 16 printable ASCII — the old \"letters, digits, underscore\" rule is gone), rejects the TRANSFER intent like a server with `accepts-transfers=false`, and answers status with the JSON of the version it reports;\n- configuration state: answers Keep Alive, Ping and Cookie Request, and stops on a Disconnect instead of draining it silently. Ping/Pong carry a plain 32-bit integer (not a varint, unlike the packet ids); the mod bench caught exactly that, see below.\n\n`Set Compression` is negotiated in both directions: the client switches to the compressed framing when the peer sends it (verified against a real server at `65536` and at vanilla's default `256`), and the mask's own server does not send the packet, which is the same wire as a vanilla server with `network-compression-threshold=-1`; the padding preset was captured from such a login, so the framings line up.\n\n### 3. 20 Hz tick-driven data shaping (unchanged from the earlier revision)\n\nAfter the handshake, proxy writes are queued and flushed once per 50 ms game tick:\n\n- every tick writes one small padding frame on `xmc:pad`, so an idle connection keeps the 20 Hz cadence in both directions;\n- queued data is split into `xmc:data` payloads of at most 24 KiB and emitted in the same tick batch, so a busy connection looks like per-tick bursts instead of a bulk TCP stream;\n- `Close` flushes the queued tick, so a graceful shutdown does not drop its last bytes.\n\n### 4. Configurable payload channels\n\n`dataChannel` / `paddingChannel` (empty keeps `xmc:data` / `xmc:pad`), validated as Minecraft resource locations: namespace and path follow vanilla's rules, at most 128 bytes, "
+    },
+    {
+     "number": 7455,
+     "title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
+     "is_pr": false,
+     "state": "open",
+     "created_at": "2026-11-22T03:25:45Z",
+     "updated_at": "2026-11-28T15:55:09Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7455",
+     "body": "> **Revision note / 修订说明**\n>\n> This issue originally proposed splitting the XMC config into `clients`/`servers` blocks. After the discussion (RPRX: the split has no clear advantage yet, keep the config as-is; switch the data path to 20 Hz instead, breaking is fine), the split was dropped and the PR #7456 was repurposed. To avoid opening a duplicate issue, this issue is updated in place: the title and description now track the 20 Hz data shaping.\n>\n> 本 issue 最初提出把 XMC 配置拆成 `clients`/`servers` 区块。讨论后（RPRX：暂时没看到拆分的明显优势，配置先别动；改为 20Hz 发数据，可以 breaking），拆分方案已放弃，#7456 也随之改成了 20Hz 实现。为避免再开一个重复 issue，这里直接原地更新标题和说明，改为跟踪 20Hz 数据整形。\n\n### Problem / 问题\n\nAfter the login/configuration handshake, XMC currently wraps proxy writes in `xmc:data` custom payloads immediately (up to 24 KiB each). An idle connection therefore emits no packets, and a busy one becomes a bulk TCP stream.\n\nReal Minecraft is not a bandwidth-driven stream; it is a 20 TPS (50 ms) clock:\n\n- both directions keep sending small packets even while idle (the client's per-tick packet, the server's entity/world updates);\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) flushes queued packets once per tick;\n- chunk loading is tick-shaped too: [Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) reports a \"chunks per tick\" rate, the server waits for batch acknowledgements, and [Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) targets roughly half of the available bandwidth;\n- the 26.3 capture in #7423 shows packet rates near multiples of 20/s in both directions: idle c2s 21 pkt/s / 89 B/s, s2c 41 pkt/s / 5.6 KB/s; running 43/697 and 99/69K; join 2.2 MB / 12 s.\n\nXMC 目前握手完成后会立即把代理写入封成 `xmc:data` 载荷（每块最多 24 KiB）：空闲时没有包，忙时就是一条 bulk TCP 流。\n\n真实 Minecraft 不是带宽驱动的流，而是 20 TPS（50ms）的时钟：\n\n- 空闲时双向也持续有小包（客户端每 tick 的包、服务端的实体/世界更新）；\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) 每 tick 才 flush 一次队列里的包；\n- 区块加载同样按 tick 整形：[Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) 上报的是 \"chunks per tick\"，服务端要等 batch ack，[Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) 还把目标压在约一半带宽；\n- #7423 的 26.3 抓包显示双向包率都接近 20/s 的整数倍：挂机 c2s 21 包/s / 89 B/s、s2c 41 包/s / 5.6 KB/s；跑动 43/697 与 99/69K；进服 2.2 MB / 12 s。\n\n### Proposal / 方案（implemented in #7456）\n\nAfter the handshake, queue proxy writes and flush them once per 50 ms game tick:\n\n- every tick writes one small `xmc:pad` frame, so an idle connection keeps the 20 Hz cadence in both directions;\n- queued data is split into `xmc:data` payloads of at most 24 KiB and emitted inside the same tick batch;\n- no artificial bandwidth cap: a busy tick may carry several payloads, like a Minecraft chunk burst;\n- `Close` flushes the queued tick before closing the connection, so the last bytes are not dropped.\n\nThe startup `paddings` schedule and the configuration format are unchanged. This is a breaking wire change for XMC (old and new peers do not pair), which is acceptable for a finalmask mask.\n\n握手完成后把代理写入入队，每 50ms 游戏 tick flush 一次：\n\n- 每个 tick 固定发一个小 `xmc:pad` 帧，保证空闲时双向都有 20Hz 节拍；\n- 队列数据按 24 KiB 拆成 `xmc:data` 载荷，在同一个 tick 批次里发出；\n- 不设人为带宽上限：忙的 tick 可以带多个载荷，像 MC 的区块 burst；\n- `Close` 前先 flush 队列，避免最后几个字节丢失。\n\n启动阶段的 `paddings` 预置和配置格式不变。对 XMC 是 breaking 的线格式变更（新旧端不能互配），对 finalmask 来说可以接受。\n\n### Scope / 范围\n\n- One padding frame per tick per direction for now; the packet-count/size distribution is not yet state-dependent (idle/walk/loading).\n- The vanilla chunk-batch/credit shape is not reproduced yet; this change only adds the 20 Hz cadence.\n- The config split (`clients`/`servers`) is dropped; see the revision note.\n\n- 目前每个 tick 每方向一个 padding 帧，包数/尺寸分布还没按状态（idle/walk/loading）区分；\n- 还没复刻 vanilla 的 chunk batch/信用窗口，仅加入 20Hz 节拍；\n- 配置拆分（`clients`/`servers`）已放弃，见顶部修订说明。\n\n### Tests / 测试\n\nUnit: `go test ./transport/internet/finalmask/xmc/` covers the tick cadence, per-tick b"
+    },
     {
      "number": 7508,
      "title": "[Bug]: VLESS inbound applies handshake timeout after the decryption handshake",
@@ -89,17 +187,6 @@
      "body": "### Version\r\n`Xray 26.11.9` — verified on `main` at `ded8443fee25`.\r\n\r\n### Description\r\nIn `transport/internet/httpupgrade/hub.go`, `upgrade()` parses the incoming HTTP upgrade request through `connReader := bufio.NewReader(io.LimitReader(conn, 12288))` (lines 53-55), writes `101 Switching Protocols`, and then returns `stat.Connection(newConnection(conn, remoteAddr))` wrapping the raw `conn` (line 103).\r\n\r\nAny payload bytes that `bufio.Reader` already read from `conn` after the `\\r\\n\\r\\n` header terminator remain unread in `connReader` and are silently dropped.\r\n\r\nThis affects clients that pipeline initial payload bytes without waiting for `101` — including Xray's own HTTPUpgrade client when `?ed=` is set on the path. Depending on TCP framing/timing, the inbound reads from the middle of the stream or stalls waiting for the dropped prefix.\r\n\r\n### Deterministic Reproduction (`go test` on `main` `ded8443fee25`)\r\nAdding the following test in `transport/internet/httpupgrade`:\r\n```go\r\npackage httpupgrade\r\n\r\nimport (\r\n\t\"io\"\r\n\t\"net\"\r\n\t\"testing\"\r\n\t\"time\"\r\n)\r\n\r\nfunc TestUpgradeKeepsPipelinedBytes(t *testing.T) {\r\n\tclient, peer := net.Pipe()\r\n\tdefer client.Close()\r\n\tgo func() {\r\n\t\t_, _ = client.Write([]byte(\"GET / HTTP/1.1\\r\\nHost: example.com\\r\\nConnection: Upgrade\\r\\nUpgrade: websocket\\r\\n\\r\\nhello\"))\r\n\t\t_, _ = io.Copy(io.Discard, client)\r\n\t}()\r\n\tconn, err := (&server{}).upgrade(peer)\r\n\tif err != nil {\r\n\t\tt.Fatal(err)\r\n\t}\r\n\t_ = conn.SetReadDeadline(time.Now().Add(time.Second))\r\n\tb := make([]byte, 5)\r\n\tif _, err := io.ReadFull(conn, b); err != nil || string(b) != \"hello\" {\r\n\t\tt.Fatalf(\"got %q, %v\", b, err)\r\n\t}\r\n}\r\n```\r\nObserved output on `main` (`ded8443fee25`):\r\n```text\r\n=== RUN   TestUpgradeKeepsPipelinedBytes\r\n    hub_pipelined_test.go:24: got \"\\x00\\x00\\x00\\x00\\x00\", read pipe: i/o timeout\r\n--- FAIL: TestUpgradeKeepsPipelinedBytes (1.00s)\r\n```\r\n\r\n### Minimal Config Pair (where `?ed=` triggers this path)\r\nServer:\r\n```json\r\n{\r\n  \"log\": {\"loglevel\": \"debug\"},\r\n  \"inbounds\": [{\r\n    \"listen\": \"127.0.0.1\", \"port\": 10000, \"protocol\": \"vless\",\r\n    \"settings\": {\"clients\": [{\"id\": \"<fresh UUID>\"}], \"decryption\": \"none\"},\r\n    \"streamSettings\": {\"network\": \"httpupgrade\", \"httpupgradeSettings\": {\"path\": \"/hu\"}}\r\n  }],\r\n  \"outbounds\": [{\"protocol\": \"freedom\"}]\r\n}\r\n```\r\nClient:\r\n```json\r\n{\r\n  \"log\": {\"loglevel\": \"debug\"},\r\n  \"inbounds\": [{\"listen\": \"127.0.0.1\", \"port\": 1080, \"protocol\": \"socks\"}],\r\n  \"outbounds\": [{\r\n    \"protocol\": \"vless\",\r\n    \"settings\": {\"address\": \"127.0.0.1\", \"port\": 10000, \"id\": \"<same UUID>\", \"encryption\": \"none\"},\r\n    \"streamSettings\": {\"network\": \"httpupgrade\", \"httpupgradeSettings\": {\"path\": \"/hu?ed=2560\"}}\r\n  }]\r\n}\r\n```\r\n\r\n### Suggested Fix\r\nWhen `connReader.Buffered() > 0`, drain the unread buffered bytes and serve them before reading from `conn` (avoid wrapping all subsequent reads in `connReader`, since its `io.LimitReader` caps reads at 12288 bytes). Happy to submit a PR with the regression test linked to this issue.\r\n\r\n---\r\n*Methodology note: initial static triage and cross-review used AI assistance (Gemini 4 Neon, Claude Opus 5.5, GPT Astra 6.2); the issue selection, code review, and local `go test` reproduction against `main` `ded8443fee25` were verified directly.*\r\n"
     },
     {
-     "number": 7511,
-     "title": "HTTPUpgrade: Fix data loss",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-28T07:40:22Z",
-     "updated_at": "2026-11-28T07:40:22Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7511",
-     "body": "close #7509\n"
-    },
-    {
      "number": 7510,
      "title": "vless/inbound: apply handshake read deadline before decryption handshake",
      "is_pr": true,
@@ -109,28 +196,6 @@
      "user": "aloneangel45",
      "url": "https://github.com/XTLS/Xray-core/pull/7510",
      "body": "Fixes #7508.\n\n### Summary\nIn `proxy/vless/inbound/inbound.go`, `Handler.Process` ran `h.decryption.Handshake(connection, nil)` before looking up the level-0 policy and calling `connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake))`.\n\nBecause `Handshake` blocks on `io.ReadFull`, a peer opening a connection to a VLESS inbound with `decryption` configured and sending fewer bytes than the handshake expects held the connection and goroutine open indefinitely, bypassing `policy.levels.0.handshake`.\n\n### Changes\n- `proxy/vless/inbound/inbound.go`: moved the level-0 policy lookup and `connection.SetReadDeadline(time.Now().Add(sessionPolicy.Timeouts.Handshake))` ahead of `h.decryption.Handshake`. `CommonConn` embeds `net.Conn`, so the later `connection.SetReadDeadline(time.Time{})` calls after header decoding / fallback continue to clear the deadline as before.\n- `proxy/vless/inbound/inbound_test.go`: added regression tests (`TestProcessSetsHandshakeDeadlineBeforeDecryptionHandshake` and `TestProcessHandshakeTimeoutWithoutDecryption`) verifying that a silent peer times out within the level-0 handshake timeout both with and without VLESS decryption configured.\n\n### Verification\n- `gofmt -l proxy/vless/inbound`\n- `go test -v ./proxy/vless/...`\n- `go vet ./proxy/vless/...`\n"
-    },
-    {
-     "number": 7208,
-     "title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-10-20T14:40:01Z",
-     "updated_at": "2026-11-28T06:36:21Z",
-     "user": "4erdenko",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\n> 简述：在 v26.10.17（与 main 相同）中，如果 XDRIVE 客户端在下载中途消失（进程被杀或断网），服务端无法察觉：它会继续从目标读取，并把剩余的整个响应写入存储（复现中 20 秒内写入约 235 MiB、607 个对象）。这些对象要等服务端的 mux 子连接自行结束后才会被清理（约 2.7–13 分钟），期间该会话仍被持续 LIST 轮询。原因是 XDRIVE 既没有对端存活检测，也没有背压。\n\nVersion: v26.10.17 (`92ccc93`, the newest release and the same commit as current `main`), `network: \"xdrive\"`, `service: \"local\"`. XDRIVE is only in the pre-releases since v26.9.30; it is not in v26.3.27. The session logic involved does not depend on the backend, so remote backends behave the same way.\n\nWhen an XDRIVE client disappears in the middle of a download (process killed, network lost, which is common for mobile clients), the server does not notice:\n\n1. It keeps reading from the target and writes the whole remaining response into the storage. In the repro the client had received 22 MiB of a 256 MiB body; within 20 s after the client was killed the server wrote 246,869,084 bytes in 607 objects.\n2. These objects stay until the server-side mux sub-connection ends on its own: about 2.7 min when the target closes the connection after the body, about 13 min with a keep-alive target. Meanwhile the dead session is still polled (about 2 LIST per second).\n3. The server logs nothing after the client is gone, even at `debug`.\n\nWith a remote backend every abandoned download can upload hundreds of MiB into the storage account, consume API quota and leave the objects there for minutes.\n\nIf only the application connection is closed while the client stays alive (curl killed), the server stops writing within about 5 s and the folder is cleaned up, so the problem is specific to the peer disappearing.\n\n| 256 MiB body at 16 MiB/s, `sessionTtlSeconds: 30` | storage at +30 s | +90 s | +180 s | server kept writing |\n|---|---|---|---|---|\n| download completes (control) | 0 B | 0 B | 0 B | no |\n| client `kill -9` after ~2 s | 246,869,084 B / 607 objects | same | same | yes, the whole remaining body |\n| client `SIGTERM` after ~2 s | 246,394,446 B / 515 objects | same | same | yes |\n| curl killed, client alive | 0 B (one `.end`) | 0 B | 0 B | no, stopped within ~5 s |\n| client `kill -9`, keep-alive target, watched 900 s | 246,453,796 B | same | same | yes; empty only at ~750–780 s |\n| client `kill -9`, target sends `Connection: close` | 246,485,923 B | same | 0 B | yes; empty at ~165 s |\n\n**Cause**\n\n- `Listener.claim` marks the session active (`transport/internet/xdrive/xdrive.go:225`); the mark is removed only in the connection's `onClose` (`xdrive.go:234`). `collect()` skips active sessions (`xdrive.go:267-269`), so the folder of a dead session is not collected while the server-side connection is open.\n- That connection is closed only when the inbound handler returns (`app/proxyman/inbound/worker.go:123-127`), i.e. after the server-side mux session ends. XDRIVE has no peer liveness signal: no heartbeat, no idle timeout. `Conn.receive` blocks on the reader channel (`conn.go:53-61`), `walReader.poll` returns quietly on an empty listing (`wal.go:295-297`), `holeTimeout` fires only when later segments exist (`wal.go:312-321`), EOF comes only from a `.end` object (`wal.go:365`).\n- No backpressure: `walWriter.Write` appends to the buffer and `flushLocked` starts `go w.upload` (`wal.go:73-91`, `wal.go:127-156`); the semaphore in `upload` limits concurrent `Put`s, not unconsumed data (`wal.go:161-166`). Segments are deleted only by the peer's reader, so nothing limits what"
-    },
-    {
-     "number": 7455,
-     "title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-22T03:25:45Z",
-     "updated_at": "2026-11-28T02:16:39Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7455",
-     "body": "> **Revision note / 修订说明**\n>\n> This issue originally proposed splitting the XMC config into `clients`/`servers` blocks. After the discussion (RPRX: the split has no clear advantage yet, keep the config as-is; switch the data path to 20 Hz instead, breaking is fine), the split was dropped and the PR #7456 was repurposed. To avoid opening a duplicate issue, this issue is updated in place: the title and description now track the 20 Hz data shaping.\n>\n> 本 issue 最初提出把 XMC 配置拆成 `clients`/`servers` 区块。讨论后（RPRX：暂时没看到拆分的明显优势，配置先别动；改为 20Hz 发数据，可以 breaking），拆分方案已放弃，#7456 也随之改成了 20Hz 实现。为避免再开一个重复 issue，这里直接原地更新标题和说明，改为跟踪 20Hz 数据整形。\n\n### Problem / 问题\n\nAfter the login/configuration handshake, XMC currently wraps proxy writes in `xmc:data` custom payloads immediately (up to 24 KiB each). An idle connection therefore emits no packets, and a busy one becomes a bulk TCP stream.\n\nReal Minecraft is not a bandwidth-driven stream; it is a 20 TPS (50 ms) clock:\n\n- both directions keep sending small packets even while idle (the client's per-tick packet, the server's entity/world updates);\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) flushes queued packets once per tick;\n- chunk loading is tick-shaped too: [Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) reports a \"chunks per tick\" rate, the server waits for batch acknowledgements, and [Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) targets roughly half of the available bandwidth;\n- the 26.3 capture in #7423 shows packet rates near multiples of 20/s in both directions: idle c2s 21 pkt/s / 89 B/s, s2c 41 pkt/s / 5.6 KB/s; running 43/697 and 99/69K; join 2.2 MB / 12 s.\n\nXMC 目前握手完成后会立即把代理写入封成 `xmc:data` 载荷（每块最多 24 KiB）：空闲时没有包，忙时就是一条 bulk TCP 流。\n\n真实 Minecraft 不是带宽驱动的流，而是 20 TPS（50ms）的时钟：\n\n- 空闲时双向也持续有小包（客户端每 tick 的包、服务端的实体/世界更新）；\n- [Tick#Game process](https://minecraft.wiki/w/Tick#Game_process) 每 tick 才 flush 一次队列里的包；\n- 区块加载同样按 tick 整形：[Chunk Batch Received](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Received) 上报的是 \"chunks per tick\"，服务端要等 batch ack，[Chunk Batch Finished](https://minecraft.wiki/w/Java_Edition_protocol/Packets#Chunk_Batch_Finished) 还把目标压在约一半带宽；\n- #7423 的 26.3 抓包显示双向包率都接近 20/s 的整数倍：挂机 c2s 21 包/s / 89 B/s、s2c 41 包/s / 5.6 KB/s；跑动 43/697 与 99/69K；进服 2.2 MB / 12 s。\n\n### Proposal / 方案（implemented in #7456）\n\nAfter the handshake, queue proxy writes and flush them once per 50 ms game tick:\n\n- every tick writes one small `xmc:pad` frame, so an idle connection keeps the 20 Hz cadence in both directions;\n- queued data is split into `xmc:data` payloads of at most 24 KiB and emitted inside the same tick batch;\n- no artificial bandwidth cap: a busy tick may carry several payloads, like a Minecraft chunk burst;\n- `Close` flushes the queued tick before closing the connection, so the last bytes are not dropped.\n\nThe startup `paddings` schedule and the configuration format are unchanged. This is a breaking wire change for XMC (old and new peers do not pair), which is acceptable for a finalmask mask.\n\n握手完成后把代理写入入队，每 50ms 游戏 tick flush 一次：\n\n- 每个 tick 固定发一个小 `xmc:pad` 帧，保证空闲时双向都有 20Hz 节拍；\n- 队列数据按 24 KiB 拆成 `xmc:data` 载荷，在同一个 tick 批次里发出；\n- 不设人为带宽上限：忙的 tick 可以带多个载荷，像 MC 的区块 burst；\n- `Close` 前先 flush 队列，避免最后几个字节丢失。\n\n启动阶段的 `paddings` 预置和配置格式不变。对 XMC 是 breaking 的线格式变更（新旧端不能互配），对 finalmask 来说可以接受。\n\n### Scope / 范围\n\n- One padding frame per tick per direction for now; the packet-count/size distribution is not yet state-dependent (idle/walk/loading).\n- The vanilla chunk-batch/credit shape is not reproduced yet; this change only adds the 20 Hz cadence.\n- The config split (`clients`/`servers`) is dropped; see the revision note.\n\n- 目前每个 tick 每方向一个 padding 帧，包数/尺寸分布还没按状态（idle/walk/loading）区分；\n- 还没复刻 vanilla 的 chunk batch/信用窗口，仅加入 20Hz 节拍；\n- 配置拆分（`clients`/`servers`）已放弃，见顶部修订说明。\n\n### Tests / 测试\n\nUnit: `go test ./transport/internet/finalmask/xmc/` covers the tick cadence, per-tick b"
     },
     {
      "number": 7499,
@@ -483,64 +548,288 @@
      "user": "svlavr",
      "url": "https://github.com/XTLS/Xray-core/pull/7364",
      "body": "This PR moves Multiplex to `proxy/vless/multiplex` and VLESS Reverse to `proxy/vless/reverse`. VLESS, VMess, and Reverse share the same Multiplex implementation. These paths pass decoded traffic through `DispatchLink` without intermediate `pipe` links.\n\n### Protocol support\n\n**Outbound Multiplex is available for VLESS and VMess.** Other outbound protocols use ordinary connections. VMess uses the shared implementation for inbound and outbound Mux. Ordinary VMess TCP and UDP keep the direct path from #5143. Reverse now uses the VLESS implementation, and the old standalone Reverse application has been removed.\n\n### VLESS and VMess outbound configuration\n\nAdd `multiplex` under `outbounds[].settings`, alongside the protocol's other settings. This fragment enables the shared pool for up to eight active streams per connection.\n\n```json\n{\n  \"settings\": {\n    \"multiplex\": {\n      \"concurrency\": 8,\n      \"xudpConcurrency\": 0,\n      \"xudpProxyUDP443\": \"reject\"\n    }\n  }\n}\n```\n\n- A positive `concurrency` enables the shared pool. A positive `xudpConcurrency` enables a separate XUDP pool. If only `xudpConcurrency` is positive, TCP uses ordinary connections. With `xudpConcurrency` omitted or zero, UDP uses the shared pool when available.\n- Omit `multiplex` or leave both counts at zero to use ordinary connections. An empty object `{}` also leaves Multiplex off. The old `enabled` property has no effect. Negative counts are rejected.\n- `xudpProxyUDP443` applies when there is a pool for UDP/443. The default `reject` reports `XUDP rejected UDP/443 traffic`. `skip` uses the ordinary path, and `allow` uses the pool. UDP/443 uses the ordinary path when there is no applicable pool.\n- XDrive requires a positive `concurrency` unless Reverse opens its own carrier. The shared XDrive pool uses a minimum concurrency of `128`.\n\n### Legacy settings and API\n\nXray ignores the top-level `outbounds[].mux` key. During JSON loading it writes one warning to standard output per outbound containing that key, including when `settings.multiplex` is also present. The new settings determine whether Multiplex is enabled.\n\n> The legacy \"mux\" setting is ignored. To enable Multiplex for VLESS or VMess outbounds, use \"settings.multiplex\". If Multiplex is disabled, Xray will use ordinary outbound connections.\n\nAPI clients set `multiplex` in the VLESS or VMess outbound protocol configuration. The old `SenderConfig.multiplex_settings` field is ignored.\r\n"
-    },
-    {
-     "number": 7493,
-     "title": "XMC finalmask: move every disconnect reason onto vanilla translation keys, and add a UUID allow list for Yggdrasil mode / XMC finalmask：踢出信息统一走原版翻译键，并为 Yggdrasil 模式补 UUID 白名单",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-26T17:11:24Z",
-     "updated_at": "2026-11-26T17:12:13Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7493",
-     "body": "# XMC finalmask：踢出信息统一走原版翻译键，并为 Yggdrasil 模式补 UUID 白名单\n\n> 类型：讨论 / proposal（先定方向，再动手）\n> 基线：`feat/xmc-config-clients-servers` @ `536a075f`\n> 相关提交：`35387572` (#6210 引入 XMC)、`6ab123bf` (#6487 引入那句硬编码文案)、`5225121a` (#7416 Yggdrasil)、`84c2b8a0`/`50ac1fe5`/`536a075f`（登录流程与单账号登录串行化）\n\n---\n\n## 摘要 / TL;DR\n\n两个提案，目标都是「login 阶段的行为、文案、拒绝理由和原版 26.3 服务器无法区分」，顺带补一个真实的安全缺口：\n\n**A. 踢出信息（Login Disconnect 的 reason）**\n1. 模块里现在有 **6 个踢出点**，其中 **5 个已经用 `{\"translate\": ...}`**，只有 legacy 密码模式的「不在白名单」用的是 `{\"text\":\"You are not white-listed on this server!\"}` 硬编码英文。原版在 login / configuration 阶段**从不**发 literal 文本组件，这里必须改成 `multiplayer.disconnect.not_whitelisted`——显示文本一模一样，但会跟随客户端语言本地化（zh_CN → `你不在此服务器的白名单中！`）。\n2. 顺手把 6 个 reason 逐个和原版 26.3 反编译源码对齐：3 个已一致，踢出点 4 需要拆分，踢出点 5 / 6 建议改，另有 1 类「静默断开」需要讨论。\n\n**B. Yggdrasil 模式没有 UUID 白名单**\n1. 现状：Yggdrasil 模式只做 `hasJoined` 验证（外加 UUID/名字一致性检查），**配置里的 `profiles` 完全不参与校验**。任何能在该 API 完成认证并 `/join` 的账号都能建立隧道。\n2. 建议：照原版 `whitelist.json` 的原理给 `yggdrasil` 增加 `allow` 列表（**按 UUID 匹配**），拒绝时用和原版白名单完全相同的 reason：`multiplayer.disconnect.not_whitelisted`。\n3. 附带修一个安全 footgun：从 legacy 模式迁移到 Yggdrasil 的用户会以为 `profiles` 仍然是白名单，实际上两端都静默忽略它。建议在配置构建期给出警告。\n\n---\n\n## 背景：XMC 的「踢出」是什么\n\nXMC 自己是「假装成在线模式 Minecraft 服务器」的 TCP finalmask，所以「踢出」只有一个实现：**在 login 阶段写一个 `clientboundLoginDisconnect` 包（reason 是 JSON 文本组件），然后关连接**。入口是 `writeDisconnectPacket()`（`transport/internet/finalmask/xmc/protocol.go:469`），触发点在 `server.go`，客户端侧只是把 reason 原样塞进 error（`client.go:241-249`、`packet_stream.go:243-246`）。\n\n进入 configuration（隧道）之后服务端不再主动踢人；畸形包、padding 校验失败等路径直接 close，不发 disconnect。\n\n### 现状：6 个踢出点\n\n| # | 触发条件 | 位置 | 当前 reason | 组件类型 |\n|---|---|---|---|---|\n| 1 | 握手 `nextState=3`（TRANSFER） | `server.go:162` | `multiplayer.disconnect.transfers_disabled` | translate |\n| 2 | 协议号不在 767–777 表内 | `server.go:175` + `protocol_table.go:201` | `outdated_client`（<754）/ `incompatible`，`with:[\"26.3\"]` | translate |\n| 3 | Yggdrasil：10 s 内 `hasJoined` 查不到 | `server.go:296` | `multiplayer.disconnect.unverified_username` | translate |\n| 4 | Yggdrasil：API 故障 / UUID 或名字不匹配 | `server.go:298` | `multiplayer.disconnect.authservers_down` | translate |\n| 5 | legacy：预共享密码错误 | `server.go:310` | `multiplayer.disconnect.authservers_down` | translate |\n| 6 | legacy：密码正确但 profile 不在 `profiles` 里 | `server.go:314` | `{\"text\":\"You are not white-listed on this server!\"}` | **text（硬编码）** |\n\n---\n\n## 提案 A：所有踢出信息改用原版翻译键\n\n### A.1 原版 26.3 login / configuration 阶段会发的所有踢出理由\n\n（来源：官方 26.3 server jar 反编译 + `minecraft-data` 的 `language.json` 交叉核对）\n\n| 阶段 | 原版 reason | 参数 | 原版出处 |\n|---|---|---|---|\n| handshake | `multiplayer.disconnect.transfers_disabled` | — | `ServerHandshakePacketListenerImpl.handleIntention` TRANSFER 分支 |\n| handshake | `multiplayer.disconnect.outdated_client` | 版本名 | `beginLogin`，`protocolVersion < 754` |\n| handshake | `multiplayer.disconnect.incompatible` | 版本名 | `beginLogin`，其余版本 |\n| login | `multiplayer.disconnect.unverified_username` | — | `ServerLoginPacketListenerImpl`，`hasJoined` 返回空 |\n| login | `multiplayer.disconnect.authservers_down` | — | 同上，`AuthenticationUnavailableException` |\n| login | `multiplayer.disconnect.slow_login` | — | 同上，`if (this.tick++ == 600)`（≈30 s） |\n| login | `multiplayer.disconnect.banned.reason` (+`.expiration`) | 理由/时间 | `PlayerList.canPlayerLogin` |\n| login | `multiplayer.disconnect.not_whitelisted` | — | `PlayerList.canPlayerLogin` |\n| login | `multiplayer.disconnect.banned_ip.reason` (+`.expiration`) | 理由/时间 | `PlayerList.canPlayerLogin` |\n| login | `multiplayer.disconnect.server_full` | — | `PlayerList.canPlayerLogin` |\n| login | `multiplayer.disconnect.duplicate_login` | — | `PlayerList.disconnectAllPlayersWithProfile` |\n| config | `multiplayer.disconnect.unexpected_query_response` | — | `ServerCommonPacketListenerImpl`（`DISCONNECT_UNEXPECTED_QUERY`） |\n| config | `multiplayer.disconnect.invalid_player_data` | — | `ServerConfigurationPacketListenerImpl`（放置玩家失败） |\n| config | `multiplayer.disconnect.configuration_error` | — | 同上（配置任务异常） |\n| config | `multiplayer.d"
-    },
-    {
-     "number": 7456,
-     "title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-22T03:25:56Z",
-     "updated_at": "2026-11-26T16:58:17Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/pull/7456",
-     "body": "Refs #7455. The config split proposed there was dropped after the discussion; this PR now carries the login and data-shaping work that came out of it.\n\n## What changed\n\n### 1. The login is a version table, not literals\n\nEvery packet id the mask writes or matches is the registration order of `LoginProtocols` / `ConfigurationProtocols`, so it now lives in one table (`protocol_table.go`), one row per release:\n\n| Release | Protocol | Login Finished session id |\n| --- | --- | --- |\n| 1.21.1 / 1.21.2·1.21.3 | 767 / 768 | no |\n| 1.21.4, 1.21.5, 1.21.6 | 769–771 | no |\n| 1.21.7·1.21.8, 1.21.9·1.21.10 | 772, 773 | no |\n| 1.21.11, 26.1 | 774, 775 | no |\n| 26.2, 26.3 | 776, 777 | yes |\n\nRows were not copied from a capture:\n\n- 767–775: minecraft-data's per-version `protocol.json` (`data/pc/<version>/`), which stores the same registration order as `{id: packet name}`;\n- 776–777: the official 26.2 / 26.3 jars, `LoginProtocols` and `ConfigurationProtocols`.\n\n26.3 is the reason the table exists. It inserts `ClientboundPostEffectsPacket` at `0x0a` in the configuration clientbound list, after the keep-alive and before `store_cookie`, and the list has grown by four packets since 1.21.1. Every id the mask uses happened to stay put — the table makes the next move a one-line change instead of a diff of five files, and `protocol_table_test.go` pins every id.\n\n### 2. The login is the vanilla 26.3 exchange\n\nDecompiled from the official 26.3 jars (`LoginProtocols`, `ServerLoginPacketListenerImpl`, `ClientHandshakePacketListenerImpl`):\n\n- client: loops over login packets instead of expecting a fixed order; requires the encryption exchange and refuses a server that asks it not to authenticate, because an offline-mode login has nothing to reproduce and no session to verify; answers login plugin requests with a null payload and cookie requests with an absent cookie; reports Login Disconnect reasons;\n- `Login Finished` carries the connection session id from 26.2 on — the server writes one per process like vanilla, the client reads and ignores it, and trailing bytes are ignored because Mojang has appended a field to this packet before;\n- server: selects its row from the handshake and rejects an unknown version with the Login Disconnect a vanilla server sends (`outdated_client` below 754, `incompatible` above), validates the player name the 26.x way (≤ 16 printable ASCII — the old \"letters, digits, underscore\" rule is gone), rejects the TRANSFER intent like a server with `accepts-transfers=false`, and answers status with the JSON of the version it reports;\n- configuration state: answers Keep Alive, Ping and Cookie Request, and stops on a Disconnect instead of draining it silently. Ping/Pong carry a plain 32-bit integer (not a varint, unlike the packet ids); the mod bench caught exactly that, see below.\n\n`Set Compression` is negotiated in both directions: the client switches to the compressed framing when the peer sends it (verified against a real server at `65536` and at vanilla's default `256`), and the mask's own server does not send the packet, which is the same wire as a vanilla server with `network-compression-threshold=-1`; the padding preset was captured from such a login, so the framings line up.\n\n### 3. 20 Hz tick-driven data shaping (unchanged from the earlier revision)\n\nAfter the handshake, proxy writes are queued and flushed once per 50 ms game tick:\n\n- every tick writes one small padding frame on `xmc:pad`, so an idle connection keeps the 20 Hz cadence in both directions;\n- queued data is split into `xmc:data` payloads of at most 24 KiB and emitted in the same tick batch, so a busy connection looks like per-tick bursts instead of a bulk TCP stream;\n- `Close` flushes the queued tick, so a graceful shutdown does not drop its last bytes.\n\n### 4. Configurable payload channels\n\n`dataChannel` / `paddingChannel` (empty keeps `xmc:data` / `xmc:pad`), validated as Minecraft resource locations: namespace and path follow vanilla's rules, at most 128 bytes, "
-    },
-    {
-     "number": 7490,
-     "title": "Routing: Read only the fds of matching processes in Linux `process`",
-     "is_pr": true,
-     "state": "closed",
-     "created_at": "2026-11-26T13:50:27Z",
-     "updated_at": "2026-11-26T16:48:44Z",
-     "user": "vrnvorona",
-     "url": "https://github.com/XTLS/Xray-core/pull/7490",
-     "body": "On Linux, `net.FindProcess` finds the owner of a socket by a `readlink` of `/proc/<pid>/fd/*` of each process. Thus each lookup costs about one `readlink` for each fd open on the system. On a system with many open files, a lookup can take seconds, and routing falls behind. See https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7161507880 and the measurements in https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7185615730.\n\nA `process` rule needs to know only whether the owner is one of its processes. This pull request uses that:\n\n- `net.FindProcessMatching(network, srcIP, srcPort, destIP, destPort, accept)` is `FindProcess` with a filter. On Linux, it calls `accept` for each process in `/proc` with its PID, name and executable path, and reads the fds of the process only if `accept` returns true. That costs one `readlink` of `/proc/<pid>/exe` for each process, in place of one `readlink` for each fd. If no accepted process owns the socket, it returns `ErrProcessNotMatched`.\n- `ProcessNameMatcher` passes its match to `FindProcessMatching`. A rule such as `\"process\": [\"xray/\", \"self/\"]` now reads only the fds of Xray itself.\n- On the other platforms, the system gives the owner directly. `FindProcessMatching` calls `FindProcess` and then `accept`, so nothing changes there.\n- `FindProcess` (also used by Lua `FindProcess`) is `FindProcessMatching` with a nil `accept`, and works as before.\n\nThe second commit fixes a separate case. A socket in `TIME_WAIT` has no process and has inode 0 in `/proc/net/*`. A new socket can have the same local address. Then the lookup took inode 0, read the fds of all processes and found nothing. Lines with inode 0 are now skipped. As before, Linux matches only the local address of the socket.\n\n**Changes in behavior**\n\n- If no accepted process owns the socket, `ProcessNameMatcher` returns false and logs nothing. Before, it logged \"no process found for inode\" when the owner was not found. This also covers an owner that Xray can't see, for example a process in another PID namespace, or a process of another user when Xray does not run as root.\n- If more than one process holds the socket (for example after `fork`), the rule matches when any accepted process holds it. Before, only the first holder in `/proc` was checked.\n- Each lookup now reads the `exe` link of every process. If the owner comes early in `/proc` and the system has few open fds, the old lookup could stop sooner. On a system with many open fds, the new lookup is much faster.\n\n**Measurements**\n\n`BenchmarkFindProcess` (in this pull request) finds the owner of a UDP socket while another process holds 50000 fds. `FindProcessMatching` accepts only the PID of the owner, as `self/` does. `FindProcessMatchingNone` accepts no process, so it reads only the `exe` link of each process. It ran on a Linux machine under load, so each `readlink` was slower than on an idle system.\n\n| `/proc` | `FindProcess` | `FindProcessMatching` | `FindProcessMatchingNone` |\n|---|---|---|---|\n| New PID namespace with only the benchmark | 116–119 ms | 0.09–0.10 ms | 0.09–0.14 ms |\n| Full system: about 2400 processes and 216000 fds | 0.85 s | 3.5–4.2 ms | 5.0–5.4 ms |\n\nEarlier, under a heavier load on the same machine, with Xray v26.11.9 in TUN mode and `process` rules for Xray itself (`xray/`, `self/`) and for one more program:\n\n| | Before | After |\n|---|---|---|\n| Median `process` lookup | 1.88 s | 0.020 s |\n| 50 parallel connections | 16.1 s | 2.1 s |\n\n**Tests**\n\n- `TestFindProcessMatching` (Linux, Windows, macOS): the owner is found, `accept` gets the same PID, name and path as `FindProcess`, and `ErrProcessNotMatched` comes back when `accept` refuses.\n- `TestProcessRule` (Linux, Windows, macOS): a `process` rule with `self/`, the name, the path and the folder of the test process matches it, and other names do not.\n- `TestFindInodeInFilesSkipsSocketsWithoutProcess` (Linux).\n- `go test ./common/net/... ./app/router/...` passes on Linux for each commit. The tests o"
-    },
-    {
-     "number": 6591,
-     "title": "Observatory: a stalled TLS handshake leaks goroutines on both sides of the probe",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2026-08-04T11:59:23Z",
-     "updated_at": "2026-11-26T16:04:22Z",
-     "user": "embogomolov",
-     "url": "https://github.com/XTLS/Xray-core/issues/6591",
-     "body": "### Integrity requirements\n\n- [X] I have read all the comments in the issue template and ensured that this issue meet the requirements.\n- [X] I confirm that I have read the documentation, understand the meaning of all the configuration items I wrote, and did not pile up seemingly useful options or default values.\n- [X] I provided the complete config and logs, rather than just providing the truncated parts based on my own judgment.\n- [X] I searched issues and did not find any similar issues.\n- [X] The problem can be successfully reproduced in the latest Release\n\n### Description\n\nWhen a peer completes the TCP handshake and then stalls inside TLS, each `burstObservatory` probe against it leaves goroutines behind on both sides of the dispatch, and they stay for the life of the process. This is the raw transport, so nothing here depends on XHTTP.\n\nThe probe side has no bound on the handshake. `newHTTPClient` sets `DisableKeepAlives` and a `DialContext`, and leaves `TLSHandshakeTimeout` at its zero value, which Go reads as no limit:\n\nhttps://github.com/XTLS/Xray-core/blob/5ca6f4b7d4dc20a881d4330e498892697627ec0c/app/observatory/burst/ping.go#L34-L47\n\n`http.Client.Timeout` ends the request, but the goroutine started inside `addTLS` stays in the handshake with the dispatched outbound behind it. The non-burst observatory does set the field, five seconds hard coded:\n\nhttps://github.com/XTLS/Xray-core/blob/5ca6f4b7d4dc20a881d4330e498892697627ec0c/app/observatory/observer.go#L158\n\n`doCheck` also receives a cancellable context and the scheduler cancels the previous round, but the probe client is still built from `h.ctx`, so that cancellation never reaches the dial:\n\nhttps://github.com/XTLS/Xray-core/blob/5ca6f4b7d4dc20a881d4330e498892697627ec0c/app/observatory/burst/healthping.go#L175\n\nThe dispatch side is the part I would like an opinion on. `DialTaggedOutbound` returns the connection with no close behaviour attached:\n\nhttps://github.com/XTLS/Xray-core/blob/5ca6f4b7d4dc20a881d4330e498892697627ec0c/transport/internet/tagged/taggedimpl/impl.go#L35\n\nClosing that connection interrupts both pipes, but the outbound behind it is still in its own dial and has never read them, so it does not notice:\n\n```\ngoroutine 61 [IO wait, 2 minutes]:\nutls.(*UConn).HandshakeContext\n\tutls@v1.8.3/u_conn.go:314\ntcp.Dial\n\ttransport/internet/tcp/dialer.go:81\ninternet.Dial\n\ttransport/internet/dialer.go:63\nproxyman/outbound.(*Handler).Dial\n\tapp/proxyman/outbound/handler.go:312\nvless/outbound.(*Handler).Process.func2\n\tproxy/vless/outbound/outbound.go:194\nretry.(*retryer).On\n\tcommon/retry/retry.go:27\nvless/outbound.(*Handler).Process\n\tproxy/vless/outbound/outbound.go:192\nproxyman/outbound.(*Handler).Dispatch\n\tapp/proxyman/outbound/handler.go:243\ndispatcher.(*DefaultDispatcher).routedDispatch\n\tapp/dispatcher/default.go:504\ncreated by dispatcher.(*DefaultDispatcher).Dispatch\n\tapp/dispatcher/default.go:288\n```\n\nThe probe side looks like this while it lasts, parked in `addTLS` with the pipe read underneath it:\n\n```\ngoroutine 77 [chan receive, 1 minutes]:\nnet/http.(*persistConn).addTLS\n\tnet/http/transport.go:1742\nnet/http.(*Transport).dialConn\n\tnet/http/transport.go:1825\n\ngoroutine 79 [select, 1 minutes]:\npipe.(*pipe).ReadMultiBuffer\n\ttransport/pipe/impl.go:99\ncnc.(*Connection).Read\n\tcommon/net/cnc/connection.go:96\ncrypto/tls.(*Conn).Read\n\tcrypto/tls/conn.go:815\n```\n\nI ran four builds side by side against the same kind of peer, each with its own listener, same config apart from the ports, probe interval 15s, sampling 3, no client traffic. Release, release with #6582, release with #6583, and release with both:\n\n```\nt, s     v26.7.28   with #6582   with #6583   with both\n   0           16           14           21          14\n  30           27           19           25          12\n  60           28           22           32          13\n  91           40           36           44          12\n 121           47           30           47          11\n 151           55           33"
-    },
-    {
-     "number": 7417,
-     "title": "Routing: Speed up `process` lookup on Linux and Windows",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-15T07:54:34Z",
-     "updated_at": "2026-11-26T15:32:23Z",
-     "user": "shershunov",
-     "url": "https://github.com/XTLS/Xray-core/pull/7417",
-     "body": "As asked in https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7185815928 and https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7187292720, this PR makes `net.FindProcess` itself fast on Linux and Windows, without a hook. The problem is in https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7161507880: with about 223k descriptors, each new connection took about 0.5 s on Linux.\n\nIn short, measured on the same VMs before and after:\n\n- Linux: a new TCP connection takes 9.3 µs instead of 2.79 ms (200 sockets of the process), and a new connection of another process with 100 connections 96 µs instead of 5.54 ms (median). With about 2570 processes, as in the linked comment, the median lookup takes 1.19 ms instead of 158 ms.\n- Windows: a new TCP connection takes 7.3 µs instead of 207 µs (200 sockets) and 6.3 µs instead of 1.99 ms (2000 sockets).\n- `FindProcess` keeps its signature, so each `process` rule and the Lua `FindProcess` get this without a change in the router, whatever the rule names.\n- One finder serves all lookups under a mutex. The slowest case is a full search of `/proc` under the lock, as each lookup of main is: the first lookup after the start, or a socket of another user when Xray runs without root.\n- The `/proc/net` and table lookups of main stay as fallbacks. \"Behavior changes\" lists how the results differ from main.\n\nWhy the size: the descriptor cache is most of the Linux code, and the gain comes from it. With `sock_diag` and the fix of the inode 0 alone, a lookup still reads the descriptors of the processes until it finds the socket: at 40 processes with 2500 descriptors, the median stays at 122.5 ms (main: 115.8 ms), against 0.34 ms with the cache. If you prefer smaller steps, I can split this into a Linux PR and a Windows PR, or drop the nsi.dll part: the cached tables alone take 89.6 µs for a new connection (median, 200 sockets; main: 198.5 µs, with nsi.dll: 6.7 µs) for a new connection (200 sockets).\n\n### Linux\n\n**Socket.** Netlink `sock_diag` finds the socket of a connection by its two addresses. The request has no `NLM_F_DUMP`, so the kernel answers it with a hash lookup. For UDP, the kernel finds the socket that gets a datagram from the remote address. A program that connects to a local proxy has the address of the proxy as the remote address of its socket. The finder thus remembers the last 4 loopback remote addresses, and for a loopback source it tries them after the given remote address. If no exact request finds a socket, the finder asks for the sockets with the local port: a dump that the kernel filters by the port. Without `sock_diag` for a protocol, the finder reads `/proc/net` as main does.\n\n`github.com/vishvananda/netlink` v1.3.1 is in `go.mod`, but its `SocketGet` sends a dump request, which the kernel answers with a walk over all sockets of the family, and its package-level functions open a new netlink socket for each call. The finder keeps one netlink socket.\n\n**Process.** Linux gives a new descriptor the lowest free number, so a new socket of a known process often gets the number of a socket that the process closed or one of its lowest free numbers. For each process that it has read, the finder keeps up to 256 socket descriptors and the 4 lowest free numbers. The search stops at the first match, as in main, and goes in this order:\n\n1. The socket cache: one `readlinkat` checks the remembered descriptor of the socket.\n2. The processes of the last 16 lookups. For the 4 newest of them, their found and known socket descriptors and 2 free numbers. For the others, a few of these.\n3. All descriptors of the processes that the finder has not read yet.\n4. A few likely descriptors of each other known process.\n5. All descriptors of the process of the last lookup, then of the other known processes. A scan reads first the numbers that the process did not have at its last scan, where a process that opened descriptors since then has its new socket.\n6. All descriptors of the processes that were"
     }
    ],
    "comments": [
+    {
+     "id": 7242824800,
+     "issue": 7357,
+     "issue_title": "chore(finalmask): code clean",
+     "created_at": "2026-11-28T17:11:31Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7357#issuecomment-7242824800",
+     "body": "首先你没有为这个 PR 提供任何描述，比如说它是否构成 https://github.com/XTLS/Xray-core/pull/7372 的 block（虽然但是一个 TCP 一个 UDP 所以），**如果不删掉这部分代码就不好实现后续改进的话我觉得当然可以暂时牺牲 Vision 对 fm 的穿透能力、以后再设计**，但问题是这个 PR 现有的代码和描述并没有说它 block 了什么，而仅是删了 Vision 的穿透能力这不奇怪吗？这就是为什么不足以构成“无异议合并”\r\n\r\nReverse 不是一个好的例子，毕竟旧写法的复杂程度有目共睹，光是使用就挺烧脑的，更好的例子是 Mux，可以说它也被改成了单独为 VLESS 服务，然而对于这一决定我提供了大量的关于历史问题和未来计划的说明，如果不改它会构成未来发展的障碍\r\n\r\n以上说明应当足以解答“上限降低”的困惑：对已有功能/特性的删除需要一些理由，比如说它不仅没人用还 block 了下一步计划"
+    },
+    {
+     "id": 7242803455,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T17:09:52Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242803455",
+     "body": "AI:\n\n> I tested the design with **100 pre-created files per direction, one write every 100 ms including empty ticks, and direct `alt=media` GETs by predicted file ID**. No application data went through `description`. My recommendation is to **retry late frames individually, size each write against receiver-confirmed byte credit, and clear the body in the same request that marks it read**. I would keep `.110` as the production transport for now.\n> \n> **Marking a file as read.** Your point about clearing the body was borne out on live Drive. After a description-only “read” update, the next GET still returned **32,832 bytes**: the 32 KiB payload plus its header. After one multipart `PATCH` set `description=READ(n)` and replaced the body with a **64-byte `READ(n)` marker**, all **nine repeat GETs** across three generations returned exactly 64 bytes. The three clear requests took **1.60–1.76 s as observed by the client**.\n> \n> The receiver should do this after delivering frame `n` in order. The sender may reuse that slot only after both its original write and the receiver’s clear are confirmed. If the clear reply is lost, read back the marker; **don’t blindly resend the clear**, because it could erase the next generation. In two local tests, a clear returned `503` and became visible **11.5 s later**, past the nominal ten-second wrap. The slot was safely reused after **12.26 s and 14.16 s**, with no lost data.\n> \n> **1. When an upload is late:** Start one second behind. If slot 37 returns `READ(37)` when the reader expects frame 137, retry the same ID after **100, 200, then 400 ms**, keeping the retry interval at 400 ms. `EMPTY(137)` is different: the writer has explicitly published that tick, so the reader can advance. Later GETs can continue and buffer their results, but delivery waits for 137. I would **not reset the whole schedule after one miss**. Adjusting the offset after repeated misses reduced stale GETs from **1,256 to 128** in one fast-link comparison, but browsing p95 barely changed (**4.75 vs 4.81 s**), and the flaky-link runs showed no consistent benefit.\n> \n> **2. How much to collect:** For a browsing-oriented prototype, I’d use `min(queued bytes, 128 KiB, remaining receiver credit)` per tick, with **3 MiB maximum outstanding**. Send a short write at the next tick without waiting to fill it. The amount sent then follows the bytes the receiver actually frees. I tested two ways of also varying the frame ceiling on a link that went **3 MB/s → 220 KB/s → 3 MB/s** during one session:\n> \n> | Sizing rule | Bulk goodput | Browsing completion p95 |\n> |---|---:|---:|\n> | 128 KiB ceiling, receiver byte credit | 728 KB/s | **6.36 s** |\n> | Ceiling based on recent receiver throughput | 269 KB/s | 10.75 s |\n> | Grow on full ticks, shrink when credit runs out | **908 KB/s** | 23.87 s |\n> \n> The throughput estimate shrank the frames during the slowdown but kept them small after bandwidth returned. Growing more aggressively recovered bulk speed at a substantial browsing cost. **128 KiB is the better tested choice for that tradeoff, not a universal optimum**: at ten ticks per second it caps even an ideal path at about **10.5 Mbit/s**.\n> \n> Across the local comparisons, matching Windows peers byte-verified **240 short responses and 48 bulk downloads**, with two downloads and browsing sharing one unchanged VLESS/Mux session per run. In the direct comparison without injected upload delays, `.110` still had lower browsing p95: **0.74 vs 4.73 s** on the fast link and **17.43 vs 22.79 s** on the flaky link. The 64-byte clear solves the duplicate-body problem; this prototype did not demonstrate a browsing-latency advantage. No production code was changed, and the temporary Drive files were deleted and verified absent."
+    },
+    {
+     "id": 7242778070,
+     "issue": 7512,
+     "issue_title": "[Feature / RFC] Multi-level client routing: nested balancers, fallback & consistentHash strategies, lazy per-group health checks",
+     "created_at": "2026-11-28T17:07:54Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/issues/7512#issuecomment-7242778070",
+     "body": "要考虑的需求太多了 我也收集了很长时间 以后可能会有但不是现在"
+    },
+    {
+     "id": 7242744597,
+     "issue": 7513,
+     "issue_title": "HTTPUpgrade: Fix client panic and out-of-bounds read on buffered 101 response",
+     "created_at": "2026-11-28T17:05:20Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7513#issuecomment-7242744597",
+     "body": "已与另一个pr合并"
+    },
+    {
+     "id": 7242502822,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:46:34Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242502822",
+     "body": "~~I think the 110 already fits.~~\n~~AI is also currently running some tests to consolidate the assumptions.~~"
+    },
+    {
+     "id": 7242450786,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:42:34Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242450786",
+     "body": "在此期间我会回顾一下历史会话并选择一个版本同步至 main，至少它修复了一些问题且有显著改进，虽然它不会是发布的最终版本"
+    },
+    {
+     "id": 7242419130,
+     "issue": 7357,
+     "issue_title": "chore(finalmask): code clean",
+     "created_at": "2026-11-28T16:40:04Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7357#issuecomment-7242419130",
+     "body": "fm 单独为 vision 设计这个真就过度了，说 core 又不像 core 一些功能又单独为 vless 服务比如 reverse\r\n\r\n所以这就是问题所在，说让我动架构结果又是挑 feat fix 合，chore 在我看来应该是无异议合并的，也没有前置 pr 卡着，删了这个只可以穿透 fragment 的也不影响你后续给 fm 设计穿透，我也没什么时间，只能先关了\r\n\r\n我只能说 fm 在这 ray 系架构里上限降低了"
+    },
+    {
+     "id": 7242352515,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:34:54Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242352515",
+     "body": "~~AI 理解错了~~，我现在说的方案完全基于 GET 而不是 description，我说的那两个问题你让 AI 确定策略吧，可以用到 description，然后你实测下\n\n很重要的一点是对于标记“已读取”，除了更新 description 外也要清空文件内容，用几十几百字节的 trash 来代替，这样即使被重复下载也没事"
+    },
+    {
+     "id": 7242307796,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:31:26Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242307796",
+     "body": "a side note from AI worth Seeing:\n\n> I’d use the **100 ms tick to decide when to try the next read**, and the **frame sequence number to decide whether that read succeeded**. That lets you adjust the one-second delay without losing your place in the stream.\n> \n> Filename filtering works. The qualification on `1000 × 48K` is that [Drive guarantees neither 1,000 results nor 48 MB in one response](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list). We verified **48,837 payload bytes in one description** and multiple descriptions in one list, but not 1,000 full descriptions in one response. A ring of 100 reusable files also exposes only their 100 **current** versions. More importantly, if the writer publishes one description every 100 ms, its ceiling is **488,370 bytes/s (3.91 Mbit/s) per direction**, regardless of how many the reader fetches together. A description-only design needs multiple writes per tick to go faster; the predictive media design can instead put more bytes in each file.\n> \n> For the two issues you raised:\n> \n> - **When an upload is late:** Suppose the reader expects frame 137 from slot 37 and gets frame 37. It should retry 137 while allowing a few later reads to proceed. If 138 is ready first, buffer it and deliver both in order once 137 arrives. An intentional empty write should carry `seq=137, length=0`, so the reader can distinguish “no data this tick” from “the write hasn’t arrived.” I’d increase the one-second lag only after repeated early reads, then shorten it gradually when first attempts consistently succeed. One slow upload needn’t delay every subsequent frame. On wraparound, reuse a slot only after its previous frame is acknowledged and its previous write can no longer land late.\n> - **How many bytes to collect:** `.110` already reports the receiver’s ordered delivery progress. I’d start each tick with roughly **100 ms worth of the receiver’s recent delivery rate**, send whatever is available up to that target, and cap total unacknowledged bytes. A short write needn’t wait to fill the target. If the receiver falls persistently behind, that byte cap slows the sender; moving the read clock another second later would only hide the backlog.\n> \n> One practical cost is worth making explicit: a fixed 100 ms cadence with empty writes means **600 writes and 600 GETs per minute per direction**, even when idle. At a one-second request duration, about ten writes and ten reads must be in flight to sustain that cadence. The latency benefit I’d measure is whether those predictive GETs actually lower **new-page completion p95 during a bulk download on the same session**, alongside bulk goodput and how often a GET returns the previous frame."
+    },
+    {
+     "id": 7242172399,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:20:54Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242172399",
+     "body": "比如说在创建了 100 个（十秒）预留文件后，每 100ms 收集一次数据并写入下一个文件（即使是没数据也要进行空写入），接收方晚一秒（为了等待 Google Drive 处理完上传以及网络延迟波动余量），每 100ms 下载下一个文件，很简单很好理解不过有一些问题需要解决：如果上传突然过慢，对端下载下一个文件时可能它还没更新，这种情况就需要重新对齐那一秒，另外每次收集多少数据仍需根据对端读取速度实时调整"
+    },
+    {
+     "id": 7242036779,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:10:59Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7242036779",
+     "body": "~~如果能筛选文件名且单个 page 能传输 1000*48K=48M 的数据量那么完全依赖 description 是可以的，不过我正在写我最初的提法的详细策略~~"
+    },
+    {
+     "id": 7242023656,
+     "issue": 7456,
+     "issue_title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
+     "created_at": "2026-11-28T16:09:58Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7242023656",
+     "body": "已由DSH+DeepSeek-v4-Flash修复"
+    },
+    {
+     "id": 7241987220,
+     "issue": 7456,
+     "issue_title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
+     "created_at": "2026-11-28T16:07:06Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7241987220",
+     "body": "引用报告：https://github.com/XTLS/Xray-core/issues/7455#issuecomment-7240081698\n\n已在本分支 tip 修好：[`5c5c49d9`](https://github.com/yandujun363/Xray-core/commit/5c5c49d9)（含回归测试），可以先看 diff。\n\n### 1. 确认与复现\n\n报告是真的，我在 `ded8443f` 上把 1–113 全部密码长度扫了一遍：\n\n- 会踩的是 **33–40、49–56、65–72、81–88、97–104、113** 字节（`[]byte(password)` 的分配按 size class 向上取整，留出 ≥8 字节富余容量时，第二次 `append` 就地和第一次共用底层数组）；\n- 报告说的「33–40，含 36 字符 UUID」精确命中：36 字节 UUID 密码下 `|p-q| = 806`，**18.8 µs** 就恢复出 `p`、`q` 和 `d`（`d` 与真实私钥逐位相同）；\n- ≤32 字节在当前工具链下不触发（cap 恰好等于 len），但那是分配器/逃逸分析的实现细节，所以回归测试按全长区间跑，不按长度放行。\n\n### 2. 修法\n\n报告建议的 `seed[:len(seed):len(seed)]` 等价写法是有效的，但这里把约束放到了**唯一持有 seed 的地方**，避免以后新调用点再把别名带回来：\n\n```go\nfunc newSHA256Stream(seed []byte) *sha256Stream {\n\treturn &sha256Stream{seed: bytes.Clone(seed)}\n}\n```\n\n派生结果与报告建议的写法逐字节相同，只是换了个更不容易被改坏的位置；调用点没动。\n\n兼容性和报告说的一致，我实测过：8 / 18 / 32 字节密码修复前后 `N` 的 digest **逐字节相同**，36 / 113 字节变了。所以受影响长度的用户必须两端同版本升级 —— 不匹配时 client 侧 `bytes.Equal` 会直接拒绝，fail closed，不会静默退回弱密钥，这点无需额外处理。\n\n### 3. 测试\n\n`transport/internet/finalmask/xmc/derivation_test.go`：\n\n- 1–113 全长度 + size class 边界（15/16/17 … 111/112/113）：断言 `p != q`、`p*q == N`、1024 bit、e=65537、**一步 Fermat 分解不出来**；\n- 多字节密码：11/12 个汉字（33/36 字节）、9 个 emoji（36 字节）、混合、含 NUL、全 `0xff` —— 命中区间的是**字节**长度而不是字符数，这块最容易漏；\n- 极端输入：空、1 字节、113（上限）、114（超上限）、4 KiB；\n- 白盒：直接构造带富余容量的缓冲，断言两条流不复用底层数组（修复前这条会红，报错原文就是 `p stream seed was rewritten ... -q-prime`）；\n- 与独立实现的 `sha256(seed+\"-N\")` 密钥流交叉验证；已知答案锁线路兼容性；8 并发派生 + `-race`。\n\n跑过：包测试 3.97 s 全绿、`-race` 9.0 s 全绿、`./infra/conf` 的 XMC 测试全绿、`go build ./...` / `go vet` / `gofmt` 干净。\n\n### 4. 责任归属\n\n- 这份派生是 **#6210** 引入的（`35387572`，2026-07-11 合入，作者 @Exclude0122）。`git log -- transport/internet/finalmask/xmc/derivation.go` 到现在只有 #6210 一条记录，本 PR #7456 从头到尾没碰过这个文件。\n- 根因是 Go 特有的 slice/append 容量语义（`[]byte(string)` 留富余容量 → 两次 `append` 别名），Java/Rust 都没有\"append 复用容量\"这回事，所以同一套算法换语言重写不会踩。\n- 模组侧没有这个问题。模组（yandujun363/xmc-mcserver-core）在 `85a5797`（2026-11-15）起已经把登录/加密整体交回 vanilla，`RsaKeyDeriver.java` 已删除；删除之前那版 Java 实现是 `concat(seed, suffix)` 每次新建数组，本身也不会踩。反而有个佐证：那份 Java 文件注释写着「byte-for-byte compatible with Xray-core 的 DeriveRSAKey」，但它是\"正确\"的派生 —— 也就是说修复前模组和 Xray 在受影响长度上算出来的 key 其实**不同**（Java 对、Go 错），修完之后两边自动对齐。\n- 结论：Xray 侧 XMC 的 Go 实现单方面引入，与模组无关、与本 PR 的改动无关。\n\n需要留意的是 vendored 副本和第三方 XMC 重写：`-p-prime` 这份派生被一些项目复制过（内嵌 `xray-core` 的 App 属于直接继承，另外有若干非 Go 的重写）。Go 副本会带着同一个弱 key；非 Go 重写如果照 Xray 行为复刻，反而落在\"正确但不兼容\"的一侧，修复落地后它们要跟就得一起改。\n\n### 5. 报告没写、但建议写进 release note 的一点\n\nclient 的 verify token 里 append 的明文就是 `password`（`client.go`），server 拿它做比对。所以私钥 `d` 一旦恢复，泄露的不只是某个 session 的 shared secret，而是**节点共享密码**本身（可据此对任意用户做伪装层 MITM）。这不影响修复方式，但影响发布说明的措辞 —— 建议写\"受影响长度的密码视为已泄露，升级后建议同时更换\"。\n\n如果这条修复放在本 PR 里不合适，我可以拆一个独立 PR 出来，你定。\n\n---\n\nEN TL;DR: the reported Go slice-aliasing defect is real and reproducible (affected password byte lengths 33–40, 49–56, 65–72, 81–88, 97–104, 113; a 36-byte UUID password lets one Fermat step recover `p`, `q` and `d` in ~19 µs). Root cause is the Go port in #6210, not the mod (its Java derivation concatenates into a fresh array, and the mod no longer does login at all). Fixed in `5c5c49d9` by taking ownership of the seed inside `newSHA256Stream`; keys for unaffected lengths are byte-identical, affected lengths derive a new key so both ends must upgrade together. `verifyToken` also carries the password verbatim, so treat an affected password as leaked.\n"
+    },
+    {
+     "id": 7241963114,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T16:05:12Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241963114",
+     "body": "AI:\n\n> **Yes. [`files.list`](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list) supports both a lower and an upper bound on `modifiedTime`, and one page can return up to 1,000 files.** A known-ID [`files.get`](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/get) has no equivalent time filter. I tested both on live Drive.\n> \n> ### Filtering by session, direction, and time\n> \n> For example, a client can request only the downstream slots for its own session. `T0` and `T1` are RFC 3339 timestamps:\n> \n> ```text\n> q = 'FOLDER_ID' in parents and trashed = false\n>     and name contains 'streams~SESSION_ID~s2c~s'\n>     and modifiedTime > 'T0' and modifiedTime <= 'T1'\n> fields = nextPageToken,incompleteSearch,files(id,modifiedTime,description)\n> ```\n> \n> Drive included a file modified **exactly at `T1`** with `<= T1` and excluded it with `< T1`. The session and direction filters run on Google’s side, so devices can share a folder without downloading one another’s frame descriptions. For an inline frame, the list response contains the payload; no second GET is needed. Drive can return fewer than 1,000 files, so the reader still needs to follow `nextPageToken`.\n> \n> Adjacent windows `(T0, T1]` and `(T1, T2]` avoid downloading the same boundary twice. They don’t guarantee delivery, though: after I overwrote a slot, querying its old time window no longer returned the old frame. Retrying a page can also return the same frame again. The receiver still needs sequence numbers to deduplicate, and the writer still needs an ACK before reusing a slot. Listing can combine **reads**; sending 4 MiB entirely through descriptions would still take **86 writes** at the measured maximum of 48,837 payload bytes each.\n> \n> ### What actually adds latency today\n> \n> **`.110` does not list before every GET.** At session setup, the client reserves slot IDs with `generateIds` and shares them in the announcement. The files are created on first use. Once the session is open, the receiver already knows the next slot ID and reads it directly. A small frame takes one metadata GET. A large frame normally takes a metadata GET followed by a media GET.\n> \n> That means the **681 ms known-ID GET** and **922 ms filtered list** measured for the same 16 KiB frame were alternative ways to retrieve it. They do not add together. Your point about TLS handshakes still stands: when a download and a new page share one Mux, handshake bytes can land inside a large frame. XDrive alone cannot guarantee they take the inline path.\n> \n> ### Can a predictive GET avoid downloading an unchanged body?\n> \n> **On the tested Drive v3 endpoint, I wouldn’t rely on conditional GET for this.** A known-ID GET with a `q` condition that could not possibly match still returned `200`. Neither metadata nor media responses supplied an `ETag` or `Last-Modified`. On an unchanged file, both `If-Modified-Since` and `If-None-Match: *` returned `200`; the media GET downloaded the same **16 KiB** again. `Range: bytes=0-7` did return exactly eight bytes with `206`, so checking the sequence cheaply is possible—but a hit then needs another request for the rest.\n> \n> There’s a third option for your original predictive-read design: **give the reader a batch of file IDs in advance and publish each ID only once.** I tested the key behavior. Before the reserved file was created, a direct media GET returned `404` with a **342-byte error body**. After the writer published to that ID, the same direct GET returned the full **32 KiB**, byte-for-byte, with no intervening list or metadata GET. Once the reader advances to the next ID, an idle poll cannot download the previous frame’s body.\n> \n> The tradeoff is creating and eventually deleting one file per frame, replenishing IDs ahead of time, and spending requests on empty polls. **I’d compare single-use IDs against the current reusable slots before introducing periodic clearing.** The live test establishes that a predictive "
+    },
+    {
+     "id": 7241870795,
+     "issue": 7511,
+     "issue_title": "HTTPUpgrade: Fix data loss",
+     "created_at": "2026-11-28T15:57:56Z",
+     "user": "Fangliding",
+     "url": "https://github.com/XTLS/Xray-core/pull/7511#issuecomment-7241870795",
+     "body": "这又是哪蹦出来的\r\nnet.Conn 接口从来不对并发调用做任何保证 一般开发是不会假设有序字节流允许并发操作的 核心里也没有会对conn并发读写的地方 以前Mux有过但是已经被修复了"
+    },
+    {
+     "id": 7241836499,
+     "issue": 7455,
+     "issue_title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
+     "created_at": "2026-11-28T15:55:08Z",
+     "user": "yandujun363",
+     "url": "https://github.com/XTLS/Xray-core/issues/7455#issuecomment-7241836499",
+     "body": "我靠喂，难不成是代码质量问题没能模拟完全MC，又得加班修"
+    },
+    {
+     "id": 7241792707,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T15:51:48Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241792707",
+     "body": "~~确实是 mind blowing，要考虑的事情太多了，其实“API 可根据更新时间筛选文件？”我还想知道 GET 请求能不能带上这个，但我猜应该不太能~~"
+    },
+    {
+     "id": 7241749939,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T15:48:26Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241749939",
+     "body": "~~I'm not a programmer but i can feel how mind blowing it sounds; Hopefully, this Transmission is relying on AI, which means it can be implemented if the steps are given to AI ( perhaps a pseudo-code is required for AI so it doesn't make mistakes ), This will save a huge amount of time.~~"
+    },
+    {
+     "id": 7241742359,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T15:47:51Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241742359",
+     "body": "@anonymously-hidden 我需要想一下，因为当前的传输模型对延迟的优化太随机了，且关于上面提的“异步 list”我也不是那么确定，还没细想"
+    },
+    {
+     "id": 7241685000,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T15:43:23Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241685000",
+     "body": "主要是 description 又不能重度使用，VLESS 层现在也没有单独把被代理的连接的前期 TLS 握手分流到单独的 Mux（Switch）而是全部数据在同一个 Mux 内，而降低延迟的需求又确实存在：本来使用 Google Drive 时一个 RTT 就是 1.5s，如果像当前的传输模型再预先加上 0.75s 的 list 来确定的确要 GET 那又加了延迟，即使是把小数据放在 description 中那么比如边进行大流量下载边新开网页时，后者的 TLS 握手仍有很大概率需要被 GET，~~这优化也太随机了~~，其实就是回到了我最初的设计 https://github.com/XTLS/Xray-core/pull/6748#issuecomment-6128144242 ，只是由于 Google Drive 必须要文件 ID 所以必须预先创建文件，然后通过更新 description 来标记“有更新和已读取”，而我所说的“直接周期性预测性传输数据”为了避免下载到重复的文件，解法一是异步 list 辅助但我不倾向于这个（不过该方法可以用于优化当前的传输模型），解法二是即使没有数据也要按时清空文件内容避免浪费对端带宽"
+    },
+    {
+     "id": 7241436358,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T15:23:56Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241436358",
+     "body": "~~I didn't reply to the previous message because I'm waiting to recharge my quota.~~\nso if the direct, periodic, and predictive data transmission is the case, Should i take the next step towards this or leave it for now?\n\n~~I believe if there is a solution for not using \"Predictive data\" is a better choice, I always have issues with things that are uncertain and feel like issuing unreliability~~\n"
+    },
+    {
+     "id": 7241399863,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T15:21:05Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7241399863",
+     "body": "我的分析：Timestamp-filtered list 虽然比 Known-ID GET 的耗时有所增加，但后者的前提也是 list，也就是说如果完全通过 description 传输数据实际上是延迟更低的，但是有一个实践问题：如果仍是现在的上下行用同一个 folder、多个用户/设备用同一个 folder，那么显然会下载到很多对自己没意义的垃圾数据，且这个问题也存在于当前的传输模型（使用 description 传输小数据），或许还是“直接周期性预测性传输数据”吧"
+    },
+    {
+     "id": 7240561702,
+     "issue": 7357,
+     "issue_title": "chore(finalmask): code clean",
+     "created_at": "2026-11-28T14:17:38Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/pull/7357#issuecomment-7240561702",
+     "body": "主要是因为 Finalmask 套的 conn 确实需要被 Vision 穿透，包括最新加的 proxy-protocol，有空搞正式版 Vision Seed 时再看吧\r\n\r\n~~即使不是 Vision，fm 完成了工作后套的那些 conn 也可以在双向 copy 阶段被去掉，即使没实现 readv/writev，也能少些 alloc~~"
+    },
+    {
+     "id": 7240483046,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T14:11:19Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7240483046",
+     "body": "能同时定义 <= 吗？那么完全通过 description 传输数据就没有重复下载的顾虑了，且不需要两次请求，所以话说一个 page 最多多少文件？"
+    },
+    {
+     "id": 7240210994,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T13:49:27Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7240210994",
+     "body": "AI on your question ( please do not mind me sending multiple responses back, it's because I want to concrete a single direction so that we can move more clearly ) :\n\n\n\n> **Use the 50,872-symbol Unicode encoding as the only binary format in Drive metadata. Keep polling known slot IDs for an active session.** Live Drive confirmed that a timestamp-filtered listing can return several frames and an ACK in one request, but direct reads delivered the data sooner. I could measure that difference; I could not independently verify Google’s reported **700–800 ms of internal processing time**.\n> \n> ### 1. Can Drive discover updates by modification time?\n> \n> **Yes.** I tested [`files.list`](https://developers.google.com/workspace/drive/api/guides/ref-search-terms) with a folder filter, `modifiedTime >=` the previous observed timestamp, and `description` in the returned fields. Two readers raced on the **same updates** over warmed HTTP/2 connections. These are medians from six paired trials per case:\n> \n> | Live Drive scenario | Known-ID GET | Timestamp-filtered list |\n> |---|---:|---:|\n> | One 16 KiB frame, starting after the write reply | **681 ms** | 922 ms |\n> | Three 2 KiB frames and one ACK, time to receive all four after the write replies | **545 ms** · 4 parallel GETs | 699 ms · 1 list |\n> | One 2 KiB frame, polling from the start of the write | **1,230 ms** | 1,460 ms |\n> \n> Direct reads won **5/6, 6/6, and 5/6** trials respectively. Listing saved three HTTP requests in the four-file case. Under Google’s [per-method quota model](https://developers.google.com/workspace/drive/api/guides/limits), where applicable, those four metadata GETs cost **20 quota units** versus **100** for one list.\n> \n> For an active session, I’d keep the direct read of the next expected slot. A listing can discover that a file **changed** and can return an existing ACK, but only the receiver knows which sequence it has **delivered in order**. It still needs to publish that ACK before the sender can safely reuse the slot.\n> \n> ### 2. Is metadata faster inside Google Drive?\n> \n> **The internal timing remains unverified.** None of the **150 Drive API responses** exposed a backend duration. Google’s [monitoring reference](https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#serviceruntime) lists the backend-latency metric for API producers, not for the `consumed_api` resource. The following numbers are therefore **client-observed**, including the network.\n> \n> I sent the same **16 KiB payload** three ways, six times each, rotating through all six orderings:\n> \n> | Live Drive path | Write reply, median | Write start → complete verified read, median |\n> |---|---:|---:|\n> | Unicode payload in `description` | **1.33 s** | **1.95 s** |\n> | Media only, reader already knows which body to fetch | 1.82 s | 2.83 s |\n> | Multipart write, then read descriptor and media | 1.81 s | 3.39 s |\n> \n> For short writes, the Unicode description delivered the bytes fastest on this route—even against a media reader that already knew what to fetch. That supports inline delivery for short writes. It does **not** establish which operation takes less time inside Google, or justify moving bulk data into descriptions.\n> \n> ### 3. How much should XDrive put inline?\n> \n> Live Drive again returned **48,837 payload bytes** exactly in **25,000 UTF-16 units**. The metadata response was **74,390 bytes**, so supporting the full format requires raising `.110`’s **65,536-byte** metadata-read limit.\n> \n> I also tested three cutoffs with matching Windows peers, **two downloads plus browsing on one XDrive session**, and the medium-frame prefix fixed at **14 KiB**. These are local transport results, two runs per cutoff and profile. All **216 browsing responses** were byte-exact.\n> \n> | Unicode full-inline cutoff | Flaky-link browsing completion p95 | Flaky-link bulk goodput | Fast-link browsing completion p95 |\n> |---|---:|---:|---:|\n> | 18 KiB | 13.33–17.71 s | 196.8–204.7 KB/s | 0.95–1.03 s |\n>"
+    },
+    {
+     "id": 7240092817,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T13:39:33Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7240092817",
+     "body": "because i've told AI previously to work only inside the folder, it by default does not answer to \"beyond folder\" ideas, so I'll implement the custom encoding and Publishing frame 0 once for now since your idea needs more cooperation with upper level. \nshould i do this? ; by the way, I'll be trying to reduce some lines, though do you think right now the protocol complexity relative to limitations on google side is acceptable? ( of course you can exclude switching idea for now )\n\n\n\n~~Regarding compatibility, i haven't kept any compatibilities with older versions and each time i say this to AI, the compatibility is its preference, I'll consider this, don't worry~~"
+    },
+    {
+     "id": 7240081698,
+     "issue": 7455,
+     "issue_title": "XMC: 20 Hz tick-driven data shaping / XMC：20Hz 按 tick 驱动的数据整形",
+     "created_at": "2026-11-28T13:38:38Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7455#issuecomment-7240081698",
+     "body": "收到了一份安全报告 @Rerowros https://github.com/XTLS/Xray-core/security/advisories/GHSA-7mv6-27w3-gc9p 你们打不开，符合 SECURITY.md “low-impact vulnerabilities in the real world”故应当发 issue，内容如下，要修的话你直接在 https://github.com/XTLS/Xray-core/pull/7456 带上明确修复 @yandujun363 \n\n<details>\n`main` at `ded8443fee25`, `transport/internet/finalmask/xmc/derivation.go`.\n\n### Summary\n`newSHA256Stream` retains the slice it is given (lines 16-19), and `Read` hashes `s.seed` on every refill (line 25). `DeriveRSAKey` builds both streams by appending to the same `seed` slice (lines 57-60):\n\n```go\nseed := []byte(password)\npStream := newSHA256Stream(append(seed, []byte(\"-p-prime\")...))\nqStream := newSHA256Stream(append(seed, []byte(\"-q-prime\")...))\n```\n\nWhen `cap(seed) >= len(password)+8`, the second `append` overwrites the backing array held by `pStream` before `derivePrime` runs at lines 62-63, so both streams read `\"<password>-q-prime\"`. `p` and `q` start equal, and the equal-prime loop at lines 66-73 advances `q` to the next valid prime. `N` is then the product of two neighboring primes and factors at the first step of Fermat's method.\n\nPasswords longer than 32 bytes allocate on the heap with capacity rounded to a malloc size class, so lengths 33-40 (including a 36-char UUID), 49-56, 65-72, etc. are affected; shorter lengths depend on escape analysis.\n\n### Impact\nBecause the server sends this RSA public key in the clear during login, anyone observing it can recover the private key and the client-encrypted shared secret (what that exposes depends on the inner payload), and can also identify affected servers since a normal 1024-bit RSA modulus does not factor in one Fermat step.\n\n### Local verification on `main` (`ded8443fee25`)\n```go\nfunc TestDeriveRSAKeyNotFermatFactorable(t *testing.T) {\n\tkey, err := DeriveRSAKey(\"00000000-0000-0000-0000-000000000000\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\ta := new(big.Int).Sqrt(key.N)\n\ta.Add(a, big.NewInt(1))\n\tb2 := new(big.Int).Sub(new(big.Int).Mul(a, a), key.N)\n\tb := new(big.Int).Sqrt(b2)\n\tif new(big.Int).Mul(b, b).Cmp(b2) == 0 {\n\t\tt.Fatal(\"N factors at the first Fermat step\")\n\t}\n}\n```\n- Before fix: `FAIL: N factors at the first Fermat step`.\n- After fix below: full `./transport/internet/finalmask/xmc` test suite passes (`0.455s`).\n\n### Suggested fix & compatibility note\nGive each `append` its own backing array:\n```go\npStream := newSHA256Stream(append(seed[:len(seed):len(seed)], \"-p-prime\"...))\nqStream := newSHA256Stream(append(seed[:len(seed):len(seed)], \"-q-prime\"...))\n```\nUnaffected password lengths keep the same key. Affected lengths will derive a different key, and the client compares the server key against its derived key, so clients and servers will need coordinated updates. Open PR #7456 does not touch `derivation.go`.\n\n---\n*Methodology note: initial static triage and cross-review used AI assistance (Gemini 4 Neon, Claude Opus 5.5, GPT Astra 6.2); the finding selection, code review, and local test runs against `main` `ded8443fee25` were verified directly.*\n</details>\n"
+    },
+    {
+     "id": 7239967241,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T13:29:06Z",
+     "user": "RPRX",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7239967241",
+     "body": "> Why keep Base64? The 48,837-byte test produced a 74,373-byte metadata response, larger than .110’s 65,536-byte metadata-read limit. I also verified a 41 KiB payload using that codec: its response was 63,978 bytes, so it fit the existing read limit\n\n多次说过不要考虑任何的旧版本兼容性，只留新“Custom encoding using 50,872 single-unit Unicode characters”格式 @anonymously-hidden \n\nAI 理解错了“如果耗时更低的话甚至可以全用它”，我的意思是 Google Drive 自身的处理耗时（现在为 700~800ms），不过若不改为“直接周期性预测性传输数据”的话那这条可以忽略，因为仍需 description 来标记“有更新和已读取”，除非有更好的办法，API 可根据更新时间筛选文件？\n\n“或者类似 Switch 让新连接开头几个数据包走这条路”也被理解错了，这需要上层 VLESS 的配合，单靠 XDRIVE 层做不到，故相关修改不予采纳"
+    },
+    {
+     "id": 7239150772,
+     "issue": 7511,
+     "issue_title": "HTTPUpgrade: Fix data loss",
+     "created_at": "2026-11-28T12:19:43Z",
+     "user": "shihchengwei-lab",
+     "url": "https://github.com/XTLS/Xray-core/pull/7511#issuecomment-7239150772",
+     "body": "Concurrent reads can duplicate one buffered byte and drop the next.\n\nI tested `a47ea87d1a03a45d658c1b7a85a4dfbb2cf94dbf` on Linux with Go 1.27.4. The original pipelined `hello` reproduction passes, but two readers can receive `AA` from the buffered prefix `AB`, with no error reporting that `A` was duplicated and `B` was lost.\n\n`connection.Read` reads and advances `remainData` without synchronization. `stat.Connection` embeds [`net.Conn`](https://pkg.go.dev/net#Conn), whose methods may be invoked concurrently.\n\nMinimal reproduction—add this file under `transport/internet/httpupgrade`:\n\n```go\npackage httpupgrade\n\nimport (\n\t\"net\"\n\t\"sort\"\n\t\"testing\"\n)\n\nfunc TestConnectionConcurrentReadsPreservePrefix(t *testing.T) {\n\tfor iteration := 0; iteration < 10000; iteration++ {\n\t\tunderlying, peer := net.Pipe()\n\t\t_ = peer.Close()\n\t\tconn := newConnection(underlying, underlying.RemoteAddr(), []byte(\"AB\"))\n\n\t\tstart := make(chan struct{})\n\t\ttype result struct {\n\t\t\tb   byte\n\t\t\tn   int\n\t\t\terr error\n\t\t}\n\t\tresults := make(chan result, 2)\n\t\treadOne := func() {\n\t\t\t<-start\n\t\t\tbuf := []byte{0}\n\t\t\tn, err := conn.Read(buf)\n\t\t\tresults <- result{b: buf[0], n: n, err: err}\n\t\t}\n\n\t\tgo readOne()\n\t\tgo readOne()\n\t\tclose(start)\n\n\t\tgot := []byte{}\n\t\tfor range 2 {\n\t\t\tr := <-results\n\t\t\tif r.err != nil || r.n != 1 {\n\t\t\t\tt.Fatalf(\"iteration %d: read returned n=%d err=%v\", iteration, r.n, r.err)\n\t\t\t}\n\t\t\tgot = append(got, r.b)\n\t\t}\n\t\t_ = conn.Close()\n\n\t\tsort.Slice(got, func(i, j int) bool { return got[i] < got[j] })\n\t\tif string(got) != \"AB\" {\n\t\t\tt.Fatalf(\"iteration %d: got %q, want each prefix byte exactly once\", iteration, got)\n\t\t}\n\t}\n}\n```\n\nRun it with:\n\n```sh\ngo test -race ./transport/internet/httpupgrade \\\n  -run '^TestConnectionConcurrentReadsPreservePrefix$' -count=1 -v\n\ngo test ./transport/internet/httpupgrade \\\n  -run '^TestConnectionConcurrentReadsPreservePrefix$' -count=20 -v\n```\n\nThe first command reports a race between the read at `connection.go:24` and the slice update at line 26. Without `-race`, 5 of 20 runs returned `AA`.\n\nCould the prefix check, copy, and cursor update be protected by a read mutex, with the mutex released before falling through to the underlying `Conn.Read`? I tested that small prototype: the original pipelined-payload test still passed, and this test passed 20/20 times under `-race`.\n\nI used AI assistance to review the stream handoff and prepare the test, then ran and verified the reproduction locally in an isolated Linux environment.\n"
+    },
+    {
+     "id": 7238320878,
+     "issue": 7208,
+     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
+     "created_at": "2026-11-28T11:05:29Z",
+     "user": "anonymously-hidden",
+     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7238320878",
+     "body": "@RPRX, @svlavr \n\nAI:\n\n> **I’d raise the inline cutoff from 14 to 18 KiB, keep Base64, and publish frame 0 only once.** I’d keep the 14 KiB prefix for medium frames, parallel range reads for large frames, and `xdrivePrev` for recovery. The 18 KiB change was tested on matching peers; nothing was pushed or released.\n> \n> ## What changed at 18 KiB?\n> \n> A quiet **16 KiB write** shows the benefit clearly. At the current 14 KiB cutoff, `.110` split it into **two metadata publications**. At 18 KiB, it needed **one**. In the local fixture, both delivered the first byte at 50 ms, but the complete write arrived at **75 ms versus 50 ms**. So the gain here was one fewer publication, not an avoided media download: neither version needed one.\n> \n> I also compared both cutoffs while browsing during two downloads on **one XDrive session**. Only the full-inline cutoff changed; the medium-frame prefix stayed at 14 KiB. Each cell is the range across two local runs per build.\n> \n> | Workload and metric | Current 14 KiB | Tested 18 KiB |\n> |---|---:|---:|\n> | Flaky 500 KB/s: browsing first-byte p95 | 18.00–26.46 s | **9.62–12.97 s** |\n> | Same workload: browsing completion p95 | 18.00–26.46 s | **12.90–12.98 s** |\n> | Same workload: bulk goodput | 202.8–217.6 KB/s | 206.1–211.3 KB/s |\n> | Same workload: total Drive requests | 2,008–2,033 | 2,012–2,046 |\n> | Fast link: browsing completion p95 | 0.72–0.87 s | 0.79–0.83 s |\n> | Fast link: bulk goodput | 183.9–193.9 Mbit/s | 198.9–201.3 Mbit/s |\n> | Fast link: total Drive requests | 665–702 | 640–648 |\n> \n> All **144 browsing probes** returned the correct bytes. The 18 KiB cutoff improved both flaky-link tail timings in both comparisons. Fast-link browsing results overlapped, and flaky-link request counts didn’t consistently fall. That supports **18 KiB as the next default**, without claiming it makes every workload faster.\n> \n> ## Can a better encoding fit more than Base64?\n> \n> **Yes. The densest encoding I verified on live Drive carried 48,837 payload bytes in one `description`, versus 18,729 with Base64.** The reason is that the observed limit behaved like **25,000 UTF-16 code units**, not 25,000 UTF-8 bytes. Drive accepted 25,000 single-unit Unicode characters but rejected 25,001. With characters that use two units, it accepted 12,500 and rejected 12,501.\n> \n> These are **raw payload bytes after accounting for XDrive’s 21-byte header**. Each tested encoding was read back through the metadata API and decoded byte-for-byte.\n> \n> | Encoding | Payload verified in one description |\n> |---|---:|\n> | Base64 | **18,729 bytes** maximum; the proposed 18 KiB uses 24,604 of 25,000 units |\n> | Base85 | **19,979 bytes** |\n> | Custom encoding using all 95 printable ASCII characters | **20,509 bytes** |\n> | 15 bits per single-unit Unicode character | **46,854 bytes** |\n> | Custom encoding using 50,872 single-unit Unicode characters | **48,837 bytes** |\n> \n> **What’s the most powerful possible?** For arbitrary binary data, the ceiling is about **49.8 KB of payload** with this header and field limit. The 48,837-byte result is already within about 2% of that ceiling. Encoding changes how many bits each allowed character represents; it does not compress the encrypted bytes.\n> \n> **Why keep Base64?** The 48,837-byte test produced a **74,373-byte metadata response**, larger than `.110`’s **65,536-byte metadata-read limit**. I also verified a **41 KiB** payload using that codec: its response was **63,978 bytes**, so it fit the existing read limit, though both peers would still need a new decoder. That makes Unicode a credible separate experiment. Base64 at 18 KiB is the option that already demonstrated a browsing benefit without introducing a new wire format.\n> \n> ## Is the maintainer’s approach better?\n> \n> **For short writes, yes.** The metadata GET that discovers the frame can also deliver all its bytes. On live Drive, a 14 KiB metadata-only update was acknowledged in **1.48 s** and read back in **2.05 s**. The same"
+    },
+    {
+     "id": 7237599824,
+     "issue": 7357,
+     "issue_title": "chore(finalmask): code clean",
+     "created_at": "2026-11-28T09:59:45Z",
+     "user": "LjhAUMEM",
+     "url": "https://github.com/XTLS/Xray-core/pull/7357#issuecomment-7237599824",
+     "body": "放了19天..."
+    },
     {
      "id": 7236126044,
      "issue": 7508,
@@ -1091,114 +1380,6 @@
      "body": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7178588017 https://github.com/XTLS/Xray-core/commit/c5ccb356aa5ef45335f633132e7cead664b8fce2"
     },
     {
-     "id": 7199142216,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-26T17:30:43Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7199142216",
-     "body": "@svlavr 我已经将 https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7178588017 先一步合并进 main https://github.com/XTLS/Xray-core/commit/c5ccb356aa5ef45335f633132e7cead664b8fce2"
-    },
-    {
-     "id": 7198646321,
-     "issue": 7493,
-     "issue_title": "XMC finalmask: move every disconnect reason onto vanilla translation keys, and add a UUID allow list for Yggdrasil mode / XMC finalmask：踢出信息统一走原版翻译键，并为 Yggdrasil 模式补 UUID 白名单",
-     "created_at": "2026-11-26T17:12:13Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/issues/7493#issuecomment-7198646321",
-     "body": "源自 https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7198319760 这个评论"
-    },
-    {
-     "id": 7198319760,
-     "issue": 7456,
-     "issue_title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
-     "created_at": "2026-11-26T16:58:00Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7198319760",
-     "body": "后续打算：\r\n\r\n- [ ] 优化踢出信息，实现更近原本\r\n- [ ] 添加Yggdrasil的uuid白名单，防止意外Yggdrasil账户进入"
-    },
-    {
-     "id": 7197969500,
-     "issue": 7488,
-     "issue_title": "SS2022 proxy: Refinements & fixes",
-     "created_at": "2026-11-26T16:41:21Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/pull/7488#issuecomment-7197969500",
-     "body": "你在公网给我发个8192长的UDP包看看 还是让AI用魔法给你变个"
-    },
-    {
-     "id": 7197142427,
-     "issue": 6591,
-     "issue_title": "Observatory: a stalled TLS handshake leaks goroutines on both sides of the probe",
-     "created_at": "2026-11-26T16:04:22Z",
-     "user": "romanrublev",
-     "url": "https://github.com/XTLS/Xray-core/issues/6591#issuecomment-7197142427",
-     "body": "Still reproducible on current `main` (`b56ffef`), and both candidate PRs (#6582, #6583) are closed unmerged, so nothing has changed since the original report. `newHTTPClient` in `app/observatory/burst/ping.go` still builds the probe `http.Transport` from `h.ctx` with no `TLSHandshakeTimeout`.\n\nMinimal repro, no second node needed: one `freedom` outbound, a `burstObservatory` probing it, and a probe destination that accepts TCP and never answers the TLS ClientHello (a listener that `Accept`s and reads into `io.Discard`). `pingConfig: {interval 2s, sampling 1, timeout 3s}`. Each probe times out at 3s, but the goroutine parked in `net/http.(*persistConn).addTLS` stays. Goroutine totals and the `addTLS` count from the `metrics` pprof endpoint, no other traffic:\n\n```\n t(s)   goroutines   addTLS   HeapAlloc(KB)\n    0           18        3           1643\n   30           31       12           1747\n   60           46       21           1853\n   90           61       30           1936\n  120           75       39           2019\n  180           91       48           2126\n  240          105       57           2218\n```\n\nOne leaked `addTLS` goroutine per probe that hits a stalled TLS peer, none ever released; linear in time. On a node that keeps probing an outbound whose path is a censor that blackholes after the ClientHello (e.g. a CDN-fronted outbound that goes silent mid-handshake), this is a steady goroutine/connection leak with `probeInterval`-paced growth, which matters most on memory-constrained relays. A per-probe `TLSHandshakeTimeout` (as the non-burst observer already sets) plus propagating the probe timeout into the dispatched outbound's dial would bound it.\n"
-    },
-    {
-     "id": 7196915430,
-     "issue": 7456,
-     "issue_title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
-     "created_at": "2026-11-26T15:54:34Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7196915430",
-     "body": "我靠，大肥鱼又自作聪明改东西。"
-    },
-    {
-     "id": 7196411530,
-     "issue": 7487,
-     "issue_title": "Hysteria proxy: Port v2.14.0 UDP forwarding optimizations; Bump quic-go",
-     "created_at": "2026-11-26T15:32:29Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/pull/7487#issuecomment-7196411530",
-     "body": "Follow-up: #7491 removes the remaining `common/buf` allocations on these paths without any API change. `Buffer.Release` boxed the `[]byte` into a `sync.Pool` on every packet; with array pointers in the pools it no longer allocates. `bytespool.GetPool` keeps its `[]byte` pools for existing callers.\n\nWith #7491 on top of this PR (`testing.AllocsPerRun`, 1200 B datagram):\n\n| Path | This PR | + #7491 |\n| --- | ---: | ---: |\n| `buf.New` + `UDPWriter.WriteMultiBuffer` | 2 | 1 |\n| `UDPReader.ReadFrom` | 1 | 1 |\n| `UDPReader.ReadMultiBuffer` + `ReleaseMulti` | 4 | 3 |\n\nWhat is left is not pool-related: the `*Buffer` from `buf.New`, the `MultiBuffer` slice returned by `ReadMultiBuffer`, and the per-packet `*net.Destination` copy. The two PRs are independent and can be merged in any order.\n"
-    },
-    {
-     "id": 7196409237,
-     "issue": 7417,
-     "issue_title": "Routing: Speed up `process` lookup on Linux and Windows",
-     "created_at": "2026-11-26T15:32:23Z",
-     "user": "shershunov",
-     "url": "https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7196409237",
-     "body": "Updated as asked above: this PR now makes `net.FindProcess` fast in core on Linux and Windows, without a hook. The description has the design, the behavior changes, measurements on VMs, and a comparison with #7490 on the same VM.\n"
-    },
-    {
-     "id": 7196394454,
-     "issue": 7488,
-     "issue_title": "SS2022 proxy: Refinements & fixes",
-     "created_at": "2026-11-26T15:31:47Z",
-     "user": "romanrublev",
-     "url": "https://github.com/XTLS/Xray-core/pull/7488#issuecomment-7196394454",
-     "body": "Thanks for picking this up — the session-before-auth and the source-change / concurrent-decode fixes all look good here.\n\nOne case from #7194 isn't covered yet: an oversized **downlink** datagram still ends the whole UDP flow instead of being dropped. In `UDPWriter.WriteMultiBuffer`, `EncodePacket` returns `ErrPacketTooLarge` once the SS2022-wrapped packet exceeds `buf.Size` (8192), and the writer does `return err`, so every datagram queued after the big one is discarded and the session's downlink stops until the client reconnects. It triggers on a normal upstream reply that is large after wrapping (a big DNS answer, some game traffic), not only on crafted input.\n\nMinimal test (fails on this branch, the second datagram is never written):\n\n```go\nfunc TestUDPWriterDropsOversizedPacket(t *testing.T) {\n\tmethod, err := GetCipherMethod(MethodAES256GCM)\n\tcommon.Must(err)\n\tkey := make([]byte, method.KeySaltLength)\n\trand.Read(key)\n\tclientCodec, err := NewUDPPacketCodec(method, [][]byte{key})\n\tcommon.Must(err)\n\tserverCodec, err := NewUDPServerCodec(method, key, nil, time.Minute)\n\tcommon.Must(err)\n\tsession, err := clientCodec.NewClientSession()\n\tcommon.Must(err)\n\n\tvar out recorder // an io.Writer that appends each Write to a slice\n\twriter := &UDPWriter{Writer: &out, Destination: net.UDPDestination(net.LocalHostIP, 443), Session: session}\n\n\tlarge := buf.New(); large.Extend(buf.Size) // too big to fit one SS2022 packet\n\tsmall := buf.New(); small.Write([]byte(\"small\"))\n\n\tif err := writer.WriteMultiBuffer(buf.MultiBuffer{large, small}); err != nil {\n\t\tt.Fatalf(\"oversized datagram should be dropped, not end the flow: %v\", err)\n\t}\n\tif len(out.packets) != 1 {\n\t\tt.Fatalf(\"expected the small datagram to still go out, got %d packets\", len(out.packets))\n\t}\n\t_, decoded, err := serverCodec.DecodePacket(out.packets[0])\n\tcommon.Must(err)\n\tif string(decoded.Payload) != \"small\" {\n\t\tt.Fatalf(\"unexpected payload %q\", decoded.Payload)\n\t}\n}\n```\n\nA lower layer would drop a datagram that doesn't fit, not tear down the connection — so dropping that one packet and continuing (`if err == ErrPacketTooLarge { continue }`) keeps the rest of the flow alive. Happy to send it as a small follow-up if you'd prefer not to fold it in here.\n"
-    },
-    {
-     "id": 7194309408,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-26T14:07:24Z",
-     "user": "anonymously-hidden",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7194309408",
-     "body": "~~I've Already Managed to Reduce some of the lines while adding more capabilities; Still Moving Forward, Early results Seem Pleasant to me.~~"
-    },
-    {
-     "id": 7194254748,
-     "issue": 7484,
-     "issue_title": "Hysteria: reduce per-packet allocations in UDP forwarding",
-     "created_at": "2026-11-26T14:05:07Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/issues/7484#issuecomment-7194254748",
-     "body": "Per review, dropped the tests that only asserted the internal reuse (`TestUDPWriterDestinationCache` and the `unsafe.StringData` checks); the behavioral tests for fragments, destination changes, and invalid input remain. Branch updated to 04b6fed5.\n"
-    },
-    {
-     "id": 7194252140,
-     "issue": 7487,
-     "issue_title": "Hysteria proxy: Port v2.14.0 UDP forwarding optimizations; Bump quic-go",
-     "created_at": "2026-11-26T14:05:00Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/pull/7487#issuecomment-7194252140",
-     "body": "Squashed into one commit (42555f6f).\n\nRemoved the tests that only asserted reuse internals (`TestUDPWriterDestinationCache`, the `unsafe.StringData` and address aliasing checks). The remaining tests cover behavior: fragment reassembly, a separate destination per packet, writer address selection and fragmentation, and invalid input.\n\n`ParseUDPMessageReuseAddr` is no longer exported; the reader uses an internal `parseUDPMessage`. The destination is parsed after defragmentation, as before. Benchmarks in the description are rerun on this commit.\n\nNot client-only: `proxy/hysteria/server.go` uses the same `UDPReader`/`UDPWriter` for inbound UDP links, so the parser, reader, and writer changes apply to the server side as well — the same two paths that changed upstream in `core/client/udp.go` and `core/server/udp.go`."
-    },
-    {
      "id": 7194214901,
      "issue": 7208,
      "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
@@ -1206,146 +1387,22 @@
      "user": "RPRX",
      "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7194214901",
      "body": "@svlavr 我在等 XDRIVE 新代码一起合并，main 的行为会和 https://github.com/XTLS/Xray-core/commit/bdf29f1e4e88f1a5cecf6ce817f06bef2c5b3db9 完全相同，可以进 Mux 文档，https://github.com/XTLS/Xray-docs-next/pull/925 三语都要更新"
-    },
-    {
-     "id": 7194053405,
-     "issue": 7417,
-     "issue_title": "Routing: Speed up `process` lookup on Linux and Windows",
-     "created_at": "2026-11-26T13:56:37Z",
-     "user": "vrnvorona",
-     "url": "https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7194053405",
-     "body": "Linux 查找的优化在 #7490：`process` 规则先读取 `/proc/<pid>/exe`，只读取它可能匹配的进程的 fd；另外跳过 inode 为 0 的行（`TIME_WAIT`）。在约 2400 个进程、约 21.6 万个 fd 的系统上，`BenchmarkFindProcess` 从 0.85 秒降到约 4 毫秒。\n\nThe Linux lookup optimization is in #7490: a `process` rule first reads `/proc/<pid>/exe` and reads the fds only of the processes that it can match. It also skips lines with inode 0 (`TIME_WAIT`). On a system with about 2400 processes and 216k fds, `BenchmarkFindProcess` goes from 0.85 s to about 4 ms.\n"
-    },
-    {
-     "id": 7193138965,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-26T13:17:32Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7193138965",
-     "body": "@RPRX, I’m updating the Multiplex documentation. Do you plan to merge `bdf29f1`, which enables Multiplex automatically for XDrive, into `main`? If so, should I document the new behavior now or keep the docs aligned with the current behavior in `main` until it’s merged?"
-    },
-    {
-     "id": 7192932234,
-     "issue": 7364,
-     "issue_title": "VLESS Multiplex, Reverse Proxy: Refactor to move code into VLESS; Mux only uses `settings.multiplex` in VLESS/VMess outbound",
-     "created_at": "2026-11-26T13:08:33Z",
-     "user": "svlavr",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7192932234",
-     "body": "I agree. I tried to solve a similar problem in my fork. I wanted to see directly from Go which node each flow was routed through, whether it was actually carrying traffic, and close selected flows on a particular node when needed.\n\nClosing a flow was the easy part. The harder part was tracing where the flow lives and which component owns its resources. For example, a single UDP session can send packets through different nodes. Traffic needs to be accounted for per node, and closing the session should leave unrelated sessions alone. In the end, tracking and controlling flows added more than three thousand lines of code, excluding tests.\n\nI looked at how a few other proxy cores handle this. Their main connection-tracking and control code is a few hundred lines, and it is easy to follow the path to the component that closes the connection. So I agree that Xray should start by passing the context from the transport to the handler and making it clear who owns the connection from open to close."
-    },
-    {
-     "id": 7192159910,
-     "issue": 7487,
-     "issue_title": "Hysteria proxy: Port v2.14.0 UDP forwarding optimizations; Bump quic-go",
-     "created_at": "2026-11-26T12:33:38Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7487#issuecomment-7192159910",
-     "body": "没必要的 test 删掉，另外这是仅客户端吗"
-    },
-    {
-     "id": 7191908452,
-     "issue": 7364,
-     "issue_title": "VLESS Multiplex, Reverse Proxy: Refactor to move code into VLESS; Mux only uses `settings.multiplex` in VLESS/VMess outbound",
-     "created_at": "2026-11-26T12:21:59Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7191908452",
-     "body": "上文 TCP worker callback 那里指的是传输层子连接的 ctx 没传进 proxy inbound handler，~~由于想转发到频道所以就不大改了~~，我觉得屎山架构导致的代码不好读不好写、这里那里不小心没照顾到然后又要修 bug 这还是小事，而最近有人提的一些架构上的问题比如什么 instance 关了但 handler 有些资源还在，handler 关了但 conn 有些资源还在，移除用户了但 conn 没被关什么的，说白了底层架构和 ctx 没梳理清楚前想实现优雅的全局单连接追踪、控制就是做你妈的春秋大梦，我觉得这个问题严重阻碍了 Xray 未来很多计划和发展~~包括官方客户端~~，以前重心只是协议而现在架构问题到了必须解决的地步，~~正好 AI 擅长脏活累活~~"
-    },
-    {
-     "id": 7191392990,
-     "issue": 7456,
-     "issue_title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
-     "created_at": "2026-11-26T11:57:58Z",
-     "user": "yandujun363",
-     "url": "https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7191392990",
-     "body": "> 实现 [#7455 (comment)](https://github.com/XTLS/Xray-core/issues/7455#issuecomment-7151252963) 后再合并\r\n\r\n有空我就整吧，不过MC又出CVE了，不过这个和Xray没关系"
-    },
-    {
-     "id": 7191166888,
-     "issue": 7487,
-     "issue_title": "Hysteria proxy: Port v2.14.0 UDP forwarding optimizations; Bump quic-go",
-     "created_at": "2026-11-26T11:47:20Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/pull/7487#issuecomment-7191166888",
-     "body": "Windows CI failed in `proxy/tun.TestTCPLossAgain` (`stack_test.go:801`), which this PR does not touch; all `proxy/hysteria` tests, including the new ones, pass in the same job. The run cannot be rerun from the fork, so a maintainer rerun of `test (windows-latest)` would help."
-    },
-    {
-     "id": 7190558980,
-     "issue": 7364,
-     "issue_title": "VLESS Multiplex, Reverse Proxy: Refactor to move code into VLESS; Mux only uses `settings.multiplex` in VLESS/VMess outbound",
-     "created_at": "2026-11-26T11:18:32Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7364#issuecomment-7190558980",
-     "body": "由于改 https://github.com/XTLS/Xray-core/commit/c5ccb356aa5ef45335f633132e7cead664b8fce2 所以看了 core 的一些代码，给我的感觉就是，因为 *ray 底层架构和接口的过度设计、不当设计和混乱（多年屎山），导致在它之上的代码（尤其是 proxy 文件夹内的）也只能写成一坨，比如首先就是我几年来多次批评的一个功能动不动就搞注册和回调增加代码成本，光看代码都不知道谁调谁，真想骂人他妈的设计成一串线性下来清清楚楚的会死吗，但是线性的话也存在有些塞 ctx 里有些靠一路传参到底的问题，不是，太混乱了，我觉得要么就弄个结构体把上文都安排进去要么就全塞 ctx 里（好吧本质上也是结构体），光到这里还不够毕竟这还是有的塞的，还有高手比如 TCP worker callback proxy inbound handler 竟然只传 conn 不传 ctx，？离了个大谱我他妈震惊，后面的代码若想干点啥高级的不就只能写成一坨吗，当初 v2ray 设计成这样可能是因为一开始没搞底层传输、后来只作为 proxy 的插件但插得比较混乱，光是底层传输自身代码内都绕来绕去，不是，至少得把 TCP/UDP worker 啥的 merge 进来并梳理清晰吧，公共组件的话 buf 和 pipe 还算有点用（缓存 readv/writev）虽然但是 pipe 塞 transport 文件夹里是何意味，而 pb 配置完全就是败笔非要 json 转一层，属于没清干净，~~我当初就极力推动吞掉 v2ctl 还跟 xiaokangwang 弄得不愉快所以 Xray 一开始就是单文件后来 v2fly 也是~~，说了这么多还不包括已经清掉的屎比如 bazel 编译，以及 Xray 已经清掉多少 v2 的历史垃圾我都记不清了，过度设计太严重了最后可取之处并不多，代码风格更是一坨\r\n\r\n~~骂爽了，如果有人用 AI 把我上面说的全部处理掉，我将直接给他一个 Project X NFT，不然总感觉这屎山代码存在修不完的 bug~~"
-    },
-    {
-     "id": 7188980280,
-     "issue": 7484,
-     "issue_title": "Hysteria: reduce per-packet allocations in UDP forwarding",
-     "created_at": "2026-11-26T10:09:17Z",
-     "user": "Fangliding",
-     "url": "https://github.com/XTLS/Xray-core/issues/7484#issuecomment-7188980280",
-     "body": "当初就看到hy和finalmask里都有喜欢在热路径原地alloc的习惯\n\n<img width=\"900\" height=\"220\" alt=\"image\" src=\"https://github.com/user-attachments/assets/d787991e-b96f-4c73-9159-ceed26e97d2f\" />\n\n不过ai接到减少alloc的要求连错误都要写一个在这里reuse也是魔了 哎。。"
-    },
-    {
-     "id": 7188906214,
-     "issue": 7484,
-     "issue_title": "Hysteria: reduce per-packet allocations in UDP forwarding",
-     "created_at": "2026-11-26T10:06:00Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7484#issuecomment-7188906214",
-     "body": "~~当然，Hy2 这块儿现在属于谁行谁上的状态，快的话还能赶上月底发版~~"
-    },
-    {
-     "id": 7188219676,
-     "issue": 7484,
-     "issue_title": "Hysteria: reduce per-packet allocations in UDP forwarding",
-     "created_at": "2026-11-26T09:36:28Z",
-     "user": "fanymagnet",
-     "url": "https://github.com/XTLS/Xray-core/issues/7484#issuecomment-7188219676",
-     "body": "Thanks. Should I open a PR for this?"
-    },
-    {
-     "id": 7188179274,
-     "issue": 7456,
-     "issue_title": "XMC finalmask: Vanilla 26.3 login from a version table, 20 Hz data shaping",
-     "created_at": "2026-11-26T09:34:47Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7456#issuecomment-7188179274",
-     "body": "实现 https://github.com/XTLS/Xray-core/issues/7455#issuecomment-7151252963 后再合并"
-    },
-    {
-     "id": 7188110150,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-26T09:31:41Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7188110150",
-     "body": "XDRIVE 这个传输层有点不同，于我而言你的贡献主要在于能够实际测试 Google Drive，~~因为我不会去做这件事~~，你能使用 AI 改进 XDRIVE 也是件好事，这提升了前期迭代效率，说是前期是因为 XDRIVE 的传输模型最终需要被人类标准化，所以需要 deVibe，所以减少 AI 所生成的代码行数能够减轻负担，我可以再等一天时间，你尝试使用你提到的 new AI 进一步简化掉五百行，~~最好不是把多行合并为 Go 语法允许的一行那种~~"
-    },
-    {
-     "id": 7187292720,
-     "issue": 7417,
-     "issue_title": "Routing: Speed up `process` lookup on Linux and Windows",
-     "created_at": "2026-11-26T09:00:26Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/pull/7417#issuecomment-7187292720",
-     "body": "或者你直接修改这个 PR 也行，我将 reopen 这个 PR 作为 reminder"
-    },
-    {
-     "id": 7178588017,
-     "issue": 7208,
-     "issue_title": "XDRIVE: when the client disappears mid-download, the server uploads the rest of the response and keeps the session for minutes",
-     "created_at": "2026-11-26T00:16:41Z",
-     "user": "RPRX",
-     "url": "https://github.com/XTLS/Xray-core/issues/7208#issuecomment-7178588017",
-     "body": "~~感觉 doc 格式排版会乱，且不想编辑 doc，这次的 pdf 没有之前的格式美观，用之前的模型重新生成吧，尤其是需要美化一下命令行、配置段~~\n\n另外 https://github.com/XTLS/Xray-core/commit/c5ccb356aa5ef45335f633132e7cead664b8fce2 我改成了 XDRIVE 客户端会自动开 VLESS Mux 128，不用手动写 Mux，但用户若写了小于 128 会被提至 128，XUDP 那个也如此\n\n使用 XDRIVE 时 VLESS Mux 的 maxReuseTimes 是无限，1024 还是小，且毕竟底层 TCP/QUIC “计划报废”已经有、且只应取决于 XDRIVE XMUX"
     }
    ]
   },
   "amnezia-vpn/amnezia-client": {
    "issues": [
+    {
+     "number": 3535,
+     "title": "feat: add light theme, accent colors, Belarusian and Hebrew, clearer tray icon states",
+     "is_pr": true,
+     "state": "open",
+     "created_at": "2026-11-28T15:43:31Z",
+     "updated_at": "2026-11-28T15:43:31Z",
+     "user": "AleksandrPidlozhevich",
+     "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3535",
+     "body": "## Summary\n\n- **Theme selection.** Settings → Application → Theme: System / Light / Dark. The choice is stored in settings and applied at startup; Android status and navigation bars follow it.\n- **Accent color selection.** Settings → Application → Accent color: Orange (default), Purple, Teal, Blue. All accent tokens in `AmneziaStyle` come from the selected palette; the orange palette keeps the previous values.\n- **Localization.** Added Belarusian (`be_BY`) and Hebrew (`he_IL`), fixed Ukrainian strings, added translations for the new theme and accent strings in all languages.\n- **Tray icon.** One base icon tinted by state: monochrome when idle (template image on macOS), accent color when connected, red on error, pulsing while connecting. The tooltip shows the connection state. On Windows the idle icon follows the taskbar theme.\n\n## Testing\n\n- Checked on Windows, macOS and iOS.\n- `lrelease`: 1416 finished, 0 unfinished in every `.ts` file.\n\n## Notes\n\n- Linux: the idle tray icon color follows the app theme, not the panel theme, when the user overrides the theme in the app.\n- Android was not checked."
+    },
     {
      "number": 3534,
      "title": "[Windows] AmneziaWG never completes the handshake when a second NIC has a default gateway but no Internet access",
@@ -1455,270 +1512,6 @@
      "user": "Dv2Corn",
      "url": "https://github.com/amnezia-vpn/amnezia-client/pull/3450",
      "body": "Fixes #3413\n\n## Problem\n\nA new self-hosted XRay (VLESS + REALITY) server installed by the app does not pass traffic. The client shows \"Connected\", but every connection ends on the decoy site instead of going through the server.\n\n## Root cause\n\n- The client default fingerprint is `hellochrome_120` ([protocolConstants.h#L72](https://github.com/amnezia-vpn/amnezia-client/blob/ac175c8a8147cfe56f98c8372ec17ea2ba00bb02/client/core/utils/constants/protocolConstants.h#L72)).\n- The server image installs Xray v26.10.31 ([Dockerfile#L4](https://github.com/amnezia-vpn/amnezia-client/blob/ac175c8a8147cfe56f98c8372ec17ea2ba00bb02/client/server_scripts/xray/Dockerfile#L4)). That release uses REALITY `83f621788ca8`, which contains XTLS/REALITY@8cdf7bf9c7f09cb9814bf08c3eb877f68b85fba8: a ClientHello without an `X25519MLKEM768` key share (placed before the optional `X25519` one) is no longer authenticated and is forwarded to the target as an ordinary visitor ([tls.go#L215-L236](https://github.com/XTLS/REALITY/blob/83f621788ca88b83179810b12baa7ae518aacb83/tls.go#L215-L236)).\n- uTLS `HelloChrome_120` has no `X25519MLKEM768` share, so the server treats the client as a probe. The client then gets the target's real certificate, REALITY verification fails on every connection, and the Xray process itself keeps running, so the app still reports \"Connected\".\n- The same check rejects several entries of the REALITY fingerprint list ([xrayConfigModel.cpp#L760-L763](https://github.com/amnezia-vpn/amnezia-client/blob/ac175c8a8147cfe56f98c8372ec17ea2ba00bb02/client/ui/models/protocols/xrayConfigModel.cpp#L760-L763)): `ios`, `android`, `edge`, `360`, `qq`, and `random` most of the time (it picks one of Xray's \"modern\" presets at start, several of which are older Chrome/iOS/Edge hellos).\n- Configs created while `hellochrome_120` was the default keep it: in the stored server settings (`xray_fingerprint`), in the saved client config, and in keys/links exported from them.\n\n## Fix\n\n- Update after #3458: `dev` now defaults to `firefox`, which also sends `X25519MLKEM768`, so this PR no longer changes the default. New configs are fine; what remains is the REALITY-only list and moving configs saved with the old default (below). The branch is merged with the current `dev`.\n- The REALITY dropdown uses a new `realityFingerprintOptions()` = `chrome`, `firefox`, `safari`: the presets the bundled server accepts. The TLS dropdown keeps the full `fingerprintOptions()` list, because a plain TLS inbound accepts any ClientHello.\n- Saved configs that still carry the old default are moved to the new one, for REALITY only:\n  - `XrayServerConfig::fromJson()` replaces `hellochrome_120` with the default unless the security is `tls`, so the settings page and new exports use a working value;\n  - `sanitizeNativeConfig()`, which already repairs the legacy `Mozilla/5.0` value on every connect (desktop and mobile), also replaces `hellochrome_120` in `realitySettings`. This fixes already issued `vpn://` keys on the receiving side without re-sharing.\n\n  `hellochrome_120` cannot complete a REALITY handshake with any Xray server that has 8cdf7bf, while the default works with both old and new servers (it also sends a plain `X25519` share), so the replacement cannot break a working connection. Other values a user picked on purpose (including `ios`, `edge` and so on) are left as they are; TLS settings are not touched.\n\n## How tested\n\nSandboxed Linux containers, no network except loopback.\n\n1. Real Xray handshake. Server: official Xray v26.10.31 (the version from the Dockerfile) with VLESS + REALITY + vision. Client: official Xray v26.7.28, which is what amnezia-xray-bindings 1.5.0 wraps (amnezia-xray-core v1.260728.0 has the same `transport/internet/tls/tls.go`, REALITY client and uTLS version). Decoy target: a local TLS 1.3 site. `curl --socks5-hostname` through the client to a local HTTP origin:\n\n   | fingerprint | server v26.10.31 | server v26.7.28 |\n   |---|---|---|\n   | hellochrome_120 (old de"
-    },
-    {
-     "number": 1211,
-     "title": "Amneziawg configs from red shiled vpn does not work in app (but works fine in CLI)",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-10-27T12:37:24Z",
-     "updated_at": "2026-11-26T15:48:58Z",
-     "user": "ostrovlyan",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1211",
-     "body": "**Describe the bug**\r\nAmneziawg configs from red shiled vpn does not work in app (linux)\r\n\r\n**To Reproduce**\r\nReset or even uninstall amnezia vpn app.\r\nGet one of ameziawg configs from red shield vpn\r\nOpen it in amneziaVPN app\r\nhere you (dont) have it\r\n\r\n**Expected behavior**\r\nAny of amneziawg configs works well in app\r\n\r\n**Log files**\r\n2024-10-27 02:55:16 debug VpnConfigurator::getDnsForConfig \"1.1.1.1\" \"1.0.0.1\"\r\n2024-10-27 02:55:16 debug \"ConnectToVpn, Server index is 2, container is amnezia-wireguard, route mode is\" Settings::VpnOnlyForwardSites\r\n2024-10-27 02:55:16 debug IpcClient::init succeed\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Initializing\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Connecting to: /var/run/amneziavpn/daemon.socket\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Daemon connected\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Check status\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Reading\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Parse command: status\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Reading\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Parse command: connected\"\r\n2024-10-27 02:55:16 debug Amnezia \"LocalSocketController\" \"Handshake completed with: \r\n\r\n\r\n\r\n**Desktop (please complete the following information):**\r\n6.11.5-arch1-1 (but honestly it affects all of the OSes)\r\n4.8.1.9\r\n\r\n\r\nSo amnezia vpn tells me, that i'm connected, red shield account page also seeing my connection, but it's just not working, i can't even ping anything.\r\n\r\nBy the way, if I take same config and use it via CLI (awg-quick) - works like a charm."
-    },
-    {
-     "number": 1166,
-     "title": "Windows / option to use tray icon as one click connect/disconnect button",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-10-15T17:42:01Z",
-     "updated_at": "2026-11-26T15:46:33Z",
-     "user": "AMBIztw",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1166",
-     "body": ""
-    },
-    {
-     "number": 1183,
-     "title": "Nvidia Shadowplay recognizes “Amnezia VPN” as a game",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-10-19T13:35:26Z",
-     "updated_at": "2026-11-26T15:43:38Z",
-     "user": "0oprivet",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1183",
-     "body": "Describe the bug\r\nNvidia Shadowplay recognizes “Amnezia VPN” as a game and starts recording it\r\n\r\nExpected behavior\r\nI expect that the program will not be recognized as a game, and will not be recorded\r\n\r\n - OS: Windows 10\r\n - Version 22H2\r\n - Nvidia Driver 561.09\r\n - Nvidia App ver 10.0.3.152\r\n\r\nAdditional context\r\nI use Nvidia Shadowplay all the time, but when “Amnezia VPN” is open (even in the tray) Shadowplay recognizes the program as a game and starts recording it. This is very annoying, because only one game can be recorded, and with Amnezia VPN constantly open, the entire recording priority goes to it.\r\nIn addition, since the program is open on a permanent basis, temporary files are being written all the time, which wastes SSD resources and just creates an unnecessary load.\r\nOf course, you can simply disable Shadowplay when you are not playing games, but it's not a solution, it's a crutch.\r\n"
-    },
-    {
-     "number": 1139,
-     "title": "Split tunneling import crashes the app (Windows client) v",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-10-09T10:55:54Z",
-     "updated_at": "2026-11-26T15:42:35Z",
-     "user": "Moksggwp",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1139",
-     "body": "**Describe the bug**\r\nA clear and concise description of what the bug is.\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Open the Amnesia app\r\n2. Go to the split tunneling section\r\n3. Import json\r\n4. The program freezes and crashes\r\n\r\n**Expected behavior**\r\nThe list is imported successfully, RAM is not loaded, or the program throws an error if the json request contains incorrect data\r\n\r\n**Log files**\r\nI have tried different lists, and more and more 400 kb give an error, although I did not notice any problem at first glance\r\n\r\n[updated_data.json](https://github.com/user-attachments/files/17306783/updated_data.json)\r\n[output.json](https://github.com/user-attachments/files/17306798/output.json)\r\n\r\n\r\n**Screenshots**\r\n![NVIDIA_Share_W1h2R8RD7P](https://github.com/user-attachments/assets/dbc5eb0a-4a31-4165-87f6-4d917418d3d7)\r\n\r\n\r\n**Desktop (please complete the following information):**\r\n - OS: [e.g. Windows 10 Version10.0.19045 Build 19045]\r\n - Version [Amnezia 4.5.3.0(apr 20 2024,89703ba5]\r\n\r\n\r\n**Additional context**\r\nI found a [topic ](https://github.com/amnezia-vpn/amnezia-client/issues/417)on a similar problem, where it says that this bug has been fixed, but I still don't understand why it manifests itself in me\r\n\r\n"
-    },
-    {
-     "number": 1130,
-     "title": "Split tunneling does not work on ipsec",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-10-08T19:53:18Z",
-     "updated_at": "2026-11-26T15:40:32Z",
-     "user": "alexxmirny",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1130",
-     "body": "**Describe the bug**\r\nAll traffic is going through vpn connection while using ipsec.\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Install Ipsec on the server\r\n2. Go to Split Tunneling on Desktop\r\n3. Add one address to whitelist (e.g. 8.8.8.8)\r\n4. Connect\r\n5. Type ```tracert google.com``` in cmd\r\n6. 1st hop is the server, not local gateway\r\n\r\n```\r\nPS C:\\Users\\alexx> tracert google.com\r\nTracing route to google.com [142.250.74.110]\r\nover a maximum of 30 hops:\r\n\r\n  1    43 ms    43 ms    43 ms  [REDACTED]\r\n  2    43 ms    44 ms    43 ms  [REDACTED]\r\n  3    54 ms    54 ms    55 ms  [REDACTED]\r\n```\r\n\r\n**Expected behavior**\r\n1st hop is the local gateway\r\n\r\n**Screenshots**\r\nLooks like this checkbock should be unchecked. \r\n![2024-10-08 18_43_25-Network Connections](https://github.com/user-attachments/assets/117f6ee7-a9f2-4120-a64c-9e6cc8812481)\r\n\r\n**Desktop (please complete the following information):**\r\n - OS: Windows 10\r\n - Version 4.8.1.9\r\n\r\n**Server (please complete the following information):**\r\n - OS: Ubuntu 16.04\r\n"
-    },
-    {
-     "number": 1044,
-     "title": "VLESS doesn't work on macOS",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-09-04T19:16:47Z",
-     "updated_at": "2026-11-26T15:30:59Z",
-     "user": "noideastowork",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1044",
-     "body": "**Describe the bug**\r\nMy VLESS config connects, but nothing works. \r\n\r\nMore info:\r\n- VMESS works fine via AmneziaVPN on macOS\r\n- Same VLESS config via other apps works fine on macOS\r\n- Same VLESS config via AmneziaVPN works on other systems also fine (Android, iOS).\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Connect to VLESS via AmneziaVPN on macOS\r\n2. See that no website is loading in any browser\r\n\r\n**Screenshots**\r\n<img width=\"584\" alt=\"Снимок экрана 2024-09-04 в 22 07 26\" src=\"https://github.com/user-attachments/assets/692977df-865a-412f-95e4-69e31d1e0bac\">\r\n\r\n**Desktop:**\r\nOS: macOS\r\nVersion 14.4 (23E214)\r\nDevice: Macbook Pro 2021 M1 Pro\r\nAmneziaVPN: 4.7.0.0\r\n\r\n"
-    },
-    {
-     "number": 996,
-     "title": "Split Tunneling does not work on Windows",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-22T13:15:59Z",
-     "updated_at": "2026-11-26T15:12:24Z",
-     "user": "denmorgenshtern",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/996",
-     "body": "Split Tunneling does not work on the Windows client. For websites and for applications both. The client \"successfully\" connects for the first time, but nothing works, like no internet at all. Reconnection does not occur at all, the \"Connect\" button does not seem to respond. Restarting the service helps. \r\n\r\nIf you disable Split Tunneling, everything works fine.\r\nAlso for macOS / iOS / Android apps Split Tunneling works great, guess only Windows problem."
-    },
-    {
-     "number": 988,
-     "title": "Is there an AUR package?",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-19T07:00:08Z",
-     "updated_at": "2026-11-26T15:06:01Z",
-     "user": "AA1999",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/988",
-     "body": "Hi,\r\nI was browsing the AUR for amnezia and these were the results:\r\n\r\n```\r\n paru amnezia\r\n1 aur/amneziawg-go 0.2.12-1 [+2 ~0.60]\r\n    AmneziaWG is a contemporary version of the popular VPN protocol, WireGuard.\r\n2 aur/amneziawg-tools 1.0.20240213-1 [+2 ~0.60]\r\n    AmneziaWG is a contemporary version of the popular VPN protocol, WireGuard.\r\n:: Packages to install (eg: 1 2 3, 1-3):\r\n::\r\n```\r\n\r\nBut from what I know this would be for the Wireguard client, is there an AUR version of this repository?"
-    },
-    {
-     "number": 1012,
-     "title": "Cannot install IKEv2/IPsec",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-25T20:09:23Z",
-     "updated_at": "2026-11-26T15:00:31Z",
-     "user": "kri-k",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1012",
-     "body": "**Describe the bug**\r\nThe application does nothing when I try to install IPsec protocol on the server.\r\nAfter I click the `Install` button, nothing happens, no additional logs or error messages are displayed.\r\n\r\n**To Reproduce**\r\n-\r\n\r\n**Expected behavior**\r\n-\r\n\r\n**Log files**\r\n-\r\n\r\n**Screenshots**\r\n-\r\n\r\n**Desktop (please complete the following information):**\r\n - OS: macos\r\n - Version 4.6.0.3 and 4.7.0.0\r\n\r\n**Smartphone (please complete the following information):**\r\n - Device: Samsung\r\n - OS: Android\r\n - Version 4.6.1.0\r\n\r\n**Server (please complete the following information):**\r\n - OS: Ubuntu 22.04\r\n\r\n**Additional context**\r\nAdd any other context about the problem here.\r\n"
-    },
-    {
-     "number": 961,
-     "title": "Local proxy mode",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-10T09:25:49Z",
-     "updated_at": "2026-11-26T14:47:51Z",
-     "user": "rbo23",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/961",
-     "body": "I'd like to connect to amnezia vpn through browser extension \"proxy switchyomega\" so it would be great if you add local proxy mode for the client"
-    },
-    {
-     "number": 975,
-     "title": "Split tunneling freezes crashes MacOS client",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-14T23:58:51Z",
-     "updated_at": "2026-11-26T14:46:27Z",
-     "user": "luixo",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/975",
-     "body": "**Describe the bug**\r\nHello, I made a `blocked.json` file consisting of 292k entries based on [roskomsvoboda API](https://reestr.rublacklist.net/api/v3/ips/) list.\r\nImporting it to AmneziaVPN freezed it completely (I waited ~5 minutes).\r\n\r\nFormat of the file:\r\n```json\r\n[\r\n    {\r\n        \"hostname\": \"1.32.194.67\",\r\n        \"ip\": \"1.32.194.67\"\r\n    },\r\n    {\r\n        \"hostname\": \"1.32.194.195\",\r\n        \"ip\": \"1.32.194.195\"\r\n    },\r\n]\r\n```\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Create a 292k entries JSON for split tunnelling\r\n2. Import it in split tunneling\r\n3. See app frozen\r\n\r\n**Expected behavior**\r\nA progress bar / faster behavior\r\n\r\n**Desktop (please complete the following information):**\r\n - OS: MacOS Sonoma\r\n - Version 14.6.1\r\n\r\n**Additional context**\r\nApp version 4.6.0.3\r\n\r\nSomewhat connected to an [issue](https://github.com/amnezia-vpn/amnezia-client/issues/417) on windows\r\n\r\nAfter restart, app worked as usual, getting to split tunneling hanged app again.\r\n\r\nTo wipe the list I invoked `plistbuddy -c 'Delete :Conf.ForwardSites' ~/Library/Preferences/org.amneziavpn.AmneziaVPN.plist`."
-    },
-    {
-     "number": 3530,
-     "title": "[macOS] After GUI crash, stale root-owned tun2socks keeps utun; all reconnects fail with ErrorCode 804 until service restart",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-26T14:24:19Z",
-     "updated_at": "2026-11-26T14:24:19Z",
-     "user": "r0meo-code",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3530",
-     "body": "### Describe the bug\n\nWhen the AmneziaVPN GUI crashes (or is otherwise relaunched while a session is up), the root-owned `tun2socks` process started by `AmneziaVPN-service` keeps running and keeps holding the `utun` interface and the previous local SOCKS port. The relaunched GUI then cannot recover on its own:\n\n- every connect attempt logs `Tun2socks process was closed with 1 exit code` followed by `Failed to terminate tun2socks. Killing the process...`\n- the UI then shows **ErrorCode::804 (Internal error)** on each attempt\n- the stale `tun2socks` is never actually killed (it is root-owned; the GUI's terminate/kill does not affect it), and the Xray core's local SOCKS port is no longer listening, so even the surviving tunnel interface carries no traffic\n\nOnly a full manual recovery helps: quit the GUI, `killall tun2socks` as root, and `launchctl kickstart -k system/AmneziaVPN-service`. After that, connecting works again.\n\n### To Reproduce\n\n1. Connect to a VLESS server (Amnezia Premium) on macOS.\n2. Have the GUI process die while connected (in our case it crashed with the stack-overflow crash from #3497; force-quitting the GUI may work the same way).\n3. Relaunch AmneziaVPN and press Connect.\n4. Observe ErrorCode 804 on every attempt; `ps` shows the old `tun2socks` (root) still alive; the GUI logs `Failed to terminate tun2socks`.\n\n### Expected behavior\n\nOn startup (or on connect), the client should detect and clean up leftover `tun2socks` instances and stale utun interfaces — e.g. via the privileged service, which owns those processes — instead of failing with a generic internal error until a manual service restart.\n\n### Log excerpt (unified log)\n\n```text\nE  AmneziaVPN (QtCore) \"Tun2socks process was closed with 1 exit code\"\nDf AmneziaVPN (QtCore) Failed to terminate tun2socks. Killing the process...\nE  AmneziaVPN (QtCore) VpnProtocol error, code ErrorCode::804(Код ошибки: 804. Внутренняя ошибка)\n```\n\n(repeats on every connect attempt)\n\nState observed while broken:\n\n```text\nroot  1804  tun2socks -device tun://utun22 -proxy socks5://...@127.0.0.1:52876   # stale, from before the crash\nutun22: inet 10.33.0.2 up, but no listener on 127.0.0.1:52876 (Xray core gone) → no traffic\ndefault route still via en0\n```\n\n### Environment\n\n- AmneziaVPN 5.1.1 (build 10), installed from `AmneziaVPN_5.1.1.10_macos_x64.pkg`, native ARM64\n- macOS 27.2 (26B123), MacBookPro18,3 (Apple M1 Pro)\n- Amnezia Premium, VLESS, site split tunneling (VpnAllExceptSites) enabled\n\nPossibly related: #3146 (tun2socks failure → Error 804 on Windows)."
-    },
-    {
-     "number": 3497,
-     "title": "[macOS] AmneziaVPN 5.1.0.6 crashes during Xray reconnect after wake with 341 nested Qt event loops",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-19T12:00:09Z",
-     "updated_at": "2026-11-26T14:23:44Z",
-     "user": "2b1q",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3497",
-     "body": "### Describe the bug\n\nAmneziaVPN crashed 5 seconds after the Mac woke from sleep. The crashed QThread was in the Xray reconnect path. The macOS crash report shows a stack guard protection failure and 341 levels of recursion through nested Qt event loops.\n\n### Observed sequence\n\n1. AmneziaVPN was running in the background.\n2. The Mac woke from sleep.\n3. The client crashed 5 seconds after wake.\n\nReproducibility is unknown.\n\n### Expected behavior\n\nThe client remains running and reconnects after wake.\n\n### Environment\n\n- AmneziaVPN 5.1.0 (build 6), native ARM64\n- macOS 27.2.1 (26B131), Apple Silicon\n- Xray reconnect path, identified from the stack trace\n\n### Redacted crash excerpt\n\n```text\nThread 9 Crashed: QThread\nException Type: EXC_BAD_ACCESS (SIGILL)\nException Subtype: KERN_PROTECTION_FAILURE\nFaulting address region: Stack Guard\n\nNear the top of the stack:\n8     QtCore           QDataStream::writeBytes(char const*, long long)\n9     QtCore           operator<<(QDataStream&, QString const&)\n10    QtRemoteObjects  [unsymbolicated]\n\nRepeated frames:\n      QtRemoteObjects  QRemoteObjectPendingCall::waitForFinished(int)\n      QtCore           QEventLoop::exec(...)\n      RECURSION LEVEL 341 (335 levels elided by macOS)\n\nAt the base of the nested calls:\n3412  QtRemoteObjects  QRemoteObjectPendingCall::waitForFinished(int) + 112\n3413  AmneziaVPN       XrayProtocol::stop() + 692\n3414  AmneziaVPN       VpnConnection::reconnectToVpn() + 244\n```\n\n### Related issues\n\n- #3042 reports a SIGSEGV in the same wake/reconnect path. PR #3494 proposes a fix for protocol object lifetime while synchronous IPC calls wait in nested event loops.\n- #2938 reports stack exhaustion from nested Qt event loops in the Windows DNS callback path."
-    },
-    {
-     "number": 3457,
-     "title": "macOS: clicking the Dock icon intermittently fails to restore the window (5.1.0.6, Apple M1)",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-12T11:35:12Z",
-     "updated_at": "2026-11-26T14:23:19Z",
-     "user": "ilpuchkov",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3457",
-     "body": "**Describe the bug**\nClicking the pinned AmneziaVPN icon in the macOS Dock intermittently activates the application without displaying its main window. The running indicator is visible, but there is no window. Opening the window from the menu bar works; quitting and relaunching can also restore it.\n\n**To Reproduce**\n1. Launch AmneziaVPN from its pinned Dock icon.\n2. Close the main window with the window close button, leaving Amnezia running.\n3. Click the pinned Dock icon again.\n4. Intermittently, the app is activated but its main window does not reappear. Repeat the close/reopen cycle if necessary.\n\n**Expected behavior**\nClicking the Dock icon should reliably restore the main window and bring it to the foreground.\n\n**Desktop / environment**\n- Mac: MacBook Pro (MacBookPro17,1), Apple M1\n- macOS: 27.2.1, build 26B131\n- AmneziaVPN: 5.1.0.6\n- UI language: Russian\n- Autostart: disabled\n- Auto-connect: disabled\n- Start minimized: disabled\n\n**Diagnostic observations**\nThe failure was reproduced manually. The existing GUI process remained alive and responsive. Connecting to its existing AmneziaVPNInstance IPC socket restored the window without restarting the application. The pinned Dock entry points to the installed application.\n\n**Additional context**\nPossibly related to #3423 (macOS window foreground handling), but this report concerns restoring a closed/hidden window by clicking the Dock icon. I have not established whether the underlying cause is the same.\n\nNo custom window helper or patched build is installed."
-    },
-    {
-     "number": 940,
-     "title": "Linux client detected as malware by antivirus software and browser",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-06T05:28:57Z",
-     "updated_at": "2026-11-26T14:07:17Z",
-     "user": "AirstaNs",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/940",
-     "body": "**Describe the bug**\r\nThe VPN client for Linux is being flagged as risky and unreliable software, while versions for other platforms are not. Additionally, Google Chrome prevents the download of the client, citing virus detection.\r\n\r\n## To Reproduce\r\nSteps to reproduce the behavior:\r\n\r\n1. Go to the VPN client download page or GitHub\r\n2. Attempt to download the Linux version of the client \r\n3. Try to download using Google Chrome and see that it blocks the download due to virus detection \r\n4. Check the VirusTotal analysis for the Linux client\r\n\r\n## Expected behavior\r\nThe Linux version of the VPN client should not be detected as risky or unreliable software security systems. Antivirus software and web browsers should treat it similarly to VPN clients for other platforms, without triggering any security alerts.\r\n\r\n**Screenshots**\r\n![chrome1](https://github.com/user-attachments/assets/7f3aae0f-1716-4b09-ae07-0ac4e30ae218)\r\n![last version](https://github.com/user-attachments/assets/66fc35ea-a587-4d1c-974f-478bdfc68171)\r\n![image](https://github.com/user-attachments/assets/646de3b3-d368-4fa6-83fd-6ac1c369f207)\r\n\r\n## Desktop:\r\n- OS: Linux\r\n- Version: 4.4.0.0 - 4.8.1.9\r\n\r\n**Additional context**\r\n[link Virustotal](https://www.virustotal.com/gui/file/37fc771d5d95e335179d7781ebc526acd4c837082455a9736e73816a67b4bf84)\r\n\r\n"
-    },
-    {
-     "number": 937,
-     "title": "Bug: Split tunneling import didn't work on android",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-08-05T21:26:27Z",
-     "updated_at": "2026-11-26T14:04:07Z",
-     "user": "Kseen715",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/937",
-     "body": "**Describe the bug**\r\nWhen I choose any file with hostnames, even if it was just produced by the same app on the same phone, nothing happens\r\n\r\nMaybe it needs some permission? But I can't manually give them if app didn't want them\r\n\r\nLogs: \r\n[AmneziaVPN.txt](https://github.com/user-attachments/files/16502897/AmneziaVPN.txt)\r\n\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Go to split tunneling import menu\r\n2. Click on import -> replace site list\r\n3. Choose file\r\n4. Amnezia app open back\r\n5. Nothing happens\r\n\r\n**Expected behavior**\r\nIt should add list to an app\r\n\r\n**Smartphone**\r\nHuawei NOVA 5t\r\nModel YAL-L21\r\nOS ver EMUI 12.0.0"
-    },
-    {
-     "number": 821,
-     "title": "Plugins for web browsers",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-05-23T08:18:25Z",
-     "updated_at": "2026-11-26T13:43:07Z",
-     "user": "XaPoHbomj",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/821",
-     "body": "Is there any plans to create plugins for web browsers?"
-    },
-    {
-     "number": 3489,
-     "title": "[macOS] App hangs on launch (100% CPU, no window, only tray icon) when displays are mirrored",
-     "is_pr": false,
-     "state": "open",
-     "created_at": "2026-11-18T07:55:36Z",
-     "updated_at": "2026-11-26T13:11:52Z",
-     "user": "VoskVosk",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3489",
-     "body": "## Description\nAfter updating to 5.1.1.9, the app no longer opens its main window on macOS. Only the tray icon appears and the main thread spins at 100% CPU. Disconnecting the external monitor fixes it immediately — the app launches normally.\n\n## Environment\n- AmneziaVPN: 5.1.1 (9), `AmneziaVPN_5.1.1.9_macos_x64.pkg`\n- macOS: 14.7.2 Sonoma (23H311)\n- Hardware: MacBook Pro M2 (Mac14,7), 8 GB\n- Displays (mirror mode):\n  - Built-in Retina: 2560×1600 (scale 2×)\n  - Samsung Odyssey G91SD: 5120×1440 (32:9, scale 1×) — set as Main\n\n## Steps to reproduce\n1. Connect an external monitor with a different aspect ratio/scale factor than the built-in display.\n2. Enable display mirroring.\n3. Launch AmneziaVPN.\n\n## Expected behavior\nMain window opens.\n\n## Actual behavior\n- Only the tray icon is shown, the window never appears.\n- The `AmneziaVPN` main thread is stuck in a busy loop (~100% CPU) — macOS spindump reports a hang.\n- `AmneziaVPN-service` is running normally (idle in its event loop).\n- After disconnecting the external monitor, the app starts normally.\n\n## Spindump excerpt\nMain thread is spinning at the same address for all 79 samples (7.85s):\n\n    Thread 0x115fe  DispatchQueue \"com.apple.main-thread\"  79 samples  cpu time 7.770s\n      ??? (AmneziaVPN + 2828644) [0x10120a964] 1-79\n\nFull spindump attached.\n\n## Possible cause\nProbably a Qt window geometry / devicePixelRatio recalculation loop when the window is restored on a mirrored screen whose scale factor differs between the physical displays (2× vs 1×).\n\n## Workaround\nLaunch the app before connecting the external monitor, or use extended desktop mode instead of mirroring."
-    },
-    {
-     "number": 412,
-     "title": "AmneziaVPN window doesn't show after \"Start minimized\" is set",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2023-10-31T08:13:12Z",
-     "updated_at": "2026-11-26T13:01:08Z",
-     "user": "r4tz52",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/412",
-     "body": "App starts and working fine with \"Connect\"/\"Disconnect\" commands from app icon in Control Centre. \"Show AmneziaVPN\" command does nothing if \"Start minimized\" is set.\r\n\r\n**To Reproduce**\r\nSteps to reproduce the behavior:\r\n1. Check \"Start app minimized\".\r\n2. Restart AmneziaVPN.\r\n2. Go to AmneziaVPN in right top corner.\r\n3. Click on \"Show AmneziaVPN\".\r\n5. Nothing happens.\r\n\r\n**Expected behavior**\r\nAmneziaVPN window shows up.\r\n\r\n**Desktop (please complete the following information):**\r\n - OS: MacOS 14.1 Sonoma\r\n - Version 4.0.8.6\r\n\r\n**Server (please complete the following information):**\r\n - OS: Ubuntu 22.04\r\n"
-    },
-    {
-     "number": 708,
-     "title": "Problem with DNS servers",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-03-22T15:40:23Z",
-     "updated_at": "2026-11-26T12:07:25Z",
-     "user": "gilza888",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/708",
-     "body": "I can’t access websites when VPN is enabled.\r\nPings IP addresses, but when trying to ping google.com or other domains it gives an error. VPN works on other devices\r\n\r\nAmnezia: 4.4.0.0\r\nLinux: KaOS rolling"
-    },
-    {
-     "number": 675,
-     "title": "consider using boringtun",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-03-07T18:00:39Z",
-     "updated_at": "2026-11-26T12:06:02Z",
-     "user": "diimdeep",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/675",
-     "body": "[boringtun](https://github.com/cloudflare/boringtun/) is more CPU friendly and seems faster, consider implementing your patches for this rust userland"
-    },
-    {
-     "number": 555,
-     "title": "Connection doesn't work on Fedora Kinoite",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2024-02-02T16:51:53Z",
-     "updated_at": "2026-11-26T12:04:38Z",
-     "user": "Knebergish",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/555",
-     "body": "**Describe the bug**\r\nConnection to the server does not work after installation on Fedora 39 Kinoite with the error mentioned below.\r\n\r\n**To Reproduce**\r\n1. Install AmneziaVPN client\r\n2. Run the application\r\n3. Press \"Connect\" button\r\n\r\n**Expected behavior**\r\nConnection to the server is successfully established.\r\n\r\n**Actual behavior**\r\n\"Internal error\" message appeared.\r\n\r\n**Log files**\r\nIn the logs of the application:\r\n> \"ConnectToVpn, Server index is 0, container is amnezia-awg, route mode is\" Settings::VpnAllSites\r\nIpcClient::init failed\r\nError occurred when init IPC client\r\n\r\nIn the journald:\r\n> fedora systemd[1]: AmneziaVPN.service: Scheduled restart job, restart counter is at 571.\r\nfedora audit[25405]: AVC avc:  denied  { execute } for  pid=25405 comm=\"(rvice.sh)\" name=\"AmneziaVPN-service.sh\" dev=\"dm-7\" ino=1450316 scontext=system_u:system_r:init_t:s0 tcontext=unconfined_u:object_r:var_t:s0 tclass=file permissive=0\r\nfedora (rvice.sh)[25405]: AmneziaVPN.service: Failed to locate executable /opt/AmneziaVPN/service/AmneziaVPN-service.sh: Permission denied\r\nfedora audit[1]: SERVICE_START pid=1 uid=0 auid=4294967295 ses=4294967295 subj=system_u:system_r:init_t:s0 msg='unit=AmneziaVPN comm=\"systemd\" exe=\"/usr/lib/systemd/systemd\" hostname=? addr=? terminal=? res=success'\r\nfedora (rvice.sh)[25405]: AmneziaVPN.service: Failed at step EXEC spawning /opt/AmneziaVPN/service/AmneziaVPN-service.sh: Permission denied\r\nfedora systemd[1]: Started AmneziaVPN.service - AmneziaVPN Service.\r\nfedora systemd[1]: AmneziaVPN.service: Main process exited, code=exited, status=203/EXEC\r\nfedora systemd[1]: AmneziaVPN.service: Failed with result 'exit-code'.\r\nfedora audit[1]: SERVICE_STOP pid=1 uid=0 auid=4294967295 ses=4294967295 subj=system_u:system_r:init_t:s0 msg='unit=AmneziaVPN comm=\"systemd\" exe=\"/usr/lib/systemd/systemd\" hostname=? addr=? terminal=? res=failed'\r\n\r\n**Desktop**\r\n - OS: Fedora 39 Kinoite\r\n - AmneziaVPN Version:  4.1.0.1 or 4.3.0.0 Pre Release\r\n\r\n**Server**\r\n - OS: Ubuntu 22.04\r\n\r\n**Additional context**\r\nAs you can see in the journald logs, AmneziaVPN.service can't start because of selinux policies, and simply enters the endless restart cycle.\r\nI'm not an expert in the configuration of things like that, but I managed to solve the problem by copying the security context from the _/usr/bin/_ folder to the folder with the application:\r\n`sudo chcon --reference=/usr/bin/ /opt/AmneziaVPN/ -R` \r\n\r\nInitial context of the application folder:\r\n```\r\n> ls -Zd /opt/AmneziaVPN/\r\nunconfined_u:object_r:var_t:s0 /opt/AmneziaVPN/\r\n```\r\nAfter fix:\r\n```\r\n> ls -Zd /opt/AmneziaVPN/\r\nsystem_u:object_r:bin_t:s0 /opt/AmneziaVPN/\r\n```\r\n\r\nIt may not be the right solution to the problem, but at least it works - after changing the context, the service successfully starts, and the connection to the server is successfully established.\r\nMaybe we can add a similar configuration to the installation process of the application on environments with selinux? If not, at least anyone can find a workaround here. \r\n\r\n---\r\n\r\nAn additional (but very less important) problem: post_install.sh script contains lines like that:\r\n```\r\necho \"user desktop creation loop started\" >> $LOG_FILE\r\nsudo cp $APP_PATH/$APP_NAME.desktop /usr/share/applications/ >> $LOG_FILE\r\nsudo cp $APP_PATH/$APP_NAME.png /usr/share/pixmaps/ >> $LOG_FILE\r\nsudo chmod 555 /usr/share/applications/$APP_NAME.desktop >> $LOG_FILE\r\n```\r\nUnfortunately, on immutable systems such as Fedora Silverblue or Fedora Kinoite, the _/usr/share/_ path is mounted as read-only, and the execution of these lines ends with errors: \r\n```\r\ncp: cannot create regular file '/usr/share/applications/AmneziaVPN.desktop': Read-only file system\r\ncp: cannot create regular file '/usr/share/pixmaps/AmneziaVPN.png': Read-only file system\r\nchmod: cannot access '/usr/share/applications/AmneziaVPN.desktop': No such file or directory\r\n```\r\nSo, no application entry are created. As a workaround,  I placed the .desktop file in the _~/.local/share/appl"
-    },
-    {
-     "number": 410,
-     "title": "When using AmnesiaVPN, audio does not pass through the SIP protocol, and voice calls in instant messengers do not work.",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2023-10-30T21:16:01Z",
-     "updated_at": "2026-11-26T12:02:33Z",
-     "user": "MNickNames",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/410",
-     "body": "When using AmnesiaVPN, audio does not pass through the SIP protocol, and voice calls in instant messengers do not work.\r\n\r\nAvailable::\r\n1. VPS Ubuntu 20.04.\r\n2. Install Amnezia client 4.0.8 on Android 13 device.\r\n3. Install Amnezia server 4.0.8 using Amnezia-WG.\r\n4. Connect Amnezia client to Amnezia server.\r\n5. Launching the Zoiper program for SIP calls on an Android 13 smartphone.\r\n6. Zoiper registers on the SIP server, calls a mobile phone, the call is received but there is no audio.\r\n7. We launch WhatsApp on a smartphone, call another smartphone, there is a call signal, we pick up the phone - there is no audio."
-    },
-    {
-     "number": 115,
-     "title": "Add a close and open buttons in the tray (linux)",
-     "is_pr": false,
-     "state": "closed",
-     "created_at": "2022-09-24T17:29:27Z",
-     "updated_at": "2026-11-26T12:01:21Z",
-     "user": "smotim",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/115",
-     "body": "![изображение](https://user-images.githubusercontent.com/57951811/192110884-d70b4f72-5f6a-4c36-8344-caa56a43567d.png)\r\nPlease add the ability to close and open the application from the tray icon, as it is done in Telegram. \r\nWhen you close the Amnezia window, then you have to look for it again in the application menu, because you can't launch it from the icon on top. And you can completely close the application only through the \"Exit\" button in the menu or System Monitor.\r\n![изображение](https://user-images.githubusercontent.com/57951811/192110908-cde8476a-73a2-441b-b267-f7036e65b761.png)\r\n"
     }
    ],
    "comments": [
@@ -1775,222 +1568,6 @@
      "user": "Anton-V-K",
      "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3474#issuecomment-7202987233",
      "body": "@EternalBlueInfinity , я сомневаюсь, что под данную \"фичу\" можно придумать универсальное и удобное решение, которое было бы понятно и \"чайникам\".\nНачать стоило бы с добавления возможности экспортировать, импортировать и очищать список приложений для туннелирования.\nПохожие задачи уже всплывали, например, https://github.com/amnezia-vpn/amnezia-client/issues/2449"
-    },
-    {
-     "id": 7197261122,
-     "issue": 3474,
-     "issue_title": "[Android] Включить по умолчанию Split tunneling с исключением из туннеля приложений банков, операторов связи и маркетплейсов",
-     "created_at": "2026-11-26T16:09:35Z",
-     "user": "EternalBlueInfinity",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3474#issuecomment-7197261122",
-     "body": "Что значит не ясно? Очень ясно.\n\nВам ничего не мешает, мне ничего не мешает, но есть люди, для которых всё это как китайская грамота. Им нужна кнопка \"вкл / выкл\", чтобы при нажатии \"вкл\" сразу всё работало, и приложения, которые не должны иметь возможности что-то разнюхивать и сливать адреса.\n\nНо даже и для тех, кто знает, проблема актуальна. Почему все эти geoip базы подсетей и доменов, которые надо не пускать в туннель, или наоборот которые заблокировани и их надо в туннель, составить смогли, а сделать предустановленный список из нескольких десятков приложений, которым в туннель нельзя - это что-то сверхъестественное? Почему мне, как пользователю, надо после каждой установки на новое устройство всё это делать вручную, если имена этих приложений давно известны?\n\n> Это обычно проходит после блокировки со стороны банка с предложение идти в отделение для восстановления доступа :)\n\nА, ну то есть давайте назовем пользователей ленивыми и будем помогать создавать им неудобства, лишь бы только самим ничего не делать? Интересная позиция."
-    },
-    {
-     "id": 7196789337,
-     "issue": 1211,
-     "issue_title": "Amneziawg configs from red shiled vpn does not work in app (but works fine in CLI)",
-     "created_at": "2026-11-26T15:48:58Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1211#issuecomment-7196789337",
-     "body": "Hello,\n\nThese configs come from a third-party provider, so please check on the latest release first - AmneziaWG support has changed a lot since then.\n\nIf it still doesn't work, please contact the provider."
-    },
-    {
-     "id": 7196733799,
-     "issue": 1166,
-     "issue_title": "Windows / option to use tray icon as one click connect/disconnect button",
-     "created_at": "2026-11-26T15:46:33Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1166#issuecomment-7196733799",
-     "body": "Hello,\n\nThis is already available: the tray icon menu now has connect/disconnect.\n\nPlease check on the latest release."
-    },
-    {
-     "id": 7196666662,
-     "issue": 1183,
-     "issue_title": "Nvidia Shadowplay recognizes “Amnezia VPN” as a game",
-     "created_at": "2026-11-26T15:43:38Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1183#issuecomment-7196666662",
-     "body": "Hello,\n\nThis is on NVIDIA's side - its app decides which programs to treat as games, and AmneziaVPN doesn't control that.\n\nPlease add AmneziaVPN to the app's exclusion list."
-    },
-    {
-     "id": 7196642953,
-     "issue": 1139,
-     "issue_title": "Split tunneling import crashes the app (Windows client) v",
-     "created_at": "2026-11-26T15:42:35Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1139#issuecomment-7196642953",
-     "body": "Hello,\n\nImporting very large lists isn't recommended - the client can freeze or crash.\n\nPlease use smaller lists. Docs: https://storage.googleapis.com/amnezia/docs?m-path=/documentation/instructions/vpn-split-tunneling"
-    },
-    {
-     "id": 7196596193,
-     "issue": 1130,
-     "issue_title": "Split tunneling does not work on ipsec",
-     "created_at": "2026-11-26T15:40:32Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1130#issuecomment-7196596193",
-     "body": "Hello,\n\nIKEv2/IPsec is no longer supported for self-hosted servers, and split tunneling isn't available with it.\n\nClosing this issue. Please use AmneziaWG or XRay instead."
-    },
-    {
-     "id": 7196375573,
-     "issue": 1044,
-     "issue_title": "VLESS doesn't work on macOS",
-     "created_at": "2026-11-26T15:30:58Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1044#issuecomment-7196375573",
-     "body": "Hello,\n\nPlease check VLESS on the latest release first.\n\nIf it still doesn't work on macOS, please write back with your app version and the VLESS config (without the private key and ip)."
-    },
-    {
-     "id": 7195934817,
-     "issue": 996,
-     "issue_title": "Split Tunneling does not work on Windows",
-     "created_at": "2026-11-26T15:12:24Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/996#issuecomment-7195934817",
-     "body": "Hello,\n\nPlease update to the latest release and check again with KillSwitch turned off (Settings -> Connection -> KillSwitch).\n\nIf the problem is still there, please write back and tell us your app version."
-    },
-    {
-     "id": 7195780435,
-     "issue": 988,
-     "issue_title": "Is there an AUR package?",
-     "created_at": "2026-11-26T15:06:01Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/988#issuecomment-7195780435",
-     "body": "Hello,\n\nPlease install AmneziaVPN from the official installer or release page first.\n\nThere is also an `amneziavpn-bin` package in the AUR, but it's maintained by the community and isn't an official Amnezia."
-    },
-    {
-     "id": 7195647640,
-     "issue": 1012,
-     "issue_title": "Cannot install IKEv2/IPsec",
-     "created_at": "2026-11-26T15:00:31Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/1012#issuecomment-7195647640",
-     "body": "Hello,\n\nSorry, IKEv2/IPsec is no longer supported for self-hosted servers\n\nFor your own server please use AmneziaWG or XRay instead."
-    },
-    {
-     "id": 7195342219,
-     "issue": 961,
-     "issue_title": "Local proxy mode",
-     "created_at": "2026-11-26T14:47:51Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/961#issuecomment-7195342219",
-     "body": "Hello,\n\nAmneziaVPN on desktop already has Local Proxy mode (127.0.0.1, default port 10808). At the moment it works with Amnezia Premium on Windows/macOS/Linux.\n\nDocs: https://storage.googleapis.com/amnezia/docs?m-path=%2Fdocumentation%2Finstructions%2Flocal-proxy"
-    },
-    {
-     "id": 7195306892,
-     "issue": 975,
-     "issue_title": "Split tunneling freezes crashes MacOS client",
-     "created_at": "2026-11-26T14:46:27Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/975#issuecomment-7195306892",
-     "body": "Hello,\n\nImporting very large lists (hundreds of thousands of entries) isn't recommended - the client can become unresponsive. Please keep the list small.\n\nDocs: https://storage.googleapis.com/amnezia/docs?m-path=/documentation/instructions/vpn-split-tunneling"
-    },
-    {
-     "id": 7194758871,
-     "issue": 3497,
-     "issue_title": "[macOS] AmneziaVPN 5.1.0.6 crashes during Xray reconnect after wake with 341 nested Qt event loops",
-     "created_at": "2026-11-26T14:23:43Z",
-     "user": "r0meo-code",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3497#issuecomment-7194758871",
-     "body": "Same crash on **5.1.1.10** — so the fix did not make it into this release.\n\n- AmneziaVPN 5.1.1 (build 10), native ARM64\n- macOS 27.2 (26B123), MacBookPro18,3 (Apple M1 Pro)\n- Amnezia Premium, VLESS, site split tunneling (VpnAllExceptSites) enabled\n- Crash after ~100 min uptime, in the background (macOS crash report: `AmneziaVPN-2026-11-26-140701.ips`)\n\nSignature matches exactly:\n\n```text\nException Type:  EXC_BAD_ACCESS (SIGILL)\nException Subtype: KERN_PROTECTION_FAILURE at 0x000000016f813fd0  (Stack Guard)\nTermination:  SIGNAL 10 Bus error\nFaulting thread stack (top):\n  QtRemoteObjects 0x94e18\n  QtRemoteObjects 0x7e184\n  ...\n  QtCore  QEventLoop::exec(...)\n  QtRemoteObjects 0x7e8bc\n  QtRemoteObjects QRemoteObjectPendingCall::waitForFinished(int)\n  ... repeated nested QEventLoop::exec / QApplication::notify frames (6+ nesting levels in the surviving portion of the stack)\n```\n\nOne more data point that may help: after this GUI crash the macOS service (`AmneziaVPN-service`, root) is left with a stale `tun2socks` process holding the utun interface, and every subsequent connect attempt from the relaunched GUI fails with `ErrorCode::804 (Internal error)` and `Failed to terminate tun2socks. Killing the process...` until the service is restarted manually. Filed separately as a recovery bug."
-    },
-    {
-     "id": 7194748976,
-     "issue": 3457,
-     "issue_title": "macOS: clicking the Dock icon intermittently fails to restore the window (5.1.0.6, Apple M1)",
-     "created_at": "2026-11-26T14:23:19Z",
-     "user": "r0meo-code",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3457#issuecomment-7194748976",
-     "body": "Still reproducible on **5.1.1.10** (macOS 27.2 / 26B123, MacBookPro18,3, Apple M1 Pro).\n\nAdditional technical detail from a live repro today:\n\n- After closing the main window with the red button, the process stays alive and healthy (main thread idle in the normal `-[NSApplication run]` event loop — sampled, not a hang).\n- Clicking the Dock icon (or `open -a AmneziaVPN`) activates the app — \"AmneziaVPN\" appears in the menu bar — but the main window never comes back.\n- `CGWindowListCopyWindowInfo` shows the main window (`kCGWindowName = AmneziaVPN`, 380×712) still exists, but with `kCGWindowIsOnscreen = false`. It is not minimized to the Dock either. So the app hides the window and never re-shows it on the AppKit `applicationShouldHandleReopen` event.\n- Only the menu bar status item or a full quit + relaunch brings the window back.\n\nLooks like the reopen event is not wired to `show()`/`raise()` on the main QWindow."
-    },
-    {
-     "id": 7194306341,
-     "issue": 940,
-     "issue_title": "Linux client detected as malware by antivirus software and browser",
-     "created_at": "2026-11-26T14:07:16Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/940#issuecomment-7194306341",
-     "body": "Thanks for the details.\n\nPlease check on the latest Linux build whether it's still flagged by antivirus or Chrome.\n\nIf it's still flagged, please reopen this issue and tell us the antivirus and browser versions."
-    },
-    {
-     "id": 7194231085,
-     "issue": 937,
-     "issue_title": "Bug: Split tunneling import didn't work on android",
-     "created_at": "2026-11-26T14:04:07Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/937#issuecomment-7194231085",
-     "body": "Hello, and thanks for the report.\n\nPlease update to the latest release and try importing the split-tunneling file again.\n\nIf it still doesn't work, please attach the split-tunneling settings file you're importing."
-    },
-    {
-     "id": 7193740372,
-     "issue": 821,
-     "issue_title": "Plugins for web browsers",
-     "created_at": "2026-11-26T13:43:07Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/821#issuecomment-7193740372",
-     "body": "Hi, thanks for the suggestion. On desktop you can use Local Proxy - the app runs a local proxy at 127.0.0.1 that browser extensions can use (for example, Censor Tracker works with it out of the box). It requires Amnezia Premium on Windows/macOS/Linux.\n\nDocs: https://storage.googleapis.com/amnezia/docs?m-path=%2Fdocumentation%2Finstructions%2Flocal-proxy"
-    },
-    {
-     "id": 7193007437,
-     "issue": 3489,
-     "issue_title": "[macOS] App hangs on launch (100% CPU, no window, only tray icon) when displays are mirrored",
-     "created_at": "2026-11-26T13:11:52Z",
-     "user": "doxliy89",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/3489#issuecomment-7193007437",
-     "body": "Same problem, but workaround with external monitor is not work for me.\nReinstall previous version also not hangs on.\nApple M4 Sequoia 15.6.1\nTested versions - 5.1.1.10 and 5.1.0.6"
-    },
-    {
-     "id": 7192763326,
-     "issue": 412,
-     "issue_title": "AmneziaVPN window doesn't show after \"Start minimized\" is set",
-     "created_at": "2026-11-26T13:01:08Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/412#issuecomment-7192763326",
-     "body": "Hi,\n\nPlease retest on the latest release of the app. If the window still doesn't show, reopen this issue with your OS and app version and we will look into it."
-    },
-    {
-     "id": 7191594882,
-     "issue": 708,
-     "issue_title": "Problem with DNS servers",
-     "created_at": "2026-11-26T12:07:25Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/708#issuecomment-7191594882",
-     "body": "Hi,\n\nOn Linux, DNS is configured via systemd-resolved, and with KillSwitch enabled all other DNS traffic is blocked - that's why names stop resolving while IPs still ping.\n\nAs a workaround, disable KillSwitch in Settings -> Connection -> KillSwitch. Please also check that this still happens on the latest release of the app, and reopen if it does.\n"
-    },
-    {
-     "id": 7191565301,
-     "issue": 675,
-     "issue_title": "consider using boringtun",
-     "created_at": "2026-11-26T12:06:02Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/675#issuecomment-7191565301",
-     "body": "Hello, and thanks for the suggestion.\n\nSwitching the WireGuard implementation to a different userspace core is not something we plan to do, so we're closing this as won't fix. If you have measurements showing a performance problem on a specific platform, feel free to open a separate issue with them - we're happy to look at concrete numbers."
-    },
-    {
-     "id": 7191535663,
-     "issue": 555,
-     "issue_title": "Connection doesn't work on Fedora Kinoite",
-     "created_at": "2026-11-26T12:04:38Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/555#issuecomment-7191535663",
-     "body": "Hi, thanks for the detailed report.\n\nThe service failed to start because of SELinux (that's what the `203/EXEC` and `Permission denied` in the journal mean). Please retest on a supported Fedora (41 or newer - see our install instructions) with the latest release of the app.\n\nIf the service still fails to start, reopen this issue and we will look into it."
-    },
-    {
-     "id": 7191488998,
-     "issue": 410,
-     "issue_title": "When using AmnesiaVPN, audio does not pass through the SIP protocol, and voice calls in instant messengers do not work.",
-     "created_at": "2026-11-26T12:02:27Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/410#issuecomment-7191488998",
-     "body": "Hi, thanks for the report.\n\nThe setup here is from 2023, so please retest on the latest release of the app. Reopen this issue if the problem is still there."
-    },
-    {
-     "id": 7191461033,
-     "issue": 115,
-     "issue_title": "Add a close and open buttons in the tray (linux)",
-     "created_at": "2026-11-26T12:01:09Z",
-     "user": "Anton-Amnezia",
-     "url": "https://github.com/amnezia-vpn/amnezia-client/issues/115#issuecomment-7191461033",
-     "body": "Hi,\n\nThis has been implemented in recent versions of the app - the tray icon menu now has both \"Show\" and \"Quit\", so you can reopen the window and fully exit from the tray.\n\nPlease update to the latest release and reopen this issue if something is still missing."
     }
    ]
   },
@@ -2061,17 +1638,6 @@
      "user": "ylh440104",
      "url": "https://github.com/HyNetworks/hysteria/pull/1727",
      "body": "## Problem\n\n- ACL rules are normalized to lower case but matched against the raw host name, so upper-case names bypass domain and geosite rules; the wildcard matcher also backtracks exponentially.\n- The password and user/password authenticators compare secrets with plain string equality, and the latter short-circuits on unknown users, revealing whether a user exists.\n- The HTTP authenticator reads the backend response without a size limit.\n- The masquerade HTTP/HTTPS servers have no read or idle timeouts, and the HTTPS redirect is built from the unvalidated Host header.\n- The masquerade file server follows symlinks, so a link inside the served directory exposes files outside it.\n- The local SOCKS5 UDP relay treats the first datagram from any source as the client, so a third party can claim the association.\n- The HTTP proxy lets the Host header override the request-URI authority.\n- The traffic stats endpoint is unauthenticated when the secret is empty, exposing connection destinations.\n- Destination addresses are written at warning level, and the server returns raw dial errors that contain the host name and the resolver address.\n- TLS verification can be disabled without a pin or CA, and the key exchange does not prefer a post-quantum group.\n\n## Solution\n\n- Normalize the host before ACL matching and replace the recursive wildcard matcher with a linear one.\n- Use constant-time secret comparison in both authenticators and drop the early exit that reveals user existence.\n- Bound the size of the auth backend response.\n- Add header, read and idle timeouts to the masquerade servers, and validate the redirect host.\n- Resolve the masquerade root once and reject any path that escapes it through symlinks.\n- Tie the UDP association to the source address of the TCP control connection.\n- Prefer the request-URI authority over the Host header.\n- Require a secret for non-loopback traffic stats listeners, allow an empty secret only for loopback callers, and compare it in constant time.\n- Keep destinations at debug level and return a generic message instead of the raw dial error.\n- Refuse to disable TLS verification unless a pin or CA is configured (or an explicit environment opt-in is set), and prefer X25519MLKEM768.\n- Pad authentication and TCP handshake payloads to fixed sizes so their length does not depend on the secret or host name length.\n\nVerified against a local server/client pair, including an on-path relay capturing the wire traffic.\n"
-    },
-    {
-     "number": 1726,
-     "title": "fix(server): reset unexpected streams instead of closing the connection",
-     "is_pr": true,
-     "state": "open",
-     "created_at": "2026-11-26T16:01:08Z",
-     "updated_at": "2026-11-26T16:01:08Z",
-     "user": "NickWalters",
-     "url": "https://github.com/HyNetworks/hysteria/pull/1726",
-     "body": "After auth, `ProxyStreamHijacker` passes any stream that does not start with a TCP request frame back to HTTP/3. If that stream starts with something other than HEADERS, HTTP/3 closes the whole QUIC connection with `H3_FRAME_UNEXPECTED`, and every proxied stream on it drops.\n\nI see this from Shadowrocket clients on iOS/macOS. My server logged about 40 `accepting stream failed: H3_FRAME_UNEXPECTED (local): expected first frame to be a HEADERS frame` disconnects in 3 hours, each one killing open SSH sessions.\n\nThis change:\n- lets HEADERS streams through to HTTP/3 as before\n- returns an error for other unknown frame types, so http3 resets only that stream and the connection stays up\n- reads `authenticated` under `authMutex`, because `ServeHTTP` sets it from another goroutine\n\n`TestServerUnexpectedStreamAfterAuth` fails on master with `Application error 0x105 (remote)` and passes with the fix. `go test ./...` in `core` passes.\n"
     }
    ],
    "comments": []
